@@ -1,90 +1,76 @@
 import type { LeagueData } from '../useLeagueLoader';
 import { getTopBidByWeek } from '../logic';
+import PosBadge from './PosBadge';
 
 export default function BiddingHistory({ data }: { data: LeagueData }) {
   const { bids, teams } = data;
-
-  // All bids sorted by week, then amount descending
   const sortedBids = [...bids].sort((a, b) => a.week - b.week || b.amount - a.amount);
-
-  // Top bid per week
   const topBids = getTopBidByWeek(bids);
 
   return (
-    <div>
+    <div className="space-y-6">
       {/* Top Bid Summary */}
-      <h3 className="text-sm font-semibold mb-3 text-slate-300">Top Bid Per Week</h3>
-      <div className="overflow-x-auto mb-6">
-        <table className="w-full text-xs border-collapse">
-          <thead>
-            <tr className="bg-slate-800">
-              <th className="px-3 py-2 text-left text-slate-400">Week</th>
-              <th className="px-3 py-2 text-left text-slate-400">Player</th>
-              <th className="px-3 py-2 text-slate-400">Pos</th>
-              <th className="px-3 py-2 text-right text-slate-400">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            {topBids.map(bid => (
-              <tr key={bid.week} className="border-b border-slate-800 hover:bg-slate-800/30">
-                <td className="px-3 py-1.5">Wk{bid.week}</td>
-                <td className="px-3 py-1.5 text-left font-medium">{bid.playerName}</td>
-                <td className="px-3 py-1.5 text-center">
-                  <PosBadge pos={bid.position} />
-                </td>
-                <td className={`px-3 py-1.5 text-right font-bold ${bid.amount >= 100 ? 'text-green-400' : bid.amount >= 25 ? 'text-yellow-400' : 'text-slate-400'}`}>
-                  ${bid.amount}
-                </td>
+      <div className="neon-card overflow-hidden fade-up">
+        <h3 className="text-xs font-bold tracking-wider px-5 pt-4 pb-3 text-[#f0f0ff]">Top Bid Per Week</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr>
+                <th className="label px-4 py-2 text-left border-b border-[#2a2e55]">Week</th>
+                <th className="label px-4 py-2 text-left border-b border-[#2a2e55]">Player</th>
+                <th className="label px-4 py-2 text-center border-b border-[#2a2e55]">Pos</th>
+                <th className="label px-4 py-2 text-right border-b border-[#2a2e55]">Amount</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {topBids.map(bid => (
+                <tr key={bid.week} className="hover:bg-[rgba(99,102,241,0.05)] transition-colors border-b border-[rgba(42,46,85,0.4)]">
+                  <td className="px-4 py-2.5 mono text-sm">Wk{bid.week}</td>
+                  <td className="px-4 py-2.5 text-left font-medium text-[#f0f0ff]" style={{ fontFamily: "'Exo 2', sans-serif" }}>{bid.playerName}</td>
+                  <td className="px-4 py-2.5 text-center"><PosBadge pos={bid.position} /></td>
+                  <td className={`px-4 py-2.5 text-right font-bold mono ${bid.amount >= 100 ? 'text-[#f59e0b]' : bid.amount >= 25 ? 'text-[#f59e0b] opacity-70' : 'text-[#6b6e99]'}`}>
+                    ${bid.amount}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Full Bidding History */}
-      <h3 className="text-sm font-semibold mb-3 text-slate-300">All Successful Bids ({bids.length} total)</h3>
-      <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
-        <table className="w-full text-xs border-collapse">
-          <thead className="sticky top-0 z-10">
-            <tr className="bg-slate-800">
-              <th className="px-2 py-2 text-slate-400">Wk</th>
-              <th className="px-2 py-2 text-left text-slate-400">Team</th>
-              <th className="px-2 py-2 text-left text-slate-400">Player</th>
-              <th className="px-2 py-2 text-slate-400">Pos</th>
-              <th className="px-2 py-2 text-right text-slate-400">Bid</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sortedBids.map((bid, i) => (
-              <tr key={i} className="border-b border-slate-800/50 hover:bg-slate-800/30">
-                <td className="px-2 py-1 text-center">{bid.week}</td>
-                <td className="px-2 py-1 text-left whitespace-nowrap">{teams.get(bid.rosterId)?.displayName || `#${bid.rosterId}`}</td>
-                <td className="px-2 py-1 text-left">{bid.playerName}</td>
-                <td className="px-2 py-1 text-center"><PosBadge pos={bid.position} /></td>
-                <td className={`px-2 py-1 text-right font-semibold ${bid.amount >= 100 ? 'text-green-400' : bid.amount >= 25 ? 'text-yellow-400' : 'text-slate-400'}`}>
-                  ${bid.amount}
-                </td>
+      <div className="neon-card overflow-hidden fade-up" style={{ animationDelay: '100ms' }}>
+        <h3 className="text-xs font-bold tracking-wider px-5 pt-4 pb-3 text-[#f0f0ff]">
+          All Successful Bids
+          <span className="ml-2 text-[#6b6e99] font-normal" style={{ fontFamily: "'Space Mono', monospace" }}>({bids.length})</span>
+        </h3>
+        <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+          <table className="w-full text-xs border-collapse">
+            <thead className="sticky top-0 z-10" style={{ background: '#0e1025' }}>
+              <tr>
+                <th className="label px-3 py-2 text-center border-b border-[#2a2e55]">Wk</th>
+                <th className="label px-3 py-2 text-left border-b border-[#2a2e55]">Team</th>
+                <th className="label px-3 py-2 text-left border-b border-[#2a2e55]">Player</th>
+                <th className="label px-3 py-2 text-center border-b border-[#2a2e55]">Pos</th>
+                <th className="label px-3 py-2 text-right border-b border-[#2a2e55]">Bid</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {sortedBids.map((bid, i) => (
+                <tr key={i} className="hover:bg-[rgba(99,102,241,0.05)] transition-colors border-b border-[rgba(42,46,85,0.4)]">
+                  <td className="px-3 py-2 text-center mono">{bid.week}</td>
+                  <td className="px-3 py-2 text-left whitespace-nowrap text-[#f0f0ff]" style={{ fontFamily: "'Exo 2', sans-serif" }}>{teams.get(bid.rosterId)?.displayName || `#${bid.rosterId}`}</td>
+                  <td className="px-3 py-2 text-left text-[#f0f0ff]" style={{ fontFamily: "'Exo 2', sans-serif" }}>{bid.playerName}</td>
+                  <td className="px-3 py-2 text-center"><PosBadge pos={bid.position} /></td>
+                  <td className={`px-3 py-2 text-right font-semibold mono ${bid.amount >= 100 ? 'text-[#f59e0b]' : bid.amount >= 25 ? 'text-[#f59e0b] opacity-70' : 'text-[#6b6e99]'}`}>
+                    ${bid.amount}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
-  );
-}
-
-function PosBadge({ pos }: { pos: string }) {
-  const colors: Record<string, string> = {
-    QB: 'bg-red-900/50 text-red-300',
-    RB: 'bg-blue-900/50 text-blue-300',
-    WR: 'bg-green-900/50 text-green-300',
-    TE: 'bg-yellow-900/50 text-yellow-300',
-    K: 'bg-purple-900/50 text-purple-300',
-    DEF: 'bg-slate-700 text-slate-300',
-  };
-  return (
-    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${colors[pos] || 'bg-slate-700 text-slate-300'}`}>
-      {pos}
-    </span>
   );
 }

@@ -83,8 +83,9 @@ export function computeEliminations(
     const topScore = scores[0]?.points || 0;
     const avgScore = scores.reduce((s, x) => s + x.points, 0) / scores.length;
 
-    // Determine eliminations
-    const elimCount = teamsRemaining <= 2 ? 0 : getElimsPerWeek(teamsRemaining);
+    // Finals: 2 teams remain — no elimination, just champion vs runner-up
+    const isFinals = teamsRemaining === 2;
+    const elimCount = isFinals ? 0 : getElimsPerWeek(teamsRemaining);
     const eliminated: number[] = [];
 
     if (elimCount > 0 && teamsRemaining > 2) {
@@ -103,7 +104,8 @@ export function computeEliminations(
 
     weekData.push({ week, teamsRemaining, scores, topScore, avgScore, cutoffScore, eliminated });
 
-    if (active.size <= 1) break;
+    // Stop after finals (2 teams played, winner is champion, loser is runner-up)
+    if (isFinals || active.size <= 1) break;
   }
 
   return { weekData, elimOrder };
