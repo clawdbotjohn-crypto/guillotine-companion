@@ -6,6 +6,7 @@ import { useAppStore, usePlayers } from '../store';
 import { useLeagueUsers, useRosters, useAllMatchups, useAllTransactions, useLeagueHistory } from '../api';
 import { computeEliminations, extractBids } from '../logic';
 import { Card, Skeleton, StatusBadge, PositionBadge } from '../components/ui';
+import { BidGrid } from '../components/BidGrid';
 import { SeasonPicker } from '../components/SeasonPicker';
 import { useSwitchSeason } from '../hooks/useSwitchSeason';
 
@@ -23,7 +24,7 @@ export function LeaguePage() {
     .map((l) => ({ leagueId: l.league_id, season: l.season, name: l.name }))
     .reverse();
 
-  const [activeView, setActiveView] = useState<'scoreboard' | 'bids' | 'timeline'>('scoreboard');
+  const [activeView, setActiveView] = useState<'scoreboard' | 'bids' | 'grid' | 'timeline'>('scoreboard');
   const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
 
   const isLoading = matchupsLoading || playersLoading;
@@ -52,6 +53,7 @@ export function LeaguePage() {
   const views = [
     { key: 'scoreboard' as const, label: 'Scores' },
     { key: 'bids' as const, label: 'Bids' },
+    { key: 'grid' as const, label: 'Grid' },
     { key: 'timeline' as const, label: 'Timeline' },
   ];
 
@@ -88,7 +90,7 @@ export function LeaguePage() {
       </div>
 
       {/* Week picker */}
-      {activeView !== 'timeline' && (
+      {activeView !== 'timeline' && activeView !== 'grid' && (
         <div className="flex gap-1.5 overflow-x-auto pb-3 mb-4 scrollbar-hide">
           {elimResult.weeks.map((w) => (
             <button
@@ -197,6 +199,45 @@ export function LeaguePage() {
             )}
           </div>
         </Card>
+      )}
+
+      {/* Grid View */}
+      {activeView === 'grid' && (
+        <div>
+          {/* Week filter for grid */}
+          <div className="flex gap-1.5 overflow-x-auto pb-3 mb-4 scrollbar-hide">
+            <button
+              onClick={() => setSelectedWeek(null)}
+              className={`shrink-0 px-3 h-9 rounded-lg text-xs font-['Space_Mono'] font-bold transition-all
+                ${selectedWeek === null
+                  ? 'bg-[#6366f1] text-white shadow-[0_0_8px_rgba(99,102,241,0.4)]'
+                  : 'bg-[#161a3a] text-[#6b6e99] hover:bg-[#1a1e3a]'
+                }`}
+            >
+              All
+            </button>
+            {elimResult.weeks.map((w) => (
+              <button
+                key={w.week}
+                onClick={() => setSelectedWeek(w.week)}
+                className={`shrink-0 w-9 h-9 rounded-lg text-xs font-['Space_Mono'] font-bold transition-all
+                  ${selectedWeek === w.week
+                    ? 'bg-[#6366f1] text-white shadow-[0_0_8px_rgba(99,102,241,0.4)]'
+                    : 'bg-[#161a3a] text-[#6b6e99] hover:bg-[#1a1e3a]'
+                  }`}
+              >
+                {w.week}
+              </button>
+            ))}
+          </div>
+          <BidGrid
+            bids={bids}
+            weeks={elimResult.weeks.map((w) => w.week)}
+            teams={elimResult.teams}
+            totalBudget={100}
+            selectedWeek={selectedWeek}
+          />
+        </div>
       )}
 
       {/* Timeline View */}

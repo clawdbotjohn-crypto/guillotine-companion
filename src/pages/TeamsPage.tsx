@@ -1,6 +1,7 @@
 // Teams page — Browse any team's profile
 // Phase 1: List of all teams with status
 
+import { useNavigate } from 'react-router-dom';
 import { useAppStore, usePlayers } from '../store';
 import { useLeagueUsers, useRosters, useAllMatchups, useLeagueHistory } from '../api';
 import { computeEliminations } from '../logic';
@@ -10,6 +11,7 @@ import { useSwitchSeason } from '../hooks/useSwitchSeason';
 import { ChevronRight } from 'lucide-react';
 
 export function TeamsPage() {
+  const navigate = useNavigate();
   const { leagueId, leagueName, leagueSeason, rootLeagueId } = useAppStore();
   const { data: users } = useLeagueUsers(leagueId);
   const { data: rosters } = useRosters(leagueId);
@@ -93,7 +95,7 @@ export function TeamsPage() {
           const pts = totalPoints.get(team.rosterId) || 0;
 
           return (
-            <Card key={team.rosterId} className="p-4 flex items-center justify-between">
+            <Card key={team.rosterId} className="p-4 flex items-center justify-between" onClick={() => navigate(`/teams/${team.rosterId}`)}>
               <div className="flex items-center gap-3">
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold font-['Space_Mono']
                   ${team.isChampion ? 'bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] text-white' :

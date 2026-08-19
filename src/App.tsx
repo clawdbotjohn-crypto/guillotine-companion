@@ -9,6 +9,7 @@ import {
   WaiversPage,
   LeaguePage,
   TeamsPage,
+  TeamProfilePage,
 } from './pages';
 
 const queryClient = new QueryClient({
@@ -38,6 +39,7 @@ function AppLayout() {
         <Route path="/waivers" element={<WaiversPage />} />
         <Route path="/league" element={<LeaguePage />} />
         <Route path="/teams" element={<TeamsPage />} />
+        <Route path="/teams/:rosterId" element={<TeamProfilePage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       {showNav && <BottomNav />}
