@@ -2,6 +2,7 @@ import { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BottomNav } from './components/BottomNav';
+import { TopHeader } from './components/TopHeader';
 
 const HomePage = lazy(() => import('./pages/HomePage').then(m => ({ default: m.HomePage })));
 const LeaguePickerPage = lazy(() => import('./pages/LeaguePickerPage').then(m => ({ default: m.LeaguePickerPage })));
@@ -39,6 +40,7 @@ function AppLayout() {
 
   return (
     <>
+      {showNav && <TopHeader />}
       <Suspense fallback={<LoadingFallback />}>
         <Routes>
           <Route path="/" element={<HomePage />} />
