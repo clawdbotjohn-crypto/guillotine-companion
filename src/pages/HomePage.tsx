@@ -53,8 +53,8 @@ export function HomePage() {
 
           {/* Logo */}
           <div className="mb-8">
-            <div className="w-20 h-20 mx-auto mb-4 rounded-2xl overflow-hidden shadow-[0_4px_20px_rgba(99,102,241,0.4)]">
-              <img src="/logo.png" alt="Guillotine Companion" className="w-full h-full object-cover" />
+            <div className="w-28 h-28 mx-auto mb-4">
+              <img src="/logo.png" alt="Guillotine Companion" className="w-full h-full object-contain drop-shadow-[0_4px_20px_rgba(99,102,241,0.4)]" />
             </div>
             <h1 className="font-['Orbitron'] text-2xl font-black uppercase tracking-[2px]
               bg-gradient-to-r from-[#f0f0ff] to-[#a5b4fc] bg-clip-text text-transparent">

@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Trophy, ChevronRight, ArrowLeft } from 'lucide-react';
+import { Trophy, ChevronRight, ArrowLeft, Loader2 } from 'lucide-react';
 import dayjs from 'dayjs';
 import { Card, Skeleton } from '../components/ui';
 import { useAppStore } from '../store';
 import { useUserLeagues } from '../api';
+import { getLeagueRosters, getLeagueUsers } from '../api/client';
 import { isGuillotineLeague } from '../logic';
 
 export function LeaguePickerPage() {
@@ -16,8 +18,36 @@ export function LeaguePickerPage() {
   // Filter to guillotine leagues only
   const guillotineLeagues = leagues?.filter((l) => isGuillotineLeague(l)) || [];
 
-  const handleSelect = (league: (typeof guillotineLeagues)[0]) => {
+  const [selectingId, setSelectingId] = useState<string | null>(null);
+  const { setTeam } = useAppStore();
+
+  const handleSelect = async (league: (typeof guillotineLeagues)[0]) => {
     setLeague(league.league_id, league.name, league.season);
+
+    // If we know the userId (entered via username), try to auto-match their roster
+    if (userId) {
+      setSelectingId(league.league_id);
+      try {
+        const [rosters, users] = await Promise.all([
+          getLeagueRosters(league.league_id),
+          getLeagueUsers(league.league_id),
+        ]);
+
+        const myRoster = rosters.find((r) => r.owner_id === userId);
+        if (myRoster) {
+          const myUser = users.find((u) => u.user_id === userId);
+          const displayName = myUser?.display_name ?? username;
+          setTeam(myRoster.roster_id, displayName);
+          navigate('/hub');
+          return;
+        }
+      } catch {
+        // On error, fall through to manual team select
+      } finally {
+        setSelectingId(null);
+      }
+    }
+
     navigate('/team-select');
   };
 
@@ -104,7 +134,11 @@ export function LeaguePickerPage() {
                   </div>
                 </div>
               </div>
-              <ChevronRight className="w-4 h-4 text-[#4a4d77] group-hover:text-[#6366f1] transition-colors" />
+              {selectingId === league.league_id ? (
+                <Loader2 className="w-4 h-4 text-[#6366f1] animate-spin" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-[#4a4d77] group-hover:text-[#6366f1] transition-colors" />
+              )}
             </Card>
           ))}
         </div>
