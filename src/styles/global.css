@@ -1,0 +1,64 @@
+/* Global styles — Neon League theme */
+@import "tailwindcss";
+
+/* Custom theme tokens matching DESIGN-DECISIONS.md */
+@theme {
+  /* Background colors */
+  --color-body: #06060f;
+  --color-card: #0e1025;
+  --color-nav: #0a0d1a;
+
+  /* Border colors */
+  --color-border: #2a2e55;
+  --color-border-subtle: #1a1e3a;
+  --color-divider: #161a3a;
+
+  /* Text colors */
+  --color-primary: #f0f0ff;
+  --color-secondary: #a5b4fc;
+  --color-muted: #6b6e99;
+  --color-dim: #4a4d77;
+
+  /* Accent */
+  --color-accent-indigo: #6366f1;
+  --color-accent-purple: #8b5cf6;
+
+  /* Position colors */
+  --color-pos-qb: #f43f5e;
+  --color-pos-rb: #6366f1;
+  --color-pos-wr: #10b981;
+  --color-pos-te: #f59e0b;
+  --color-pos-k: #6b7280;
+  --color-pos-def: #6b7280;
+
+  /* Status colors */
+  --color-status-green: #10b981;
+  --color-status-amber: #f59e0b;
+  --color-status-red: #f43f5e;
+
+  /* Typography */
+  --font-display: "Orbitron", sans-serif;
+  --font-body: "Exo 2", sans-serif;
+  --font-mono: "Space Mono", monospace;
+}
+
+/* Base styles */
+body {
+  font-family: var(--font-body);
+  background-color: var(--color-body);
+  color: var(--color-primary);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Utility classes for the neon aesthetic */
+.glow-indigo {
+  box-shadow: 0 0 15px rgba(99, 102, 241, 0.3), 0 0 30px rgba(99, 102, 241, 0.1);
+}
+
+.glow-purple {
+  box-shadow: 0 0 15px rgba(139, 92, 246, 0.3), 0 0 30px rgba(139, 92, 246, 0.1);
+}
+
+.gradient-accent {
+  background: linear-gradient(135deg, var(--color-accent-indigo), var(--color-accent-purple));
+}
