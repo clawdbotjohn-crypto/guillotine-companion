@@ -157,8 +157,8 @@ const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }>
   middle: { bg: 'rgba(245,158,11,0.15)', text: '#f59e0b', label: 'Middle' },
   'at-risk': { bg: 'rgba(244,63,94,0.15)', text: '#f43f5e', label: 'At Risk' },
   eliminated: { bg: 'rgba(244,63,94,0.2)', text: '#f43f5e', label: 'Eliminated' },
-  champion: { bg: 'rgba(99,102,241,0.2)', text: '#8b5cf6', label: 'Champion' },
-  'runner-up': { bg: 'rgba(168,85,247,0.15)', text: '#a855f7', label: 'Runner-Up' },
+  champion: { bg: 'rgba(245,158,11,0.2)', text: '#f59e0b', label: 'Champion' },
+  'runner-up': { bg: 'rgba(156,163,175,0.15)', text: '#9ca3af', label: 'Runner-Up' },
 };
 
 export function StatusBadge({ status, className = '' }: StatusBadgeProps) {

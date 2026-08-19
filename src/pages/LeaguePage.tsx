@@ -3,15 +3,18 @@
 
 import { useState } from 'react';
 import { useAppStore, usePlayers } from '../store';
-import { useLeagueUsers, useRosters, useAllMatchups, useAllTransactions, useLeagueHistory } from '../api';
+import { useLeague, useLeagueUsers, useRosters, useAllMatchups, useAllTransactions, useLeagueHistory } from '../api';
 import { computeEliminations, extractBids } from '../logic';
 import { Card, Skeleton, StatusBadge, PositionBadge } from '../components/ui';
+import { Trophy, Medal } from 'lucide-react';
 import { BidGrid } from '../components/BidGrid';
+import { FaabTracker } from '../components/FaabTracker';
 import { SeasonPicker } from '../components/SeasonPicker';
 import { useSwitchSeason } from '../hooks/useSwitchSeason';
 
 export function LeaguePage() {
   const { leagueId, leagueName, leagueSeason, rootLeagueId } = useAppStore();
+  const { data: league } = useLeague(leagueId);
   const { data: users } = useLeagueUsers(leagueId);
   const { data: rosters } = useRosters(leagueId);
   const { isLoading: playersLoading } = usePlayers();
@@ -24,7 +27,7 @@ export function LeaguePage() {
     .map((l) => ({ leagueId: l.league_id, season: l.season, name: l.name }))
     .reverse();
 
-  const [activeView, setActiveView] = useState<'scoreboard' | 'bids' | 'grid' | 'timeline'>('scoreboard');
+  const [activeView, setActiveView] = useState<'scoreboard' | 'bids' | 'grid' | 'faab' | 'timeline'>('scoreboard');
   const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
 
   const isLoading = matchupsLoading || playersLoading;
@@ -54,6 +57,7 @@ export function LeaguePage() {
     { key: 'scoreboard' as const, label: 'Scores' },
     { key: 'bids' as const, label: 'Bids' },
     { key: 'grid' as const, label: 'Grid' },
+    { key: 'faab' as const, label: 'FAAB' },
     { key: 'timeline' as const, label: 'Timeline' },
   ];
 
@@ -90,7 +94,7 @@ export function LeaguePage() {
       </div>
 
       {/* Week picker */}
-      {activeView !== 'timeline' && activeView !== 'grid' && (
+      {activeView !== 'timeline' && activeView !== 'grid' && activeView !== 'faab' && (
         <div className="flex gap-1.5 overflow-x-auto pb-3 mb-4 scrollbar-hide">
           {elimResult.weeks.map((w) => (
             <button
@@ -139,8 +143,20 @@ export function LeaguePage() {
               {weekData.scores.map((s) => {
                 const team = elimResult.teams.get(s.rosterId);
                 const isEliminated = weekData.eliminated.includes(s.rosterId);
+                const isChampion = weekData.isFinals && s.rosterId === elimResult.champion;
+                const isRunnerUp = weekData.isFinals && s.rosterId === elimResult.runnerUp;
                 const pct = s.rank / weekData.teamsRemaining;
-                const color = isEliminated ? '#f43f5e' : pct <= 0.33 ? '#10b981' : pct >= 0.67 ? '#f59e0b' : '#a5b4fc';
+                const color = isChampion
+                  ? '#f59e0b'
+                  : isRunnerUp
+                  ? '#9ca3af'
+                  : isEliminated
+                  ? '#f43f5e'
+                  : pct <= 0.33
+                  ? '#10b981'
+                  : pct >= 0.67
+                  ? '#f59e0b'
+                  : '#a5b4fc';
 
                 return (
                   <div
@@ -154,9 +170,21 @@ export function LeaguePage() {
                       >
                         {s.rank}
                       </span>
+                      {isChampion && (
+                        <Trophy size={14} className="text-[#f59e0b] shrink-0" />
+                      )}
+                      {isRunnerUp && (
+                        <Medal size={14} className="text-[#9ca3af] shrink-0" />
+                      )}
                       <span className={`text-sm ${isEliminated ? 'line-through text-[#4a4d77]' : 'text-[#f0f0ff]'}`}>
                         {team?.displayName}
                       </span>
+                      {isChampion && (
+                        <StatusBadge status="champion" />
+                      )}
+                      {isRunnerUp && (
+                        <StatusBadge status="runner-up" />
+                      )}
                       {isEliminated && (
                         <StatusBadge status="eliminated" />
                       )}
@@ -240,6 +268,16 @@ export function LeaguePage() {
         </div>
       )}
 
+      {/* FAAB View */}
+      {activeView === 'faab' && rosters && users && (
+        <FaabTracker
+          rosters={rosters}
+          users={users}
+          teams={elimResult.teams}
+          totalBudget={league?.settings?.waiver_budget ?? 1000}
+        />
+      )}
+
       {/* Timeline View */}
       {activeView === 'timeline' && (
         <div className="space-y-2">
@@ -279,11 +317,19 @@ export function LeaguePage() {
                   <div className="mt-1.5 space-y-0.5">
                     {w.scores.map((s) => {
                       const team = elimResult.teams.get(s.rosterId);
+                      const isChamp = s.rosterId === elimResult.champion;
                       return (
                         <div key={s.rosterId} className="flex items-center justify-between text-xs">
-                          <span className={s.rank === 1 ? 'text-[#8b5cf6] font-bold' : 'text-[#6b6e99]'}>
-                            {s.rank === 1 ? '👑 ' : ''}{team?.displayName}
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            {isChamp ? (
+                              <Trophy size={12} className="text-[#f59e0b] shrink-0" />
+                            ) : (
+                              <Medal size={12} className="text-[#9ca3af] shrink-0" />
+                            )}
+                            <span className={isChamp ? 'text-[#f59e0b] font-bold' : 'text-[#9ca3af]'}>
+                              {team?.displayName}
+                            </span>
+                          </div>
                           <span className="font-['Space_Mono'] tabular-nums text-[#a5b4fc]">
                             {s.points.toFixed(1)}
                           </span>
