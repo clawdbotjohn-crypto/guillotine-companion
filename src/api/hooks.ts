@@ -106,3 +106,12 @@ export function useUserLeagues(userId: string | null, season: string) {
     staleTime: STALE_6H,
   });
 }
+
+export function useLeagueHistory(leagueId: string | null) {
+  return useQuery<League[]>({
+    queryKey: ['league-history', leagueId],
+    queryFn: () => api.getLeagueHistory(leagueId!),
+    enabled: !!leagueId,
+    staleTime: STALE_6H,
+  });
+}

@@ -2,17 +2,25 @@
 // Phase 1: List of all teams with status
 
 import { useAppStore, usePlayers } from '../store';
-import { useLeagueUsers, useRosters, useAllMatchups } from '../api';
+import { useLeagueUsers, useRosters, useAllMatchups, useLeagueHistory } from '../api';
 import { computeEliminations } from '../logic';
 import { Card, Skeleton, StatusBadge } from '../components/ui';
+import { SeasonPicker } from '../components/SeasonPicker';
+import { useSwitchSeason } from '../hooks/useSwitchSeason';
 import { ChevronRight } from 'lucide-react';
 
 export function TeamsPage() {
-  const { leagueId, leagueName } = useAppStore();
+  const { leagueId, leagueName, leagueSeason, rootLeagueId } = useAppStore();
   const { data: users } = useLeagueUsers(leagueId);
   const { data: rosters } = useRosters(leagueId);
   const { isLoading: playersLoading } = usePlayers();
   const { data: matchups, isLoading: matchupsLoading } = useAllMatchups(leagueId, 18);
+  const { data: leagueHistory, isLoading: historyLoading } = useLeagueHistory(rootLeagueId);
+  const handleSwitchSeason = useSwitchSeason();
+
+  const seasons = (leagueHistory || [])
+    .map((l) => ({ leagueId: l.league_id, season: l.season, name: l.name }))
+    .reverse();
 
   const isLoading = matchupsLoading || playersLoading;
 
@@ -66,6 +74,14 @@ export function TeamsPage() {
       <p className="text-xs text-[#6b6e99] mb-6">
         {leagueName} · {teamList.length} teams
       </p>
+
+      {/* Season Picker */}
+      <SeasonPicker
+        seasons={seasons}
+        currentSeason={leagueSeason || ''}
+        onSelect={handleSwitchSeason}
+        isLoading={historyLoading}
+      />
 
       <div className="space-y-2">
         {teamList.map((team) => {

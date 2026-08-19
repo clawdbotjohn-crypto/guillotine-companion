@@ -3,17 +3,25 @@
 
 import { useState } from 'react';
 import { useAppStore, usePlayers } from '../store';
-import { useLeagueUsers, useRosters, useAllMatchups, useAllTransactions } from '../api';
+import { useLeagueUsers, useRosters, useAllMatchups, useAllTransactions, useLeagueHistory } from '../api';
 import { computeEliminations, extractBids } from '../logic';
 import { Card, Skeleton, StatusBadge, PositionBadge } from '../components/ui';
+import { SeasonPicker } from '../components/SeasonPicker';
+import { useSwitchSeason } from '../hooks/useSwitchSeason';
 
 export function LeaguePage() {
-  const { leagueId, leagueName } = useAppStore();
+  const { leagueId, leagueName, leagueSeason, rootLeagueId } = useAppStore();
   const { data: users } = useLeagueUsers(leagueId);
   const { data: rosters } = useRosters(leagueId);
   const { isLoading: playersLoading } = usePlayers();
   const { data: matchups, isLoading: matchupsLoading } = useAllMatchups(leagueId, 18);
   const { data: transactions } = useAllTransactions(leagueId, 18);
+  const { data: leagueHistory, isLoading: historyLoading } = useLeagueHistory(rootLeagueId);
+  const handleSwitchSeason = useSwitchSeason();
+
+  const seasons = (leagueHistory || [])
+    .map((l) => ({ leagueId: l.league_id, season: l.season, name: l.name }))
+    .reverse();
 
   const [activeView, setActiveView] = useState<'scoreboard' | 'bids' | 'timeline'>('scoreboard');
   const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
@@ -53,6 +61,14 @@ export function LeaguePage() {
         League
       </h1>
       <p className="text-xs text-[#6b6e99] mb-6">{leagueName}</p>
+
+      {/* Season Picker */}
+      <SeasonPicker
+        seasons={seasons}
+        currentSeason={leagueSeason || ''}
+        onSelect={handleSwitchSeason}
+        isLoading={historyLoading}
+      />
 
       {/* View Toggle */}
       <div className="flex gap-1 bg-[#0a0d1a] rounded-lg p-1 mb-6">

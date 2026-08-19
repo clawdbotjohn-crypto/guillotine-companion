@@ -8,15 +8,18 @@ import {
   useRosters,
   useAllMatchups,
   useAllTransactions,
+  useLeagueHistory,
 } from '../api';
 import { computeEliminations, extractBids } from '../logic';
 import { Card, StatCard, StatusBadge, Skeleton, PositionBadge } from '../components/ui';
+import { SeasonPicker } from '../components/SeasonPicker';
+import { useSwitchSeason } from '../hooks/useSwitchSeason';
 import { LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export function HubPage() {
   const navigate = useNavigate();
-  const { leagueId, leagueName, rosterId, teamName, reset } = useAppStore();
+  const { leagueId, leagueName, leagueSeason, rootLeagueId, rosterId, teamName, reset } = useAppStore();
 
   const { data: league } = useLeague(leagueId);
   const { data: users } = useLeagueUsers(leagueId);
@@ -24,6 +27,12 @@ export function HubPage() {
   const { isLoading: playersLoading } = usePlayers();
   const { data: matchups, isLoading: matchupsLoading } = useAllMatchups(leagueId, 18);
   const { data: transactions } = useAllTransactions(leagueId, 18);
+  const { data: leagueHistory, isLoading: historyLoading } = useLeagueHistory(rootLeagueId);
+  const handleSwitchSeason = useSwitchSeason();
+
+  const seasons = (leagueHistory || [])
+    .map((l) => ({ leagueId: l.league_id, season: l.season, name: l.name }))
+    .reverse(); // oldest to newest (left to right)
 
   const isLoading = matchupsLoading || playersLoading;
 
@@ -119,6 +128,14 @@ export function HubPage() {
           </button>
         </div>
       </div>
+
+      {/* Season Picker */}
+      <SeasonPicker
+        seasons={seasons}
+        currentSeason={leagueSeason || ''}
+        onSelect={handleSwitchSeason}
+        isLoading={historyLoading}
+      />
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 gap-3 mb-6">

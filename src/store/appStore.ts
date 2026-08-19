@@ -12,6 +12,7 @@ interface AppState {
   leagueId: string | null;
   leagueName: string | null;
   leagueSeason: string | null;
+  rootLeagueId: string | null; // The original league ID entered (most recent season)
   rosterId: number | null;
   teamName: string | null;
 
@@ -21,6 +22,7 @@ interface AppState {
   // Actions
   setUser: (username: string, userId: string) => void;
   setLeague: (id: string, name: string, season: string) => void;
+  switchSeason: (leagueId: string, name: string, season: string) => void;
   setTeam: (rosterId: number, teamName: string) => void;
   setStrategy: (s: AppState['activeStrategy']) => void;
   reset: () => void;
@@ -32,6 +34,7 @@ const initialState = {
   leagueId: null as string | null,
   leagueName: null as string | null,
   leagueSeason: null as string | null,
+  rootLeagueId: null as string | null,
   rosterId: null as number | null,
   teamName: null as string | null,
   activeStrategy: 'safe' as const,
@@ -45,7 +48,17 @@ export const useAppStore = create<AppState>()(
       setUser: (username, userId) => set({ username, userId }),
 
       setLeague: (id, name, season) =>
-        set({ leagueId: id, leagueName: name, leagueSeason: season, rosterId: null, teamName: null }),
+        set((state) => ({
+          leagueId: id,
+          leagueName: name,
+          leagueSeason: season,
+          rootLeagueId: state.rootLeagueId || id,
+          rosterId: null,
+          teamName: null,
+        })),
+
+      switchSeason: (leagueId, name, season) =>
+        set({ leagueId, leagueName: name, leagueSeason: season, rosterId: null, teamName: null }),
 
       setTeam: (rosterId, teamName) => set({ rosterId, teamName }),
 

@@ -49,3 +49,15 @@ export const getUserLeagues = (userId: string, season: string) =>
 
 // Players (large payload ~30MB)
 export const getAllPlayers = () => get<Record<string, any>>('/players/nfl');
+
+// League history — walk previous_league_id chain
+export async function getLeagueHistory(leagueId: string): Promise<League[]> {
+  const history: League[] = [];
+  let currentId: string | null = leagueId;
+  while (currentId) {
+    const league = await getLeague(currentId);
+    history.push(league);
+    currentId = league.previous_league_id;
+  }
+  return history; // Most recent first
+}
