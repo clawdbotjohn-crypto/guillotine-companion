@@ -20,6 +20,8 @@ body {
   color: #f0f0ff;
   font-family: 'Exo 2', sans-serif;
   font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -32,33 +34,9 @@ h1, h2, h3, h4, h5, h6 {
 ::-webkit-scrollbar-track { background: #06060f; }
 ::-webkit-scrollbar-thumb { background: #2a2e55; border-radius: 3px; }
 
-/* Neon glow card */
-.neon-card {
-  background: rgba(14,16,37,0.8);
-  border: 1px solid #2a2e55;
-  border-radius: 12px;
-  backdrop-filter: blur(12px);
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-.neon-card:hover {
-  border-color: #6366f1;
-  box-shadow: 0 4px 20px rgba(99,102,241,0.15);
-}
-
-/* Position badge pill */
-.pos-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2px 8px;
-  border-radius: 20px;
-  font-size: 10px;
-  font-weight: 700;
-  font-family: 'Exo 2', sans-serif;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  border: 1px solid;
-}
+/* Hide scrollbar on mobile */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
 /* Monospace for all data/numbers */
 .mono {
@@ -102,18 +80,19 @@ h1, h2, h3, h4, h5, h6 {
   animation: pulseRed 2s ease-in-out infinite;
 }
 
-/* Tab gradient underline */
-.tab-active {
-  position: relative;
+/* Neon glow pulse */
+@keyframes neonPulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(99,102,241,0.3); }
+  50% { box-shadow: 0 0 16px rgba(99,102,241,0.5); }
 }
-.tab-active::after {
-  content: '';
-  position: absolute;
-  bottom: -1px;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, #6366f1, #8b5cf6, #ec4899);
-  border-radius: 3px;
-  box-shadow: 0 0 8px rgba(99,102,241,0.4);
+
+/* Safe area for bottom nav */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Selection color */
+::selection {
+  background: rgba(99,102,241,0.3);
+  color: #f0f0ff;
 }
