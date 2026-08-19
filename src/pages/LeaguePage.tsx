@@ -275,6 +275,7 @@ export function LeaguePage() {
           users={users}
           teams={elimResult.teams}
           totalBudget={league?.settings?.waiver_budget ?? 1000}
+          bids={bids}
         />
       )}
 
