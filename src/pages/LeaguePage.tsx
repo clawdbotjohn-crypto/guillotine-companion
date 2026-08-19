@@ -13,7 +13,7 @@ import { SeasonPicker } from '../components/SeasonPicker';
 import { useSwitchSeason } from '../hooks/useSwitchSeason';
 
 export function LeaguePage() {
-  const { leagueId, leagueName, leagueSeason, rootLeagueId } = useAppStore();
+  const { leagueId, leagueName, leagueSeason, rootLeagueId, rosterId: selectedRosterId } = useAppStore();
   const { data: league } = useLeague(leagueId);
   const { data: users } = useLeagueUsers(leagueId);
   const { data: rosters } = useRosters(leagueId);
@@ -52,7 +52,6 @@ export function LeaguePage() {
   const bids = transactions ? extractBids(transactions) : [];
   const hasWeekData = elimResult.weeks.length > 0;
   const currentWeek = selectedWeek ?? elimResult.weeks.length;
-  const weekData = elimResult.weeks.find((w) => w.week === currentWeek);
   const leagueStatus = league?.status ?? '';
 
   const views = [
@@ -64,7 +63,7 @@ export function LeaguePage() {
   ];
 
   return (
-    <div className="px-6 py-6 pb-24 max-w-lg mx-auto">
+    <div className={`px-6 py-6 pb-24 mx-auto ${activeView === 'scoreboard' ? 'max-w-3xl' : 'max-w-lg'}`}>
       <h1 className="font-['Orbitron'] text-lg font-bold uppercase tracking-wider text-[#f0f0ff] mb-1">
         League
       </h1>
@@ -116,8 +115,8 @@ export function LeaguePage() {
         </Card>
       )}
 
-      {/* Week picker */}
-      {hasWeekData && activeView !== 'timeline' && activeView !== 'grid' && activeView !== 'faab' && (
+      {/* Week picker — only for Bids view */}
+      {hasWeekData && activeView === 'bids' && (
         <div className="flex gap-1.5 overflow-x-auto pb-3 mb-4 scrollbar-hide">
           {elimResult.weeks.map((w) => (
             <button
@@ -135,96 +134,126 @@ export function LeaguePage() {
         </div>
       )}
 
-      {/* Scoreboard View */}
-      {activeView === 'scoreboard' && !weekData && hasWeekData && (
-        <Card hover={false} className="p-6">
-          <p className="text-[#6b6e99] text-sm text-center">No scores for this week yet</p>
-        </Card>
-      )}
-      {activeView === 'scoreboard' && weekData && (
+      {/* Scoreboard View — Full Season Table */}
+      {activeView === 'scoreboard' && hasWeekData && (
         <div>
-          {/* Summary stats */}
-          <div className="grid grid-cols-3 gap-2 mb-4">
-            <div className="bg-[#161a3a] rounded-lg p-3 text-center">
-              <div className="text-[9px] text-[#4a4d77] uppercase tracking-wider">Top</div>
-              <div className="font-['Space_Mono'] text-sm text-[#10b981] font-bold tabular-nums">
-                {weekData.topScore.toFixed(1)}
-              </div>
-            </div>
-            <div className="bg-[#161a3a] rounded-lg p-3 text-center">
-              <div className="text-[9px] text-[#4a4d77] uppercase tracking-wider">Avg</div>
-              <div className="font-['Space_Mono'] text-sm text-[#a5b4fc] font-bold tabular-nums">
-                {weekData.avgScore.toFixed(1)}
-              </div>
-            </div>
-            <div className="bg-[#161a3a] rounded-lg p-3 text-center">
-              <div className="text-[9px] text-[#4a4d77] uppercase tracking-wider">Cutoff</div>
-              <div className="font-['Space_Mono'] text-sm text-[#f43f5e] font-bold tabular-nums">
-                {weekData.cutoffScore.toFixed(1)}
-              </div>
-            </div>
-          </div>
-
-          {/* All scores */}
-          <Card hover={false} className="p-4">
-            <div className="space-y-1.5">
-              {weekData.scores.map((s) => {
-                const team = elimResult.teams.get(s.rosterId);
-                const isEliminated = weekData.eliminated.includes(s.rosterId);
-                const isChampion = weekData.isFinals && s.rosterId === elimResult.champion;
-                const isRunnerUp = weekData.isFinals && s.rosterId === elimResult.runnerUp;
-                const pct = s.rank / weekData.teamsRemaining;
-                const color = isChampion
-                  ? '#f59e0b'
-                  : isRunnerUp
-                  ? '#9ca3af'
-                  : isEliminated
-                  ? '#f43f5e'
-                  : pct <= 0.33
-                  ? '#10b981'
-                  : pct >= 0.67
-                  ? '#f59e0b'
-                  : '#a5b4fc';
-
-                return (
-                  <div
-                    key={s.rosterId}
-                    className={`flex items-center justify-between py-1.5 ${isEliminated ? 'opacity-60' : ''}`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="font-['Space_Mono'] text-[10px] w-5 text-right tabular-nums"
-                        style={{ color }}
-                      >
-                        {s.rank}
-                      </span>
-                      {isChampion && (
-                        <Trophy size={14} className="text-[#f59e0b] shrink-0" />
-                      )}
-                      {isRunnerUp && (
-                        <Medal size={14} className="text-[#9ca3af] shrink-0" />
-                      )}
-                      <span className={`text-sm ${isEliminated ? 'line-through text-[#4a4d77]' : 'text-[#f0f0ff]'}`}>
-                        {team?.displayName}
-                      </span>
-                      {isChampion && (
-                        <StatusBadge status="champion" />
-                      )}
-                      {isRunnerUp && (
-                        <StatusBadge status="runner-up" />
-                      )}
-                      {isEliminated && (
-                        <StatusBadge status="eliminated" />
-                      )}
-                    </div>
-                    <span className="font-['Space_Mono'] text-xs tabular-nums" style={{ color }}>
-                      {s.points.toFixed(1)}
-                    </span>
+          {/* Season aggregate stats */}
+          {(() => {
+            const seasonTop = Math.max(...elimResult.weeks.map((w) => w.topScore));
+            const seasonAvg = elimResult.weeks.reduce((sum, w) => sum + w.avgScore, 0) / elimResult.weeks.length;
+            const seasonCut = elimResult.weeks.reduce((sum, w) => sum + w.cutoffScore, 0) / elimResult.weeks.length;
+            return (
+              <div className="grid grid-cols-3 gap-2 mb-4">
+                <div className="bg-[#161a3a] rounded-lg p-3 text-center">
+                  <div className="text-[9px] text-[#4a4d77] uppercase tracking-wider">Season High</div>
+                  <div className="font-['Space_Mono'] text-sm text-[#10b981] font-bold tabular-nums">
+                    {seasonTop.toFixed(1)}
                   </div>
-                );
-              })}
-            </div>
-          </Card>
+                </div>
+                <div className="bg-[#161a3a] rounded-lg p-3 text-center">
+                  <div className="text-[9px] text-[#4a4d77] uppercase tracking-wider">Avg/Wk</div>
+                  <div className="font-['Space_Mono'] text-sm text-[#a5b4fc] font-bold tabular-nums">
+                    {seasonAvg.toFixed(1)}
+                  </div>
+                </div>
+                <div className="bg-[#161a3a] rounded-lg p-3 text-center">
+                  <div className="text-[9px] text-[#4a4d77] uppercase tracking-wider">Avg Cut</div>
+                  <div className="font-['Space_Mono'] text-sm text-[#f43f5e] font-bold tabular-nums">
+                    {seasonCut.toFixed(1)}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Full-season data table */}
+          <div className="bg-[#0e1025] rounded-lg border border-[#2a2e55] overflow-x-auto">
+            <table className="w-full text-xs border-collapse min-w-[480px]">
+              <thead>
+                <tr className="bg-[#161a3a]">
+                  <th className="font-['Orbitron'] text-[10px] text-[#6b6e99] uppercase tracking-wider text-left px-2 py-2 border-b border-[#2a2e55]">Wk</th>
+                  <th className="font-['Orbitron'] text-[10px] text-[#6b6e99] uppercase tracking-wider text-right px-2 py-2 border-b border-[#2a2e55]">Top</th>
+                  <th className="font-['Orbitron'] text-[10px] text-[#6b6e99] uppercase tracking-wider text-right px-2 py-2 border-b border-[#2a2e55]">Avg</th>
+                  <th className="font-['Orbitron'] text-[10px] text-[#6b6e99] uppercase tracking-wider text-right px-2 py-2 border-b border-[#2a2e55]">Cut</th>
+                  <th className="font-['Orbitron'] text-[10px] text-[#6b6e99] uppercase tracking-wider text-right px-2 py-2 border-b border-[#2a2e55]">
+                    {selectedRosterId ? (elimResult.teams.get(selectedRosterId)?.displayName ?? 'My Team') : 'My Team'}
+                  </th>
+                  <th className="font-['Orbitron'] text-[10px] text-[#6b6e99] uppercase tracking-wider text-center px-2 py-2 border-b border-[#2a2e55]">Rank</th>
+                  <th className="font-['Orbitron'] text-[10px] text-[#6b6e99] uppercase tracking-wider text-left px-2 py-2 border-b border-[#2a2e55]">Eliminated</th>
+                </tr>
+              </thead>
+              <tbody>
+                {elimResult.weeks.map((w, idx) => {
+                  const myScore = selectedRosterId
+                    ? w.scores.find((s) => s.rosterId === selectedRosterId)
+                    : null;
+                  const isChampionWeek = w.isFinals && elimResult.champion !== null;
+                  const myEliminated = selectedRosterId
+                    ? w.eliminated.includes(selectedRosterId)
+                    : false;
+
+                  // Rank color
+                  let rankColor = '#a5b4fc'; // default middle
+                  if (myScore) {
+                    if (myEliminated) {
+                      rankColor = '#f43f5e';
+                    } else if (isChampionWeek && myScore.rosterId === elimResult.champion) {
+                      rankColor = '#f59e0b';
+                    } else {
+                      const pct = myScore.rank / w.teamsRemaining;
+                      if (pct <= 0.33) rankColor = '#10b981';
+                      else if (pct > 0.67) rankColor = '#f59e0b';
+                    }
+                  }
+
+                  const elimNames = w.eliminated
+                    .map((id) => elimResult.teams.get(id)?.displayName ?? `Team ${id}`)
+                    .join(', ');
+
+                  const rowBg = idx % 2 === 0 ? 'bg-[#0a0d1a]' : 'bg-[#0e1025]';
+
+                  return (
+                    <tr
+                      key={w.week}
+                      className={`${rowBg} ${isChampionWeek ? 'border-l-2 border-l-[#f59e0b]' : ''}`}
+                    >
+                      <td className="font-['Space_Mono'] text-[#f0f0ff] px-2 py-1.5 tabular-nums border-b border-[#2a2e55]">
+                        {w.week}
+                      </td>
+                      <td className="font-['Space_Mono'] text-[#10b981] text-right px-2 py-1.5 tabular-nums border-b border-[#2a2e55]">
+                        {w.topScore.toFixed(1)}
+                      </td>
+                      <td className="font-['Space_Mono'] text-[#a5b4fc] text-right px-2 py-1.5 tabular-nums border-b border-[#2a2e55]">
+                        {w.avgScore.toFixed(1)}
+                      </td>
+                      <td className="font-['Space_Mono'] text-[#f43f5e] text-right px-2 py-1.5 tabular-nums border-b border-[#2a2e55]">
+                        {w.cutoffScore.toFixed(1)}
+                      </td>
+                      <td
+                        className="font-['Space_Mono'] text-right px-2 py-1.5 tabular-nums border-b border-[#2a2e55]"
+                        style={{ color: myScore ? rankColor : '#4a4d77' }}
+                      >
+                        {myScore ? myScore.points.toFixed(1) : '—'}
+                      </td>
+                      <td
+                        className="font-['Space_Mono'] text-center px-2 py-1.5 tabular-nums border-b border-[#2a2e55]"
+                        style={{ color: rankColor }}
+                      >
+                        {myScore ? `${myScore.rank}/${w.teamsRemaining}` : '—'}
+                      </td>
+                      <td className="text-left px-2 py-1.5 border-b border-[#2a2e55] max-w-[150px] truncate">
+                        {w.eliminated.length > 0 ? (
+                          <span className="text-[#f43f5e] line-through">{elimNames}</span>
+                        ) : (
+                          <span className="text-[#4a4d77]">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
