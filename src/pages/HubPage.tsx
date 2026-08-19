@@ -14,7 +14,7 @@ import { computeEliminations, extractBids } from '../logic';
 import { Card, StatCard, StatusBadge, Skeleton, PositionBadge } from '../components/ui';
 import { SeasonPicker } from '../components/SeasonPicker';
 import { useSwitchSeason } from '../hooks/useSwitchSeason';
-import { LogOut } from 'lucide-react';
+import { LogOut, Calendar } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export function HubPage() {
@@ -71,15 +71,126 @@ export function HubPage() {
   const bids = transactions ? extractBids(transactions) : [];
   const myBids = bids.filter((b) => b.rosterId === rosterId);
 
-  // Find my current stats
-  const lastWeek = elimResult.weeks[elimResult.weeks.length - 1];
-  const myLastScore = lastWeek?.scores.find((s) => s.rosterId === rosterId);
-
-  // FAAB budget
+  // FAAB budget (available even pre-season)
   const myRoster = rosters.find((r) => r.roster_id === rosterId);
   const totalBudget = league?.settings?.waiver_budget ?? 1000;
   const budgetUsed = myRoster?.settings?.waiver_budget_used ?? 0;
   const budgetRemaining = totalBudget - budgetUsed;
+
+  // Detect pre-season / no-data state
+  const hasWeekData = elimResult.weeks.length > 0;
+  const leagueStatus = league?.status ?? '';
+
+  // Pre-season: no matchup data yet
+  if (!hasWeekData) {
+    const draftStatusLabel =
+      leagueStatus === 'pre_draft'
+        ? 'Not Started'
+        : leagueStatus === 'drafting'
+        ? 'In Progress'
+        : 'Complete'; // 'in_season' or 'complete' with no weeks means draft is done
+
+    const statusMessage =
+      leagueStatus === 'pre_draft'
+        ? 'League created, draft pending'
+        : leagueStatus === 'drafting'
+        ? 'Draft in progress'
+        : 'Season starting soon';
+
+    return (
+      <div className="px-6 py-6 pb-24 max-w-lg mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="font-['Orbitron'] text-lg font-bold uppercase tracking-wider text-[#f0f0ff]">
+              {teamName}
+            </h1>
+            <p className="text-xs text-[#6b6e99] mt-0.5">{leagueName}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => { reset(); navigate('/'); }}
+              className="text-[#4a4d77] hover:text-[#f43f5e] transition-colors p-1"
+              title="Switch league"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Season Picker */}
+        <SeasonPicker
+          seasons={seasons}
+          currentSeason={leagueSeason || ''}
+          onSelect={handleSwitchSeason}
+          isLoading={historyLoading}
+        />
+
+        {/* Pre-season card */}
+        <Card hover={false} className="p-6 mb-6">
+          <div className="flex flex-col items-center text-center">
+            <div className="w-12 h-12 rounded-full bg-[#161a3a] flex items-center justify-center mb-4">
+              <Calendar className="w-6 h-6 text-[#6366f1]" />
+            </div>
+            <h2 className="text-[#f0f0ff] font-semibold text-base mb-1">
+              Season hasn&apos;t started yet
+            </h2>
+            <p className="text-[#6b6e99] text-sm mb-4">
+              Check back after Week 1 for scores and rankings.
+            </p>
+            <div className="text-xs text-[#6b6e99]">
+              <span className="text-[#4a4d77]">Draft:</span>{' '}
+              <span className={
+                draftStatusLabel === 'Complete' ? 'text-[#10b981]' :
+                draftStatusLabel === 'In Progress' ? 'text-[#f59e0b]' :
+                'text-[#6b6e99]'
+              }>
+                {draftStatusLabel}
+              </span>
+            </div>
+            <p className="text-[10px] text-[#4a4d77] mt-2">{statusMessage}</p>
+          </div>
+        </Card>
+
+        {/* FAAB remaining — always available */}
+        <div className="grid grid-cols-1 gap-3 mb-6">
+          <StatCard
+            label="FAAB Remaining"
+            value={`$${budgetRemaining}`}
+            subtext={`of $${totalBudget}`}
+            accentColor="#f59e0b"
+          />
+        </div>
+
+        {/* Recent bids (unlikely pre-season but safe to show) */}
+        {myBids.length > 0 && (
+          <Card hover={false} className="p-4">
+            <h2 className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#6b6e99] mb-3">
+              Recent Pickups
+            </h2>
+            <div className="space-y-2">
+              {myBids.slice(-5).reverse().map((bid, i) => (
+                <div key={i} className="flex items-center justify-between text-sm">
+                  <div className="flex items-center gap-2">
+                    <PositionBadge position={bid.position} />
+                    <span className="text-[#f0f0ff]">{bid.playerName}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="font-['Space_Mono'] text-xs text-[#f59e0b] tabular-nums">${bid.amount}</span>
+                    <span className="text-[10px] text-[#4a4d77]">Wk{bid.week}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+      </div>
+    );
+  }
+
+  // Find my current stats
+  const lastWeek = elimResult.weeks[elimResult.weeks.length - 1];
+  const myLastScore = lastWeek?.scores.find((s) => s.rosterId === rosterId);
 
   // Total points scored
   const totalPoints = elimResult.weeks.reduce((sum, w) => {

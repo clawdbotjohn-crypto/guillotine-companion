@@ -6,7 +6,7 @@ import { useAppStore, usePlayers } from '../store';
 import { useLeague, useLeagueUsers, useRosters, useAllMatchups, useAllTransactions, useLeagueHistory } from '../api';
 import { computeEliminations, extractBids } from '../logic';
 import { Card, Skeleton, StatusBadge, PositionBadge } from '../components/ui';
-import { Trophy, Medal } from 'lucide-react';
+import { Trophy, Medal, Calendar } from 'lucide-react';
 import { BidGrid } from '../components/BidGrid';
 import { FaabTracker } from '../components/FaabTracker';
 import { SeasonPicker } from '../components/SeasonPicker';
@@ -50,8 +50,10 @@ export function LeaguePage() {
 
   const elimResult = computeEliminations(matchups, rosters, users);
   const bids = transactions ? extractBids(transactions) : [];
+  const hasWeekData = elimResult.weeks.length > 0;
   const currentWeek = selectedWeek ?? elimResult.weeks.length;
   const weekData = elimResult.weeks.find((w) => w.week === currentWeek);
+  const leagueStatus = league?.status ?? '';
 
   const views = [
     { key: 'scoreboard' as const, label: 'Scores' },
@@ -93,8 +95,29 @@ export function LeaguePage() {
         ))}
       </div>
 
+      {/* Pre-season: no week data */}
+      {!hasWeekData && (
+        <Card hover={false} className="p-6">
+          <div className="flex flex-col items-center text-center">
+            <div className="w-12 h-12 rounded-full bg-[#161a3a] flex items-center justify-center mb-4">
+              <Calendar className="w-6 h-6 text-[#6366f1]" />
+            </div>
+            <h2 className="text-[#f0f0ff] font-semibold text-base mb-1">
+              No scores yet
+            </h2>
+            <p className="text-[#6b6e99] text-sm mb-2">
+              {leagueStatus === 'pre_draft'
+                ? 'The league has been created but the draft hasn\'t started.'
+                : leagueStatus === 'drafting'
+                ? 'The draft is in progress — scores will appear after Week 1.'
+                : 'The season hasn\'t kicked off yet. Check back after Week 1.'}
+            </p>
+          </div>
+        </Card>
+      )}
+
       {/* Week picker */}
-      {activeView !== 'timeline' && activeView !== 'grid' && activeView !== 'faab' && (
+      {hasWeekData && activeView !== 'timeline' && activeView !== 'grid' && activeView !== 'faab' && (
         <div className="flex gap-1.5 overflow-x-auto pb-3 mb-4 scrollbar-hide">
           {elimResult.weeks.map((w) => (
             <button
@@ -113,6 +136,11 @@ export function LeaguePage() {
       )}
 
       {/* Scoreboard View */}
+      {activeView === 'scoreboard' && !weekData && hasWeekData && (
+        <Card hover={false} className="p-6">
+          <p className="text-[#6b6e99] text-sm text-center">No scores for this week yet</p>
+        </Card>
+      )}
       {activeView === 'scoreboard' && weekData && (
         <div>
           {/* Summary stats */}

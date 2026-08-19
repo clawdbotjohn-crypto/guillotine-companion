@@ -1,5 +1,6 @@
 // Team Profile Page — Detailed view of a single team's season data
 
+import { useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAppStore, usePlayers } from '../store';
 import {
@@ -16,6 +17,13 @@ import { Card, StatCard, StatusBadge, Skeleton, PositionBadge } from '../compone
 import { SeasonPicker } from '../components/SeasonPicker';
 import { useSwitchSeason } from '../hooks/useSwitchSeason';
 import { ArrowLeft, Target, BarChart3, DollarSign } from 'lucide-react';
+
+const POSITION_COLORS: Record<string, string> = {
+  QB: '#f43f5e', RB: '#6366f1', WR: '#10b981', TE: '#f59e0b', K: '#6b6e99', DEF: '#4a4d77',
+};
+function positionColor(pos: string) {
+  return POSITION_COLORS[pos] || '#4a4d77';
+}
 
 export function TeamProfilePage() {
   const { rosterId: rosterIdParam } = useParams<{ rosterId: string }>();
@@ -146,6 +154,18 @@ export function TeamProfilePage() {
   const totalSpent = teamBids.reduce((s, b) => s + b.amount, 0);
   const biggestBid = teamBids.length > 0 ? Math.max(...teamBids.map((b) => b.amount)) : 0;
   const avgBid = teamBids.length > 0 ? totalSpent / teamBids.length : 0;
+
+  const positionBreakdown = useMemo(() => {
+    const byPosition: Record<string, number> = {};
+    for (const bid of teamBids) {
+      const pos = bid.position || 'Unknown';
+      byPosition[pos] = (byPosition[pos] || 0) + bid.amount;
+    }
+    const total = Object.values(byPosition).reduce((a, b) => a + b, 0);
+    return Object.entries(byPosition)
+      .map(([pos, amount]) => ({ pos, amount, pct: total > 0 ? (amount / total) * 100 : 0 }))
+      .sort((a, b) => b.amount - a.amount);
+  }, [teamBids]);
 
   // Draft picks
   const teamDraftPicks = draftPicks
@@ -290,6 +310,30 @@ export function TeamProfilePage() {
                 </div>
               </div>
             </div>
+            {/* Position breakdown */}
+            {positionBreakdown.length > 0 && (
+              <div className="space-y-2 mb-4 pb-3 border-b border-[#1a1e3a]">
+                {positionBreakdown.map(({ pos, amount, pct }) => (
+                  <div key={pos} className="flex items-center gap-3">
+                    <PositionBadge position={pos} className="w-8" />
+                    <div className="flex-1">
+                      <div className="h-3 rounded-full bg-[#1a1e3a] overflow-hidden">
+                        <div
+                          className="h-full rounded-full"
+                          style={{ width: `${pct}%`, backgroundColor: positionColor(pos) }}
+                        />
+                      </div>
+                    </div>
+                    <span className="font-['Space_Mono'] text-xs text-[#f59e0b] w-12 text-right">
+                      ${amount}
+                    </span>
+                    <span className="font-['Space_Mono'] text-xs text-[#6b6e99] w-10 text-right">
+                      {pct.toFixed(0)}%
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
             {/* Bid list */}
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {teamBids.map((bid, i) => (
