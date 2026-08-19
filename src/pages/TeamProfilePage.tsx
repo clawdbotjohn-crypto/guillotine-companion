@@ -1,6 +1,5 @@
 // Team Profile Page — Detailed view of a single team's season data
 
-import { useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAppStore, usePlayers } from '../store';
 import {
@@ -155,7 +154,7 @@ export function TeamProfilePage() {
   const biggestBid = teamBids.length > 0 ? Math.max(...teamBids.map((b) => b.amount)) : 0;
   const avgBid = teamBids.length > 0 ? totalSpent / teamBids.length : 0;
 
-  const positionBreakdown = useMemo(() => {
+  const positionBreakdown = (() => {
     const byPosition: Record<string, number> = {};
     for (const bid of teamBids) {
       const pos = bid.position || 'Unknown';
@@ -165,7 +164,7 @@ export function TeamProfilePage() {
     return Object.entries(byPosition)
       .map(([pos, amount]) => ({ pos, amount, pct: total > 0 ? (amount / total) * 100 : 0 }))
       .sort((a, b) => b.amount - a.amount);
-  }, [teamBids]);
+  })();
 
   // Draft picks
   const teamDraftPicks = draftPicks
