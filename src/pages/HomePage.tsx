@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart3, Shield, Users, ShoppingCart } from 'lucide-react';
-import { Button } from '../components/ui';
+import { BarChart3, Shield, Users, ShoppingCart, ChevronRight } from 'lucide-react';
+import { Button, Card } from '../components/ui';
 import { useAppStore } from '../store';
 import { useSleeperUser } from '../api';
 
@@ -10,7 +10,7 @@ export function HomePage() {
   const [showLeagueId, setShowLeagueId] = useState(false);
   const [leagueIdInput, setLeagueIdInput] = useState('');
   const navigate = useNavigate();
-  const { setUser, setLeague } = useAppStore();
+  const { setUser, setLeague, leagueId, leagueName, teamName } = useAppStore();
 
   // Username lookup
   const [searchUsername, setSearchUsername] = useState<string | null>(null);
@@ -62,6 +62,23 @@ export function HomePage() {
             </h1>
             <p className="text-[#6b6e99] text-sm mt-2">Your survival toolkit for guillotine leagues</p>
           </div>
+
+          {/* Quick access for returning users */}
+          {leagueId && teamName && (
+            <div className="mb-6">
+              <Card className="p-4 cursor-pointer border-l-4 border-l-[#6366f1]" onClick={() => navigate('/hub')}>
+                <div className="flex items-center justify-between">
+                  <div className="text-left">
+                    <p className="text-xs text-[#6b6e99] uppercase tracking-wider">Continue as</p>
+                    <p className="text-sm font-bold text-[#f0f0ff]">{teamName}</p>
+                    {leagueName && <p className="text-xs text-[#4a4d77]">{leagueName}</p>}
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-[#6366f1]" />
+                </div>
+              </Card>
+              <p className="text-[#4a4d77] text-xs uppercase tracking-[2px] mt-4 mb-2">— or enter a different username —</p>
+            </div>
+          )}
 
           {/* Username Input */}
           <form onSubmit={handleUsernameSubmit} className="space-y-4">
