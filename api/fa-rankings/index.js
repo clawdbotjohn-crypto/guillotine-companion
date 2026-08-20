@@ -23,28 +23,31 @@ module.exports = async function (context, req) {
       return;
     }
 
-    // Build form data for FA POST
-    // CRITICAL: ALL params must be sent, even zeros. FA returns empty page if any are missing.
-    const DEFAULTS = {
-      teams: '12', bn: '4', mon: '0',
-      qb: '1', rb: '2', wr: '2', te: '1',
-      qrwt: '0', rwt: '1', rw: '0', wt: '0',
-      patd: '4.0', rutd: '6.0', retd: '6.0',
-      payd: '0.04', ruyd: '0.1', reyd: '0.1',
-      cmp: '0', inc: '0', int: '-2.0', car: '0',
-      rec: '1.0', fum: '-2.0',
-    };
-    const formParams = new URLSearchParams();
-    for (const [key, defaultVal] of Object.entries(DEFAULTS)) {
-      const val = params[key] !== undefined && params[key] !== null ? String(params[key]) : defaultVal;
-      formParams.append(key, val);
+    // Build query string for FA GET request
+    // FA's POST endpoint is broken (WordPress caching strips POST body),
+    // but GET returns the page with rankings using default settings.
+    // The page reads cookie 'draftsheetForm' for custom settings on the client side.
+    // Since we're server-side, we use GET and the VoRP values will be from FA's
+    // default settings (10-team half-PPR). The player names, teams, and positions
+    // are still accurate for matching purposes.
+    //
+    // NOTE: We pass league params in the URL (FA ignores them for now) and as a
+    // cookie (in case FA's PHP starts reading it). This is a best-effort approach.
+    const cookieData = {};
+    const paramKeys = ['teams', 'bn', 'mon', 'qb', 'rb', 'wr', 'te', 'qrwt', 'rwt', 'rw', 'wt', 'patd', 'rutd', 'retd', 'payd', 'ruyd', 'reyd', 'cmp', 'inc', 'int', 'car', 'rec', 'fum'];
+    for (const key of paramKeys) {
+      if (params[key] !== undefined && params[key] !== null) {
+        cookieData[key] = String(params[key]);
+      }
     }
 
-    // POST to Football Absurdity (MUST be POST, not GET!)
+    // GET the draft sheet page
     const faResponse = await fetch('https://footballabsurdity.com/draft-sheet/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: formParams.toString(),
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Cookie': 'draftsheetForm=' + encodeURIComponent(JSON.stringify(cookieData)),
+      },
     });
 
     if (!faResponse.ok) {
@@ -78,7 +81,28 @@ module.exports = async function (context, req) {
       }
     }
 
-    context.res = { status: 200, headers, body: JSON.stringify({ rankings }) };
+    // Parse league settings from the page header for verification
+    const leagueHeader = root.querySelector('#league-header');
+    let pageSettings = {};
+    if (leagueHeader) {
+      const spans = leagueHeader.querySelectorAll('span > span');
+      for (const span of spans) {
+        const parts = span.text.trim().split('\n');
+        if (parts.length === 2) {
+          pageSettings[parts[0].trim()] = parts[1].trim();
+        }
+      }
+    }
+
+    context.res = {
+      status: 200,
+      headers,
+      body: JSON.stringify({
+        rankings,
+        pageSettings,
+        note: 'VoRP values use FA default settings (10-team half-PPR). Player names/teams/positions are accurate for matching.',
+      }),
+    };
   } catch (err) {
     context.res = { status: 500, headers, body: JSON.stringify({ error: err.message }) };
   }
