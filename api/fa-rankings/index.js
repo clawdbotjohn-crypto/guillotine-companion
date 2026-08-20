@@ -24,12 +24,20 @@ module.exports = async function (context, req) {
     }
 
     // Build form data for FA POST
+    // CRITICAL: ALL params must be sent, even zeros. FA returns empty page if any are missing.
+    const DEFAULTS = {
+      teams: '12', bn: '4', mon: '0',
+      qb: '1', rb: '2', wr: '2', te: '1',
+      qrwt: '0', rwt: '1', rw: '0', wt: '0',
+      patd: '4.0', rutd: '6.0', retd: '6.0',
+      payd: '0.04', ruyd: '0.1', reyd: '0.1',
+      cmp: '0', inc: '0', int: '-2.0', car: '0',
+      rec: '1.0', fum: '-2.0',
+    };
     const formParams = new URLSearchParams();
-    const paramKeys = ['teams', 'bn', 'mon', 'qb', 'rb', 'wr', 'te', 'qrwt', 'rwt', 'rw', 'wt', 'patd', 'rutd', 'retd', 'payd', 'ruyd', 'reyd', 'cmp', 'inc', 'int', 'car', 'rec', 'fum'];
-    for (const key of paramKeys) {
-      if (params[key] !== undefined && params[key] !== null) {
-        formParams.append(key, String(params[key]));
-      }
+    for (const [key, defaultVal] of Object.entries(DEFAULTS)) {
+      const val = params[key] !== undefined && params[key] !== null ? String(params[key]) : defaultVal;
+      formParams.append(key, val);
     }
 
     // POST to Football Absurdity (MUST be POST, not GET!)
