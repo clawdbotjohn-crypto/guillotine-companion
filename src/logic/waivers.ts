@@ -1,6 +1,6 @@
 // Waiver bid suggester — implements strategies from docs/REQUIREMENTS.md.
 // All values are % of the league's FAAB budget, scaled to the detected budget.
-// Ships 4 core strategies + predicted winning bid + budget floor.
+// Ships 4 core strategies + predicted winning bid.
 
 import type { League, Roster } from '../api/types';
 import type { RosPlayerProjection } from './projections';
@@ -24,6 +24,7 @@ export interface WaiverPlayerRow {
   rosPoints: number;
   projectedPointsPerWeek: number;
   sourceValue: number;
+  sourceRank?: number;
   starterWeeks: number;
   possibleStarterWeeks: number;
   suggestions: BidSuggestion[];
@@ -144,11 +145,6 @@ export function calculateRemainingFaab(budget: number, roster: Roster | undefine
   return Math.max(0, budget - (roster.settings.waiver_budget_used ?? 0));
 }
 
-/** Apply a user budget floor: never let a suggestion drop remaining below the floor. */
-export function applyBudgetFloor(value: number, remaining: number, floor: number): number {
-  const spendable = Math.max(0, remaining - floor);
-  return Math.min(value, spendable);
-}
 
 export function buildLeagueContext(
   league: League | undefined,
@@ -187,7 +183,7 @@ export function buildWaiverBoard(
   ctx: LeagueContext,
   _bids: BidInfo[],
   getName: (id: string) => string,
-  opts?: { budgetFloor?: number; remaining?: number; maxPerPos?: number },
+  opts?: { maxPerPos?: number },
 ): WaiverPlayerRow[] {
   // Rank against every projected player before filtering for availability. Availability
   // determines which rows are shown, never the Sleeper ROS rank/value basis.
@@ -226,16 +222,11 @@ export function buildWaiverBoard(
       const vorp = vorpStrategy(base, replacementByPos, ctx);
       const pred = predictWinningBid(weeks, ctx.currentWeek);
 
-      const clamp = (v: number) =>
-        opts?.budgetFloor != null && opts?.remaining != null
-          ? applyBudgetFloor(v, opts.remaining, opts.budgetFloor)
-          : v;
-
       const suggestions: BidSuggestion[] = [
-        mk('safe', 'Safe', clamp(safe), ctx.budget),
-        mk('exponential', 'Exp. Starter', clamp(exp), ctx.budget),
-        mk('weeks-starter', 'Weeks-as-Starter', clamp(weeks), ctx.budget),
-        mk('vorp', 'VoRP', clamp(vorp), ctx.budget),
+        mk('weeks-starter', 'Weeks-as-Starter', weeks, ctx.budget),
+        mk('safe', 'Safe', safe, ctx.budget),
+        mk('exponential', 'Exp. Starter', exp, ctx.budget),
+        mk('vorp', 'VoRP', vorp, ctx.budget),
       ];
 
       rows.push({
@@ -246,6 +237,7 @@ export function buildWaiverBoard(
         rosPoints: p.rosPoints,
         projectedPointsPerWeek: p.pointsPerWeek,
         sourceValue: projections.get(p.playerId)?.sourceValue ?? p.rosPoints,
+        sourceRank: projections.get(p.playerId)?.sourceRank,
         starterWeeks,
         possibleStarterWeeks: ctx.weeksRemaining,
         suggestions,
@@ -254,7 +246,7 @@ export function buildWaiverBoard(
       });
     });
   }
-  return sortWaiverRowsByStrategy(rows, 'safe');
+  return sortWaiverRowsByStrategy(rows, 'weeks-starter');
 }
 
 /** Return a copy sorted by the strategy currently displayed in the Waivers UI. */

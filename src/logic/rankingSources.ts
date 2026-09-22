@@ -2,7 +2,7 @@ import type { ExternalRanking, League } from '../api/types';
 import type { PlayerRecord } from '../store/players';
 import type { RosPlayerProjection } from './projections';
 
-export type WaiverRankingSource = 'sleeper' | 'fantasycalc' | 'football-absurdity';
+export type WaiverRankingSource = 'sleeper' | 'fantasycalc' | 'fantasypros';
 
 export const RANKING_SOURCES: Array<{
   key: WaiverRankingSource;
@@ -12,7 +12,7 @@ export const RANKING_SOURCES: Array<{
 }> = [
   { key: 'sleeper', label: 'Sleeper rest-of-season projections', shortLabel: 'Sleeper ROS', metricLabel: 'ROS pts' },
   { key: 'fantasycalc', label: 'FantasyCalc redraft market values', shortLabel: 'FantasyCalc', metricLabel: 'FC value' },
-  { key: 'football-absurdity', label: 'Football Absurdity league-adjusted VoRP', shortLabel: 'Football Absurdity', metricLabel: 'FA VoRP' },
+  { key: 'fantasypros', label: 'FantasyPros expert consensus rankings', shortLabel: 'FantasyPros ECR', metricLabel: 'ECR' },
 ];
 
 export function getReceptionScoring(league: League): number {
@@ -26,35 +26,12 @@ export function hasSuperflex(league: League): boolean {
     position === 'SUPER_FLEX' || position === 'QB_FLEX');
 }
 
-/** Map Sleeper scoring/lineup settings to Football Absurdity's draft-sheet form. */
-export function mapLeagueToFootballAbsurdity(league: League): Record<string, string | number> {
-  const positions = league.roster_positions;
-  const count = (position: string) => positions.filter((item) => item === position).length;
-  const scoring = league.scoring_settings || {};
-  return {
-    teams: league.total_rosters || league.settings?.num_teams || 12,
-    qb: count('QB') || 1,
-    rb: count('RB') || 2,
-    wr: count('WR') || 2,
-    te: count('TE') || 1,
-    rwt: count('FLEX') || 1,
-    qrwt: count('SUPER_FLEX') + count('QB_FLEX'),
-    wt: count('REC_FLEX'),
-    rw: count('WRRB_FLEX'),
-    bn: count('BN') || 4,
-    patd: scoring.pass_td ?? 4,
-    rutd: scoring.rush_td ?? 6,
-    retd: scoring.rec_td ?? 6,
-    payd: scoring.pass_yd ?? 0.04,
-    ruyd: scoring.rush_yd ?? 0.1,
-    reyd: scoring.rec_yd ?? 0.1,
-    cmp: scoring.pass_cmp ?? 0,
-    inc: scoring.pass_inc ?? 0,
-    int: scoring.pass_int ?? -2,
-    car: scoring.rush_att ?? 0,
-    rec: scoring.rec ?? 0,
-    fum: scoring.fum_lost ?? -2,
-  };
+/** Map Sleeper reception scoring to FantasyPros' actual ECR page variants. */
+export function getFantasyProsScoring(league: League): 'ppr' | 'half' | 'standard' {
+  const receptions = getReceptionScoring(league);
+  if (receptions === 1) return 'ppr';
+  if (receptions === 0.5) return 'half';
+  return 'standard';
 }
 
 export function normalizePlayerName(name: string): string {
@@ -120,6 +97,7 @@ export function buildExternalRankingMap(
       position,
       totalPoints: ranking.value,
       sourceValue: ranking.value,
+      sourceRank: ranking.rank,
       pointsPerWeek: normalizedScore,
       projectedWeeks: 0,
     });

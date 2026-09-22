@@ -6,7 +6,7 @@ import {
   buildExternalRankingMap,
   getReceptionScoring,
   hasSuperflex,
-  mapLeagueToFootballAbsurdity,
+  getFantasyProsScoring,
 } from '../rankingSources';
 
 function player(id: string, name: string, position: string, team: string): PlayerRecord {
@@ -42,7 +42,7 @@ function ranking(name: string, value: number, sleeperId?: string): ExternalRanki
 }
 
 describe('external waiver ranking sources', () => {
-  it('prefers FantasyCalc Sleeper IDs and robustly matches suffix-normalized FA names', () => {
+  it('prefers FantasyCalc Sleeper IDs and robustly matches suffix-normalized external names', () => {
     const result = buildExternalRankingMap([
       ranking('Different upstream spelling', 9000, '202'),
       ranking('Marvin Harrison', 100),
@@ -50,6 +50,7 @@ describe('external waiver ranking sources', () => {
 
     expect([...result.projections.keys()].sort()).toEqual(['101', '202']);
     expect(result.projections.get('202')?.sourceValue).toBe(9000);
+    expect(result.projections.get('202')?.sourceRank).toBe(1);
     expect(result.unmatched).toBe(0);
   });
 
@@ -58,23 +59,23 @@ describe('external waiver ranking sources', () => {
       ranking('Marvin Harrison Jr.', 9000, '101'),
       ranking('Puka Nacua', 8000, '202'),
     ], players).projections;
-    const footballAbsurdity = buildExternalRankingMap([
+    const fantasyPros = buildExternalRankingMap([
       ranking('Marvin Harrison Jr.', 3, '101'),
       ranking('Puka Nacua', 14, '202'),
     ], players).projections;
 
     const fcRows = buildWaiverBoard(['101', '202'], fantasyCalc, context, [], (id) => players.get(id)!.full_name);
-    const faRows = buildWaiverBoard(['101', '202'], footballAbsurdity, context, [], (id) => players.get(id)!.full_name);
+    const ecrRows = buildWaiverBoard(['101', '202'], fantasyPros, context, [], (id) => players.get(id)!.full_name);
 
     expect(fcRows.map((row) => row.playerId)).toEqual(['101', '202']);
-    expect(faRows.map((row) => row.playerId)).toEqual(['202', '101']);
+    expect(ecrRows.map((row) => row.playerId)).toEqual(['202', '101']);
     expect(fcRows.find((row) => row.playerId === '101')?.posRank).toBe(1);
-    expect(faRows.find((row) => row.playerId === '101')?.posRank).toBe(2);
+    expect(ecrRows.find((row) => row.playerId === '101')?.posRank).toBe(2);
     expect(fcRows.find((row) => row.playerId === '101')?.suggestions)
-      .not.toEqual(faRows.find((row) => row.playerId === '101')?.suggestions);
+      .not.toEqual(ecrRows.find((row) => row.playerId === '101')?.suggestions);
   });
 
-  it('maps league scoring and lineup format into both external source configurations', () => {
+  it('maps league reception scoring to the exact FantasyPros ECR page variant', () => {
     const league: League = {
       league_id: '1', name: 'Test', total_rosters: 14, settings: {}, season: '2026',
       season_type: 'regular', status: 'in_season', draft_id: 'd', previous_league_id: null,
@@ -84,9 +85,6 @@ describe('external waiver ranking sources', () => {
 
     expect(getReceptionScoring(league)).toBe(0.5);
     expect(hasSuperflex(league)).toBe(true);
-    expect(mapLeagueToFootballAbsurdity(league)).toMatchObject({
-      teams: 14, qb: 1, rb: 2, wr: 2, te: 1, rwt: 1, qrwt: 1,
-      rec: 0.5, patd: 6, int: -3,
-    });
+    expect(getFantasyProsScoring(league)).toBe('half');
   });
 });

@@ -14,15 +14,18 @@ export {
   getProjectionPoints,
   getRestOfSeasonStartWeek,
   sumRestOfSeasonProjections,
+  buildWeeklyProjectionContext,
+  getTeamByeWeek,
   type ProjectionScoring,
   type RosPlayerProjection,
+  type WeeklyPlayerProjection,
 } from './projections';
 
 export {
   RANKING_SOURCES,
   getReceptionScoring,
   hasSuperflex,
-  mapLeagueToFootballAbsurdity,
+  getFantasyProsScoring,
   normalizePlayerName,
   buildExternalRankingMap,
   type WaiverRankingSource,

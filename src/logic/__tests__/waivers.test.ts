@@ -125,7 +125,8 @@ describe('buildWaiverBoard', () => {
       [],
       (id) => id,
     );
-    expect(rows[0].playerId).toBe('rb-25-available'); // Safe order
+    expect(rows[0].playerId).toBe('te-1-available'); // Weeks-as-Starter is the default order
+    expect(rows[0].suggestions[0].strategy).toBe('weeks-starter');
 
     const weeksSorted = sortWaiverRowsByStrategy(rows, 'weeks-starter');
     expect(weeksSorted[0].playerId).toBe('te-1-available');
@@ -210,7 +211,7 @@ describe('buildWaiverBoard', () => {
     expect(rows).toEqual([]);
   });
 
-  it('does not clamp raw values when remaining FAAB is supplied without a budget floor', () => {
+  it('preserves raw model values without any budget-floor clamp path', () => {
     const projections = new Map([
       ['available-qb', projection('available-qb', 'QB', 30)],
     ]);
@@ -221,10 +222,12 @@ describe('buildWaiverBoard', () => {
       context,
       [],
       (id) => id,
-      { remaining: 20 },
     );
 
     expect(suggestionValue(rows, 'safe')).toBe(188);
     expect(suggestionValue(rows, 'safe')).toBeGreaterThan(20);
+    expect(rows[0].suggestions.map((item) => item.strategy)).toEqual([
+      'weeks-starter', 'safe', 'exponential', 'vorp',
+    ]);
   });
 });

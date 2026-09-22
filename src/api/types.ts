@@ -133,7 +133,9 @@ export interface FantasyCalcResponse {
   fetchedAt: string;
 }
 
-export interface FootballAbsurdityResponse {
-  rankings: Array<ExternalRanking & { vorp: number }>;
-  settings: Record<string, string | number>;
+export interface FantasyProsResponse {
+  players: ExternalRanking[];
+  scoring: 'ppr' | 'half' | 'standard';
+  sourceUrl: string;
+  fetchedAt: string;
 }

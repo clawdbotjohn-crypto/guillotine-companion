@@ -13,9 +13,9 @@ import type {
   NflState,
   WeeklyProjectionMap,
   FantasyCalcResponse,
-  FootballAbsurdityResponse,
+  FantasyProsResponse,
 } from './types';
-import { getReceptionScoring, hasSuperflex, mapLeagueToFootballAbsurdity } from '../logic/rankingSources';
+import { getReceptionScoring, getFantasyProsScoring, hasSuperflex } from '../logic/rankingSources';
 
 const STALE_30M = 1000 * 60 * 30;
 const STALE_1H = 1000 * 60 * 60;
@@ -185,13 +185,29 @@ export function useFantasyCalcRankings(league: League | undefined, enabled = tru
   });
 }
 
-export function useFootballAbsurdityRankings(league: League | undefined, enabled = true) {
-  const params = league ? mapLeagueToFootballAbsurdity(league) : null;
-  return useQuery<FootballAbsurdityResponse>({
-    queryKey: ['football-absurdity-rankings', params],
-    queryFn: () => api.getFootballAbsurdityRankings(params!),
-    enabled: enabled && !!params,
+export function useFantasyProsRankings(league: League | undefined, enabled = true) {
+  const scoring = league ? getFantasyProsScoring(league) : null;
+  return useQuery<FantasyProsResponse>({
+    queryKey: ['fantasypros-ecr-rankings', scoring],
+    queryFn: () => api.getFantasyProsRankings(scoring!),
+    enabled: enabled && !!scoring,
     staleTime: STALE_6H,
+    gcTime: STALE_6H,
+    retry: 1,
+  });
+}
+
+/** One upcoming week, kept independent from the selected season-long value source. */
+export function useWeeklyProjections(
+  season: string | null,
+  week: number | null,
+  enabled = true,
+) {
+  return useQuery<WeeklyProjectionMap>({
+    queryKey: ['sleeper-weekly-projections', season, week],
+    queryFn: () => api.getWeeklyProjections(season!, week!),
+    enabled: enabled && !!season && week != null && week >= 1 && week <= 18,
+    staleTime: STALE_30M,
     gcTime: STALE_6H,
     retry: 1,
   });

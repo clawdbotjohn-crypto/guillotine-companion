@@ -1,34 +1,48 @@
-# Handoff — Selectable Waiver Ranking Sources (PR #7)
+# Handoff — PR #7 Review Changes (2026-09-22)
 
 ## Status
-Implemented on `feat/waiver-ranking-sources` from merged `origin/main` (`9f2eda1`). Sleeper ROS remains the default source. FantasyCalc redraft market value and Football Absurdity league-adjusted VoRP are both implemented with live upstream data; neither source was blocked.
+Implemented on `feat/waiver-ranking-sources` for existing PR #7. No merge, production deployment, workflow dispatch, or push to `main` was performed.
 
-## What changed
-- Added a visible three-way source selector that remains available during loading and source-specific error/unavailable states.
-- FantasyCalc endpoint uses redraft mode plus league team count, reception scoring (standard/half/full PPR), and 1QB/superflex setting; direct Sleeper IDs are preferred for matching.
-- Football Absurdity endpoint now uses its proven POST form integration and maps full Sleeper scoring/lineup settings; normalized name+position+team fallback handles player matching.
-- External raw values are displayed honestly as `FC value` / `FA VoRP`. A source-relative normalized score drives VoRP calculations, while every rank-based strategy is recalculated from the selected source's complete player pool. Weekly Sleeper projections are not mixed into these season-long rankings.
-- Added source conversion/scoring tests proving source changes reverse ordering, positional ranks, and strategy outputs.
-- Used remaining session time on the next P0 follow-up: League → Bids now has All/QB/RB/WR/TE/FLEX/DEF/K filters shared by Grid and List. FLEX groups RB/WR/TE, and Grid collapses to the relevant columns.
+## Source provenance and selector
+- Replaced the three source buttons with one native accessible `Player Values` select. It has Sleeper ROS, FantasyCalc, and FantasyPros ECR options and no redundant `Active:` copy.
+- Removed Football Absurdity from the UI, client, types, API route, and API dependencies. It was **not** relabeled.
+- Added a direct FantasyPros ECR Azure Function adapted from the proven Draft Assistant `api/ecr-rankings/index.js` integration. The function fetches FantasyPros itself at `https://www.fantasypros.com/nfl/rankings/{ppr-overall|half-point-ppr-overall|overall}.php`, parses that page's embedded `ecrData`, retains each actual `rank_ecr`, and reports the exact source URL. A live handler invocation returned HTTP 200, 132 QB/RB/WR/TE players, and FantasyPros' URL; the first result was Jahmyr Gibbs, ECR #1. The season-value score only converts ECR into descending positive numbers for model math; cards display the original ECR rank.
+- League reception scoring selects the matching FantasyPros PPR, half-PPR, or standard page. No third-party feed is attributed to FantasyPros.
+
+## Waiver UX/model changes
+- Weeks-as-Starter is first and is the initial strategy. The pure board builder also defaults to Weeks-as-Starter ordering. Suggestions are selected by `strategy` key, not tab/array index.
+- Each of Weeks-as-Starter, Safe, Exponential Starter, and VoRP has concise strategy-specific copy.
+- Removed the Floor control, local state, clamp option, clamp function, and dead path. Raw recommendations and the existing over-budget warning remain.
+- Cards show official 2026 team bye weeks from the NFL schedule release. Missing teams/unsupported seasons say `Bye unavailable`; completed byes say `Bye passed (W#)`.
+- An independent Sleeper weekly query runs for the upcoming week regardless of season-long source. It uses league reception scoring and shows `Next week: N.N pts · WR#`. Positional ranks are computed from the full weekly projection payload before roster/availability filtering. Exact Sleeper injury metadata renders as a compact badge; projection values are never used to infer injury or matchup quality. Bye and missing-projection states are explicit.
+
+## Regression coverage
+- Native dropdown label/options/change behavior, no Football Absurdity, no `Active:` copy.
+- Weeks-as-Starter first/default and default board ordering.
+- Key-based strategy outputs and unclamped raw recommendation behavior.
+- Official bye lookup plus honest unsupported-season behavior.
+- Weekly positional rank includes rostered players from the complete projection pool (available WR remains WR2 behind a rostered WR).
+- External original source rank plumbing and league-to-FantasyPros scoring format.
 
 ## Exact browser verification
-Verified in headless Chromium against real Sleeper league **#SFB15 - Dallas Wings** (`1237312439318478848`, 2025), through the running Vite app plus local API functions. Captures were written to `/tmp/waivers-sleeper.jpg`, `/tmp/waivers-fantasycalc.jpg`, and `/tmp/waivers-fa.jpg` during the session.
-- Default **Sleeper ROS** was selected and honestly showed unavailable because this is a historical 2025 league while Sleeper state is 2026; the source selector remained usable.
-- Switching to **FantasyCalc** loaded live values and a full board: Jahmyr Gibbs RB1 (`10507`), Jaxon Smith-Njigba WR1 (`9491`), Puka Nacua WR4 (`8172`).
-- Switching to **Football Absurdity** loaded live league-adjusted VoRP and changed ordering/ranks: Jahmyr Gibbs RB1 (`28.5`), Puka Nacua WR1 (`23.3`), while Jaxon Smith-Njigba moved to WR4 (`20.6`).
-- Live handler checks returned 199 FantasyCalc players and 132 Football Absurdity rankings.
-- League Bids follow-up was verified in the same browser flow: all eight position filters rendered; selecting WR changed the Grid headers from `WK/QB/RB/WR/TE/K/DEF` to `WK/WR` and retained only WR bids.
+Ran the final production bundle with Azure Static Web Apps CLI and local API functions, then tested in headless Chromium against real Sleeper league **#SFB15 - Dallas Wings** (`1237312439318478848`, 2025), roster 1 / user `4thandLange`.
+- The `Player Values` control appeared as an accessible combobox with exactly Sleeper ROS, FantasyCalc, and FantasyPros ECR.
+- Sleeper ROS honestly showed unavailable because the real league is 2025 while Sleeper state is 2026; the dropdown remained usable.
+- Selecting FantasyPros loaded live direct ECR data. The board opened with Weeks-as-Starter first/selected and showed Jahmyr Gibbs `RB#1 · ECR #1`, Ja'Marr Chase `WR#1 · ECR #2`, model dollars, predictions, `Next week: No projection`, `Bye unavailable`, and real Sleeper injury badges including Out/IR/Questionable.
+- Clicking Safe changed both per-card strategy values/labels and the explanation to `Uses a conservative position-and-rank baseline for steady bidding.`
+- The browser caught and prompted a fix for a null comparison that initially rendered unsupported historical byes as `Bye`; the rebuilt final bundle correctly renders `Next week: No projection · Bye unavailable`.
+- Limitation: no accessible real 2026 Sleeper league was available for browser proof of live weekly-point/rank and 2026 bye text. That data path is covered by focused regression tests; the historical real-league browser correctly exercises the honest unavailable states.
 
 ## Verification
-- Targeted source regression tests: PASS (3/3)
-- Existing waiver/projection tests: PASS (13/13)
-- Full test suite: PASS (26/26)
-- Lint: PASS (0 warnings/errors)
-- Production build: PASS
-- `git diff --check`: PASS
+- `npm test`: **PASS** — 6 files, 30 tests
+- `npm run lint`: **PASS** — 0 warnings/errors
+- `npm run build`: **PASS**
+- `git diff --check`: **PASS**
+- Direct FantasyPros function invocation: **PASS** — HTTP 200, 132 players, direct fantasypros.com source URL
 
-## Remaining follow-ups
-Continue with the next uncompleted P0 follow-up in project `PROGRESS.md`: waiver availability toggle, then strategy explanations and separate next-week/bye context.
+## Remaining
+- Optional active-team positional-rank bug was not attempted; required review changes took priority.
+- After push, confirm PR #7 preview/check status and, if a real current-season league becomes available, repeat browser verification for numeric weekly projection rank and 2026 bye text.
 
 ---
 

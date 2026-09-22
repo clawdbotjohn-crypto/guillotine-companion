@@ -11,7 +11,7 @@ import type {
   NflState,
   WeeklyProjectionMap,
   FantasyCalcResponse,
-  FootballAbsurdityResponse,
+  FantasyProsResponse,
 } from './types';
 
 const BASE = 'https://api.sleeper.app/v1';
@@ -82,20 +82,10 @@ export function getFantasyCalcRankings(options: {
   return getLocal(`/api/fc-rankings?${params}`);
 }
 
-export function getFootballAbsurdityRankings(
-  params: Record<string, string | number>,
-): Promise<FootballAbsurdityResponse> {
-  return fetch('/api/fa-rankings', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
-  }).then(async (res) => {
-    if (!res.ok) {
-      const body = await res.json().catch(() => null) as { error?: string } | null;
-      throw new ApiError(body?.error || `Ranking source error: ${res.statusText}`, res.status);
-    }
-    return res.json();
-  });
+export function getFantasyProsRankings(
+  scoring: 'ppr' | 'half' | 'standard',
+): Promise<FantasyProsResponse> {
+  return getLocal(`/api/ecr-rankings?scoring=${scoring}`);
 }
 
 /** Fetch projection weeks with a small concurrency cap so one page load does not fan out 16 requests. */
