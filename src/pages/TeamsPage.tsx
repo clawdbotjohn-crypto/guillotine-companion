@@ -57,7 +57,12 @@ export function TeamsPage() {
     const elim = computeEliminations(matchups, rosters, users);
     const playerSeasons = buildPlayerSeasons(matchups);
     const projections = projectAllTeams(rosters, playerSeasons, league, elim);
-    const posRanks = computePositionGroupRanks(matchups, league);
+    const activeRosterIds = new Set(
+      [...elim.teams.values()]
+        .filter((team) => team.eliminatedWeek == null)
+        .map((team) => team.rosterId),
+    );
+    const posRanks = computePositionGroupRanks(matchups, league, activeRosterIds);
     const histRanks = computeHistoricalRanks(elim);
     return { elim, projections, posRanks, histRanks };
   }, [matchups, rosters, users, league]);
@@ -174,15 +179,7 @@ export function TeamsPage() {
               {/* Position-group breakdown */}
               {isOpen && (
                 <div className="mt-3 pt-3 border-t border-[#1a1e3a]">
-                  {groups.length > 0 ? (
-                    <div className="grid grid-cols-4 gap-2">
-                      {groups.map((g) => (
-                        <PosCell key={g.position} g={g} />
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-[10px] text-[#4a4d77]">No starter scoring data yet.</p>
-                  )}
+                  <PositionGroupBreakdown groups={groups} eliminated={t.eliminated} />
                   <button
                     onClick={() => navigate(`/teams/${t.rosterId}`)}
                     className="mt-3 text-[11px] text-[#6366f1] underline underline-offset-4 hover:text-[#8b5cf6]"
@@ -195,6 +192,32 @@ export function TeamsPage() {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+export function PositionGroupBreakdown({
+  groups,
+  eliminated,
+}: {
+  groups: PosGroupRank[];
+  eliminated: boolean;
+}) {
+  if (eliminated) {
+    return (
+      <p className="text-[10px] text-[#4a4d77]">
+        Eliminated — no current positional standing.
+      </p>
+    );
+  }
+  if (groups.length === 0) {
+    return <p className="text-[10px] text-[#4a4d77]">No starter scoring data yet.</p>;
+  }
+  return (
+    <div className="grid grid-cols-4 gap-2">
+      {groups.map((g) => (
+        <PosCell key={g.position} g={g} />
+      ))}
     </div>
   );
 }

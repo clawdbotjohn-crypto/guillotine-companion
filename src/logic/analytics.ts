@@ -230,11 +230,15 @@ const POS_GROUPS = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'K', 'DEF'];
  * For each team, compute season starter points by position group vs the league.
  * Uses actual starters_points from matchups (historical). FLEX is its own group:
  * a started RB/WR/TE beyond the fixed slots is credited to FLEX.
- * Returns Map<rosterId, PosGroupRank[]>.
+ * Only active roster IDs participate in the current standings. Eliminated
+ * rosters retain their historical matchup data, but are excluded from both the
+ * result and every position's comparison pool.
+ * Returns Map<active rosterId, PosGroupRank[]>.
  */
 export function computePositionGroupRanks(
   weekMatchups: Map<number, Matchup[]>,
   league: League | undefined,
+  activeRosterIds: ReadonlySet<number>,
 ): Map<number, PosGroupRank[]> {
   const slots = parseLineupSlots(league?.roster_positions);
   // rosterId -> pos -> total points
@@ -264,11 +268,11 @@ export function computePositionGroupRanks(
 
   // Rank each position group across teams
   const result = new Map<number, PosGroupRank[]>();
-  const rosterIds = [...teamPos.keys()];
+  const rosterIds = [...activeRosterIds];
   for (const pos of POS_GROUPS) {
     const arr = rosterIds
       .map((rid) => ({ rid, pts: teamPos.get(rid)?.get(pos) ?? 0 }))
-      .sort((a, b) => b.pts - a.pts);
+      .sort((a, b) => b.pts - a.pts || a.rid - b.rid);
     arr.forEach((e, i) => {
       const list = result.get(e.rid) ?? [];
       list.push({ position: pos, points: e.pts, rank: i + 1, outOf: arr.length });
