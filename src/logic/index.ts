@@ -8,3 +8,26 @@ export {
   type EliminationResult,
   type BidInfo,
 } from './elimination';
+
+export {
+  getProjectionScoring,
+  getProjectionPoints,
+  getRestOfSeasonStartWeek,
+  sumRestOfSeasonProjections,
+  type ProjectionScoring,
+  type RosPlayerProjection,
+} from './projections';
+
+export {
+  buildPlayerSeasons,
+  parseLineupSlots,
+  projectBestLineup,
+  projectAllTeams,
+  computePositionGroupRanks,
+  computeHistoricalRanks,
+  type PlayerSeason,
+  type LineupSlots,
+  type TeamProjection,
+  type PosGroupRank,
+  type HistoricalRank,
+} from './analytics';

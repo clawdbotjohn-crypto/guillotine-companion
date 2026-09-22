@@ -8,6 +8,7 @@ import { computeEliminations, extractBids } from '../logic';
 import { Card, Skeleton, StatusBadge, PositionBadge } from '../components/ui';
 import { Trophy, Medal, Calendar } from 'lucide-react';
 import { BidGrid } from '../components/BidGrid';
+import { ScoresChart } from '../components/ScoresChart';
 import { FaabTracker } from '../components/FaabTracker';
 import { SeasonPicker } from '../components/SeasonPicker';
 import { useSwitchSeason } from '../hooks/useSwitchSeason';
@@ -27,8 +28,10 @@ export function LeaguePage() {
     .map((l) => ({ leagueId: l.league_id, season: l.season, name: l.name }))
     .reverse();
 
-  const [activeView, setActiveView] = useState<'scoreboard' | 'bids' | 'grid' | 'faab' | 'timeline'>('scoreboard');
+  const [activeView, setActiveView] = useState<'scoreboard' | 'bids' | 'faab' | 'timeline'>('scoreboard');
   const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
+  // Bids tab sub-mode: grid (default) or list. (Combined Bids+Grid per John feedback 2026-09-22)
+  const [bidsMode, setBidsMode] = useState<'grid' | 'list'>('grid');
 
   const isLoading = matchupsLoading || playersLoading;
 
@@ -51,13 +54,11 @@ export function LeaguePage() {
   const elimResult = computeEliminations(matchups, rosters, users);
   const bids = transactions ? extractBids(transactions) : [];
   const hasWeekData = elimResult.weeks.length > 0;
-  const currentWeek = selectedWeek ?? elimResult.weeks.length;
   const leagueStatus = league?.status ?? '';
 
   const views = [
     { key: 'scoreboard' as const, label: 'Scores' },
     { key: 'bids' as const, label: 'Bids' },
-    { key: 'grid' as const, label: 'Grid' },
     { key: 'faab' as const, label: 'FAAB' },
     { key: 'timeline' as const, label: 'Timeline' },
   ];
@@ -115,15 +116,25 @@ export function LeaguePage() {
         </Card>
       )}
 
-      {/* Week picker — only for Bids view */}
+      {/* Week picker — Bids (list mode) + Grid share the same week filter with an All option */}
       {hasWeekData && activeView === 'bids' && (
         <div className="flex gap-1.5 overflow-x-auto pb-3 mb-4 scrollbar-hide">
+          <button
+            onClick={() => setSelectedWeek(null)}
+            className={`shrink-0 px-3 h-9 rounded-lg text-xs font-['Space_Mono'] font-bold transition-all
+              ${selectedWeek === null
+                ? 'bg-[#6366f1] text-white shadow-[0_0_8px_rgba(99,102,241,0.4)]'
+                : 'bg-[#161a3a] text-[#6b6e99] hover:bg-[#1a1e3a]'
+              }`}
+          >
+            All
+          </button>
           {elimResult.weeks.map((w) => (
             <button
               key={w.week}
               onClick={() => setSelectedWeek(w.week)}
               className={`shrink-0 w-9 h-9 rounded-lg text-xs font-['Space_Mono'] font-bold transition-all
-                ${currentWeek === w.week
+                ${selectedWeek === w.week
                   ? 'bg-[#6366f1] text-white shadow-[0_0_8px_rgba(99,102,241,0.4)]'
                   : 'bg-[#161a3a] text-[#6b6e99] hover:bg-[#1a1e3a]'
                 }`}
@@ -137,6 +148,9 @@ export function LeaguePage() {
       {/* Scoreboard View — Full Season Table */}
       {activeView === 'scoreboard' && hasWeekData && (
         <div>
+          {/* Scores-by-week chart with user's team highlighted */}
+          <ScoresChart elim={elimResult} selectedRosterId={selectedRosterId} />
+
           {/* Season aggregate stats */}
           {(() => {
             const seasonTop = Math.max(...elimResult.weeks.map((w) => w.topScore));
@@ -257,71 +271,64 @@ export function LeaguePage() {
         </div>
       )}
 
-      {/* Bids View */}
-      {activeView === 'bids' && (
-        <Card hover={false} className="p-4">
-          <div className="space-y-2">
-            {bids
-              .filter((b) => b.week === currentWeek)
-              .sort((a, b) => b.amount - a.amount)
-              .map((bid, i) => {
-                const team = elimResult.teams.get(bid.rosterId);
-                return (
-                  <div key={i} className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <PositionBadge position={bid.position} />
-                      <div>
-                        <div className="text-[#f0f0ff]">{bid.playerName}</div>
-                        <div className="text-[10px] text-[#4a4d77]">{team?.displayName}</div>
-                      </div>
-                    </div>
-                    <span className="font-['Space_Mono'] text-xs text-[#f59e0b] tabular-nums">${bid.amount}</span>
-                  </div>
-                );
-              })}
-            {bids.filter((b) => b.week === currentWeek).length === 0 && (
-              <p className="text-[#4a4d77] text-xs text-center py-4">No bids this week</p>
-            )}
-          </div>
-        </Card>
-      )}
-
-      {/* Grid View */}
-      {activeView === 'grid' && (
+      {/* Bids View — combined Grid (default) + List, mode toggle */}
+      {activeView === 'bids' && hasWeekData && (
         <div>
-          {/* Week filter for grid */}
-          <div className="flex gap-1.5 overflow-x-auto pb-3 mb-4 scrollbar-hide">
-            <button
-              onClick={() => setSelectedWeek(null)}
-              className={`shrink-0 px-3 h-9 rounded-lg text-xs font-['Space_Mono'] font-bold transition-all
-                ${selectedWeek === null
-                  ? 'bg-[#6366f1] text-white shadow-[0_0_8px_rgba(99,102,241,0.4)]'
-                  : 'bg-[#161a3a] text-[#6b6e99] hover:bg-[#1a1e3a]'
-                }`}
-            >
-              All
-            </button>
-            {elimResult.weeks.map((w) => (
+          {/* Grid / List mode toggle */}
+          <div className="flex gap-1 bg-[#0a0d1a] rounded-lg p-1 mb-4 w-fit">
+            {(['grid', 'list'] as const).map((m) => (
               <button
-                key={w.week}
-                onClick={() => setSelectedWeek(w.week)}
-                className={`shrink-0 w-9 h-9 rounded-lg text-xs font-['Space_Mono'] font-bold transition-all
-                  ${selectedWeek === w.week
-                    ? 'bg-[#6366f1] text-white shadow-[0_0_8px_rgba(99,102,241,0.4)]'
-                    : 'bg-[#161a3a] text-[#6b6e99] hover:bg-[#1a1e3a]'
+                key={m}
+                onClick={() => setBidsMode(m)}
+                className={`px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider rounded-md transition-all
+                  ${bidsMode === m
+                    ? 'bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] text-white'
+                    : 'text-[#4a4d77] hover:text-[#6b6e99]'
                   }`}
               >
-                {w.week}
+                {m === 'grid' ? 'Grid' : 'List'}
               </button>
             ))}
           </div>
-          <BidGrid
-            bids={bids}
-            weeks={elimResult.weeks.map((w) => w.week)}
-            teams={elimResult.teams}
-            totalBudget={100}
-            selectedWeek={selectedWeek}
-          />
+
+          {bidsMode === 'grid' ? (
+            <BidGrid
+              bids={bids}
+              weeks={elimResult.weeks.map((w) => w.week)}
+              teams={elimResult.teams}
+              totalBudget={league?.settings?.waiver_budget ?? 1000}
+              selectedWeek={selectedWeek}
+            />
+          ) : (
+            <Card hover={false} className="p-4">
+              <div className="space-y-2">
+                {bids
+                  .filter((b) => selectedWeek === null || b.week === selectedWeek)
+                  .sort((a, b) => (selectedWeek === null ? a.week - b.week || b.amount - a.amount : b.amount - a.amount))
+                  .map((bid, i) => {
+                    const team = elimResult.teams.get(bid.rosterId);
+                    return (
+                      <div key={i} className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <PositionBadge position={bid.position} />
+                          <div>
+                            <div className="text-[#f0f0ff]">{bid.playerName}</div>
+                            <div className="text-[10px] text-[#4a4d77]">
+                              {selectedWeek === null && <span className="text-[#6366f1] mr-1">W{bid.week}</span>}
+                              {team?.displayName}
+                            </div>
+                          </div>
+                        </div>
+                        <span className="font-['Space_Mono'] text-xs text-[#f59e0b] tabular-nums">${bid.amount}</span>
+                      </div>
+                    );
+                  })}
+                {bids.filter((b) => selectedWeek === null || b.week === selectedWeek).length === 0 && (
+                  <p className="text-[#4a4d77] text-xs text-center py-4">No bids{selectedWeek !== null ? ' this week' : ''}</p>
+                )}
+              </div>
+            </Card>
+          )}
         </div>
       )}
 

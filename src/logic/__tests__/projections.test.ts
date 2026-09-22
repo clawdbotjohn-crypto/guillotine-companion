@@ -1,0 +1,85 @@
+import { describe, expect, it } from 'vitest';
+import type { NflState, WeeklyProjectionMap } from '../../api/types';
+import {
+  getProjectionScoring,
+  getRestOfSeasonStartWeek,
+  sumRestOfSeasonProjections,
+} from '../projections';
+
+const positions: Record<string, string> = {
+  player: 'WR',
+  standardOnly: 'RB',
+};
+
+function weekly(...entries: [number, WeeklyProjectionMap][]) {
+  return new Map<number, WeeklyProjectionMap>(entries);
+}
+
+describe('Sleeper ROS projection aggregation', () => {
+  it('sums every remaining weekly PPR projection and includes missing weeks as zero', () => {
+    const weeks = weekly(
+      [3, { player: { pts_ppr: 20, pts_half_ppr: 17, pts_std: 14 } }],
+      [4, { player: { pts_ppr: 10, pts_half_ppr: 8.5, pts_std: 7 } }],
+      [5, {}],
+    );
+
+    const result = sumRestOfSeasonProjections(
+      weeks,
+      getProjectionScoring(1),
+      (playerId) => positions[playerId],
+    );
+
+    expect(result.get('player')).toEqual({
+      playerId: 'player',
+      position: 'WR',
+      totalPoints: 30,
+      pointsPerWeek: 10,
+      projectedWeeks: 3,
+    });
+  });
+
+  it('selects half-PPR or standard totals from league reception scoring without field fallback', () => {
+    const weeks = weekly(
+      [3, {
+        player: { pts_ppr: 20, pts_half_ppr: 17, pts_std: 14 },
+        standardOnly: { pts_std: 8 },
+      }],
+      [4, {
+        player: { pts_ppr: 10, pts_half_ppr: 8.5, pts_std: 7 },
+        standardOnly: { pts_std: 6 },
+      }],
+    );
+
+    const half = sumRestOfSeasonProjections(
+      weeks,
+      getProjectionScoring(0.5),
+      (playerId) => positions[playerId],
+    );
+    const standard = sumRestOfSeasonProjections(
+      weeks,
+      getProjectionScoring(0),
+      (playerId) => positions[playerId],
+    );
+
+    expect(half.get('player')?.totalPoints).toBe(25.5);
+    expect(half.has('standardOnly')).toBe(false);
+    expect(standard.get('player')?.totalPoints).toBe(21);
+    expect(standard.get('standardOnly')?.totalPoints).toBe(14);
+  });
+
+  it('starts with the current week unless Sleeper marks it completed', () => {
+    const state: NflState = {
+      week: 3,
+      display_week: 2,
+      season: '2026',
+      season_type: 'regular',
+      leg: 3,
+      league_season: '2026',
+      season_start_date: '2026-09-09',
+      season_has_scores: true,
+    };
+
+    expect(getRestOfSeasonStartWeek(state)).toBe(3);
+    expect(getRestOfSeasonStartWeek({ ...state, display_week: 3 })).toBe(4);
+  });
+});
