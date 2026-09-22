@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { Roster } from '../../api/types';
+import type { BidInfo } from '../elimination';
 import type { RosPlayerProjection } from '../projections';
-import { buildWaiverBoard, calculateRemainingFaab, type LeagueContext } from '../waivers';
+import {
+  buildWaiverBoard,
+  calculateRemainingFaab,
+  sortWaiverRowsByStrategy,
+  type LeagueContext,
+} from '../waivers';
 
 const context: LeagueContext = {
   budget: 1000,
@@ -57,12 +63,21 @@ describe('buildWaiverBoard', () => {
       projections.set(id, projection(id, 'QB', 40 - rank));
     }
     projections.set('available-qb', projection('available-qb', 'QB', 10));
+    const historicalBids: BidInfo[] = [1, 2, 3].map((rank) => ({
+      week: rank,
+      rosterId: rank,
+      playerId: `rostered-qb-${String(rank).padStart(2, '0')}`,
+      playerName: `QB ${rank}`,
+      position: 'QB',
+      amount: 153,
+      status: 'complete',
+    }));
 
     const rows = buildWaiverBoard(
       ['available-qb'],
       projections,
       context,
-      [],
+      historicalBids,
       (id) => id,
     );
 
@@ -74,6 +89,8 @@ describe('buildWaiverBoard', () => {
     expect(suggestionValue(rows, 'exponential')).toBe(150);
     expect(suggestionValue(rows, 'weeks-starter')).toBe(0);
     expect(rows[0].starterWeeks).toBe(0);
+    // Position-level bid history must not assign the same $153 prediction to this deep QB.
+    expect(rows[0].predictedWinningBid).toBe(0);
   });
 
   it('values the top positional player as a starter for every remaining week', () => {
@@ -99,6 +116,61 @@ describe('buildWaiverBoard', () => {
     expect(rows[0].starterWeeks).toBe(11);
     expect(rows[0].possibleStarterWeeks).toBe(11);
     expect(suggestionValue(rows, 'weeks-starter')).toBe(suggestionValue(rows, 'safe'));
+  });
+
+  it('sorts rows by the selected strategy rather than always using Safe', () => {
+    const projections = new Map<string, RosPlayerProjection>();
+    for (let rank = 1; rank <= 24; rank++) {
+      const id = `rb-${rank}`;
+      projections.set(id, projection(id, 'RB', 40 - rank));
+    }
+    projections.set('rb-25-available', projection('rb-25-available', 'RB', 15));
+    projections.set('te-1-available', projection('te-1-available', 'TE', 30));
+
+    const rows = buildWaiverBoard(
+      ['rb-25-available', 'te-1-available'],
+      projections,
+      context,
+      [],
+      (id) => id,
+    );
+    expect(rows[0].playerId).toBe('rb-25-available'); // Safe order
+
+    const weeksSorted = sortWaiverRowsByStrategy(rows, 'weeks-starter');
+    expect(weeksSorted[0].playerId).toBe('te-1-available');
+    expect(suggestionValue([weeksSorted[0]], 'weeks-starter'))
+      .toBeGreaterThan(suggestionValue([weeksSorted[1]], 'weeks-starter'));
+  });
+
+  it('scales predicted winning bids by player quality instead of one flat position bid', () => {
+    const projections = new Map<string, RosPlayerProjection>();
+    for (let rank = 1; rank <= 8; rank++) {
+      const id = `market-qb-${rank}`;
+      projections.set(id, projection(id, 'QB', 31 - rank));
+    }
+    const bids: BidInfo[] = [2, 3, 4].map((rank) => ({
+      week: rank,
+      rosterId: rank,
+      playerId: `market-qb-${rank}`,
+      playerName: `Market QB ${rank}`,
+      position: 'QB',
+      amount: 100,
+      status: 'complete',
+    }));
+
+    const rows = buildWaiverBoard(
+      ['market-qb-1', 'market-qb-8'],
+      projections,
+      context,
+      bids,
+      (id) => id,
+    );
+    const elite = rows.find((row) => row.playerId === 'market-qb-1')!;
+    const fringe = rows.find((row) => row.playerId === 'market-qb-8')!;
+
+    expect(elite.predictedWinningBid).toBeGreaterThan(fringe.predictedWinningBid);
+    expect(elite.predictedWinningBid).not.toBe(100);
+    expect(fringe.predictedWinningBid).not.toBe(100);
   });
 
   it('uses projected ROS values for replacement level and VoRP', () => {

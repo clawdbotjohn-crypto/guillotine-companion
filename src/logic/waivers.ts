@@ -123,18 +123,28 @@ function scale(value1000: number, budget: number): number {
  */
 function predictWinningBid(
   position: string,
-  safeValue: number,
+  modeledValue: number,
   bids: BidInfo[],
+  historicalModeledValues: Map<string, number>,
 ): { value: number; confidence: 'low' | 'medium' | 'high' } {
   const posBids = bids.filter((b) => b.position === position && b.amount > 0);
-  if (posBids.length < 3) {
-    return { value: Math.round(safeValue * 2), confidence: 'low' };
+  const marketRatios = posBids.flatMap((bid) => {
+    const historicalModeledValue = historicalModeledValues.get(bid.playerId) ?? 0;
+    return historicalModeledValue > 0 ? [bid.amount / historicalModeledValue] : [];
+  });
+
+  if (marketRatios.length < 3) {
+    return { value: Math.round(modeledValue * 2), confidence: 'low' };
   }
-  // Use the upper quartile of historical winning bids at this position
-  const sorted = posBids.map((b) => b.amount).sort((a, b) => a - b);
-  const q3 = sorted[Math.floor(sorted.length * 0.75)];
-  const confidence = posBids.length >= 10 ? 'high' : 'medium';
-  return { value: Math.round(Math.max(q3, safeValue)), confidence };
+
+  // Calibrate to this league's upper-quartile spend aggressiveness without assigning
+  // one flat position-wide bid to players of radically different quality. Historical
+  // player quality uses today's ROS model, so bound the multiplier to limit drift.
+  marketRatios.sort((a, b) => a - b);
+  const q3Ratio = marketRatios[Math.floor(marketRatios.length * 0.75)];
+  const marketMultiplier = Math.min(3, Math.max(1, q3Ratio));
+  const confidence = marketRatios.length >= 10 ? 'high' : 'medium';
+  return { value: Math.round(modeledValue * marketMultiplier), confidence };
 }
 
 /** Remaining FAAB for the selected roster, based on the league budget and Sleeper spend. */
@@ -195,6 +205,19 @@ export function buildWaiverBoard(
   // Replacement level per position = projected weekly value of the first player past the last starter.
   const replacementByPos = computeReplacementLevels(projections, ctx);
 
+  // Historical winning bids calibrate a market multiplier against each bid player's
+  // current ROS Weeks-as-Starter value. Missing/unprojected players are ignored.
+  const historicalModeledValues = new Map<string, number>();
+  for (const bid of bids) {
+    const projection = projections.get(bid.playerId);
+    const posRank = leagueWideRanks.get(bid.playerId);
+    if (!projection || posRank == null) continue;
+    historicalModeledValues.set(
+      bid.playerId,
+      weeksStarterStrategy({ position: projection.position, posRank }, ctx),
+    );
+  }
+
   // Group available by position
   const byPos = new Map<string, { playerId: string; rosPoints: number; pointsPerWeek: number }[]>();
   for (const pid of availablePlayerIds) {
@@ -223,7 +246,7 @@ export function buildWaiverBoard(
       const starterWeeks = projectedStarterWeeks(base, ctx);
       const weeks = weeksStarterStrategy(base, ctx);
       const vorp = vorpStrategy(base, replacementByPos, ctx);
-      const pred = predictWinningBid(pos, safe, bids);
+      const pred = predictWinningBid(pos, weeks, bids, historicalModeledValues);
 
       const clamp = (v: number) =>
         opts?.budgetFloor != null && opts?.remaining != null
@@ -252,9 +275,21 @@ export function buildWaiverBoard(
       });
     });
   }
-  // Sort board by best safe suggestion desc
-  rows.sort((a, b) => (b.suggestions[0].value - a.suggestions[0].value));
-  return rows;
+  return sortWaiverRowsByStrategy(rows, 'safe');
+}
+
+/** Return a copy sorted by the strategy currently displayed in the Waivers UI. */
+export function sortWaiverRowsByStrategy(
+  rows: WaiverPlayerRow[],
+  strategy: StrategyKey,
+): WaiverPlayerRow[] {
+  const valueFor = (row: WaiverPlayerRow) =>
+    row.suggestions.find((suggestion) => suggestion.strategy === strategy)?.value ?? 0;
+  return [...rows].sort(
+    (a, b) => valueFor(b) - valueFor(a)
+      || b.rosPoints - a.rosPoints
+      || a.name.localeCompare(b.name),
+  );
 }
 
 function mk(strategy: StrategyKey, label: string, value: number, budget: number): BidSuggestion {

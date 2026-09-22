@@ -25,6 +25,7 @@ import {
   buildWaiverBoard,
   calculateRemainingFaab,
   computeAvailablePlayers,
+  sortWaiverRowsByStrategy,
   type StrategyKey,
 } from '../logic/waivers';
 import { getPlayerName } from '../store/players';
@@ -182,7 +183,8 @@ export function WaiversPage() {
   }
 
   const { ctx, remainingFaab, rows } = board;
-  const filtered = posFilter === 'ALL' ? rows : rows.filter((r) => r.position === posFilter);
+  const positionRows = posFilter === 'ALL' ? rows : rows.filter((r) => r.position === posFilter);
+  const filtered = sortWaiverRowsByStrategy(positionRows, strategy);
   const stratIdx = STRATEGIES.findIndex((s) => s.key === strategy);
 
   return (
@@ -243,7 +245,7 @@ export function WaiversPage() {
         <Info size={12} className="mt-0.5 shrink-0" />
         <span>
           Values use Sleeper rest-of-season projections (weekly totals from week {projectionStartWeek} through 18)
-          in your league's scoring format. "Predicted" = likely winning bid from this league's historical spending at that position.
+          in your league's scoring format. "Predicted" scales each player's Weeks-as-Starter value by this league's historical position-market aggressiveness.
         </span>
       </div>
 
