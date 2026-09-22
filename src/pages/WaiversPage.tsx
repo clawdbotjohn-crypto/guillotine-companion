@@ -134,6 +134,37 @@ export function VorpSourceNotice({
   );
 }
 
+export function VorpControls({
+  strategy,
+  replacementTeamCount,
+  maxReplacementTeams,
+  onReplacementTeamChange,
+  rankingSource,
+  unavailableReason,
+}: {
+  strategy: StrategyKey;
+  replacementTeamCount: number;
+  maxReplacementTeams: number;
+  onReplacementTeamChange: (teams: number) => void;
+  rankingSource: WaiverRankingSource;
+  unavailableReason?: string;
+}) {
+  if (strategy !== 'vorp') return null;
+  return (
+    <>
+      <ReplacementTeamSelector
+        value={replacementTeamCount}
+        max={maxReplacementTeams}
+        onChange={onReplacementTeamChange}
+      />
+      <VorpSourceNotice
+        rankingSource={rankingSource}
+        unavailableReason={unavailableReason}
+      />
+    </>
+  );
+}
+
 export function PredictedWinningBidFooter({
   strategy,
   row,
@@ -322,7 +353,13 @@ export function WaiversPage() {
         Waivers
       </h1>
       <RankingSourceSelector value={rankingSource} onChange={setRankingSource} />
-      <VorpSourceNotice rankingSource={rankingSource} />
+      <VorpControls
+        strategy={strategy}
+        replacementTeamCount={normalizedReplacementTarget}
+        maxReplacementTeams={replacementBounds.max}
+        onReplacementTeamChange={(value) => setReplacementTeamSelection({ leagueId, value })}
+        rankingSource={rankingSource}
+      />
       {content}
     </div>
   );
@@ -414,13 +451,11 @@ export function WaiversPage() {
       </p>
 
       <RankingSourceSelector value={rankingSource} onChange={setRankingSource} />
-      <ReplacementTeamSelector
-        value={normalizedReplacementTarget}
-        max={replacementBounds.max}
-        onChange={(value) => setReplacementTeamSelection({ leagueId, value })}
-      />
-
-      <VorpSourceNotice
+      <VorpControls
+        strategy={strategy}
+        replacementTeamCount={normalizedReplacementTarget}
+        maxReplacementTeams={replacementBounds.max}
+        onReplacementTeamChange={(value) => setReplacementTeamSelection({ leagueId, value })}
         rankingSource={rankingSource}
         unavailableReason={sleeperUnavailableReason}
       />

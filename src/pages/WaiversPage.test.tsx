@@ -5,6 +5,7 @@ import {
   PredictedWinningBidFooter,
   RankingSourceSelector,
   ReplacementTeamSelector,
+  VorpControls,
   VorpSourceNotice,
 } from './WaiversPage';
 import {
@@ -45,6 +46,26 @@ describe('waiver controls', () => {
 
     fireEvent.change(select, { target: { value: '5' } });
     expect(onChange).toHaveBeenCalledWith(5);
+  });
+
+  it('shows replacement-depth and source controls only when VoRP is selected', () => {
+    const onChange = vi.fn();
+    const props = {
+      replacementTeamCount: 8,
+      maxReplacementTeams: 8,
+      onReplacementTeamChange: onChange,
+      rankingSource: 'fantasypros' as const,
+    };
+    const { rerender } = render(<VorpControls strategy="weeks-starter" {...props} />);
+
+    expect(screen.queryByLabelText('Replacement/startable depth teams')).toBeNull();
+    expect(screen.queryByRole('status')).toBeNull();
+
+    rerender(<VorpControls strategy="vorp" {...props} />);
+    expect(screen.getByLabelText('Replacement/startable depth teams')).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toMatch(
+      /VoRP uses Sleeper ROS projected fantasy points independently/i,
+    );
   });
 
   it('shows that external Player Values cannot replace Sleeper ROS for VoRP', () => {
