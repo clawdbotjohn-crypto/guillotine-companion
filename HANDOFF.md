@@ -1,3 +1,14 @@
+# Follow-up — VoRP-Only Controls (2026-09-22)
+
+- **Status:** COMPLETE on PR #7 branch; implementation commit `5cd0778`.
+- The `Replacement/startable depth teams` selector and independent Sleeper ROS notice now render only when the **VoRP** strategy is selected. Weeks-as-Starter, Safe, and Aggressive no longer show irrelevant VoRP configuration.
+- The selected replacement depth remains in page state when switching strategies, so returning to VoRP preserves the user's choice.
+- Added a DOM regression that renders a non-VoRP strategy, proves both controls absent, switches to VoRP, and proves the selector and source notice appear.
+- Verification: focused 7/7 tests, full 10 files / 52 tests, lint 0 warnings/errors, production build, and `git diff --check` passed.
+- No merge, main push, force-push, production deploy, or workflow dispatch was performed.
+
+---
+
 # Final Orchestrator Handoff — Required P0 Set (2026-09-22)
 
 - **Verified session time:** 45 min of 60 target; exited early because all required P0 work was complete rather than inventing unrelated work.
