@@ -12,7 +12,7 @@ export const WAIVER_STRATEGIES: { key: StrategyKey; label: string }[] = [
 export const WAIVER_STRATEGY_EXPLANATIONS: Record<Exclude<StrategyKey, 'vorp'>, string> = {
   'weeks-starter': 'Values players by how many remaining weeks they project to stay in a starting lineup.',
   safe: 'Uses a conservative position-and-rank baseline for steady bidding.',
-  aggressive: 'The maximum you should consider bidding: a spending ceiling, not intrinsic player value. It intentionally accepts overpay risk to land elite players, with a lower ceiling later in the season.',
+  aggressive: 'The maximum you should consider bidding: a player-sensitive spending ceiling equal to Predicted Winning Bid, not intrinsic player value. It intentionally accepts overpay risk to land elite players and declines continuously as the season advances.',
 };
 
 export function getWaiverStrategyExplanation(

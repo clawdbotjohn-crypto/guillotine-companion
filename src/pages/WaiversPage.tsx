@@ -38,6 +38,7 @@ import {
   normalizeReplacementTeamTarget,
   sortWaiverRowsByStrategy,
   type StrategyKey,
+  type WaiverPlayerRow,
 } from '../logic/waivers';
 import { getPlayerName } from '../store/players';
 import {
@@ -129,6 +130,34 @@ export function VorpSourceNotice({
     >
       VoRP uses Sleeper ROS projected fantasy points independently of the selected Player Values source.
       {unavailableReason ? ` VoRP is unavailable: ${unavailableReason}.` : ''}
+    </div>
+  );
+}
+
+export function PredictedWinningBidFooter({
+  strategy,
+  row,
+}: {
+  strategy: StrategyKey;
+  row: Pick<WaiverPlayerRow, 'predictedWinningBid' | 'predictedConfidence'>;
+}) {
+  if (strategy === 'aggressive') return null;
+  return (
+    <div className="flex items-center justify-between mt-2 pt-2 border-t border-[#1a1e3a]">
+      <span className="text-[10px] text-[#6b6e99] uppercase tracking-wider">Predicted winning bid</span>
+      <div className="flex items-center gap-1.5">
+        <span className="font-['Space_Mono'] text-xs text-[#f59e0b] tabular-nums">
+          ${row.predictedWinningBid}
+        </span>
+        <span
+          className={`text-[9px] uppercase px-1.5 py-0.5 rounded-full
+            ${row.predictedConfidence === 'high' ? 'bg-[rgba(16,185,129,0.15)] text-[#10b981]'
+              : row.predictedConfidence === 'medium' ? 'bg-[rgba(245,158,11,0.15)] text-[#f59e0b]'
+              : 'bg-[rgba(100,116,139,0.15)] text-[#64748b]'}`}
+        >
+          {row.predictedConfidence}
+        </span>
+      </div>
     </div>
   );
 }
@@ -505,22 +534,7 @@ export function WaiversPage() {
                   </div>
                 </div>
               </div>
-              <div className="flex items-center justify-between mt-2 pt-2 border-t border-[#1a1e3a]">
-                <span className="text-[10px] text-[#6b6e99] uppercase tracking-wider">Predicted winning bid</span>
-                <div className="flex items-center gap-1.5">
-                  <span className="font-['Space_Mono'] text-xs text-[#f59e0b] tabular-nums">
-                    ${row.predictedWinningBid}
-                  </span>
-                  <span
-                    className={`text-[9px] uppercase px-1.5 py-0.5 rounded-full
-                      ${row.predictedConfidence === 'high' ? 'bg-[rgba(16,185,129,0.15)] text-[#10b981]'
-                        : row.predictedConfidence === 'medium' ? 'bg-[rgba(245,158,11,0.15)] text-[#f59e0b]'
-                        : 'bg-[rgba(100,116,139,0.15)] text-[#64748b]'}`}
-                  >
-                    {row.predictedConfidence}
-                  </span>
-                </div>
-              </div>
+              <PredictedWinningBidFooter strategy={strategy} row={row} />
             </Card>
           );
         })}

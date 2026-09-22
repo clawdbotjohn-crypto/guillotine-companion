@@ -251,17 +251,6 @@ function safeStrategy(row: { posRank: number; position: string }, ctx: LeagueCon
   return scale(base1000 * weight * premium, ctx.budget);
 }
 
-/** Aggressive maximum-bid ceiling: up to 1/2 budget in weeks 1-8, then 1/4 and 1/8. */
-function aggressiveStrategy(row: { posRank: number; position: string }, ctx: LeagueContext): number {
-  if ((VORP_WEIGHTS[row.position] ?? 0) < 0.5) return 0;
-  let cap: number;
-  if (ctx.currentWeek <= 8) cap = ctx.budget * 0.5;
-  else if (ctx.currentWeek <= 12) cap = ctx.budget * 0.25;
-  else cap = ctx.budget * 0.125;
-  const eliteFactor = Math.max(0.3, 1 - (row.posRank - 1) * 0.12);
-  return Math.round(cap * eliteFactor);
-}
-
 /** Estimate how many remaining guillotine weeks a player stays above the starter cutoff. */
 function projectedStarterWeeks(row: { posRank: number; position: string }, ctx: LeagueContext): number {
   const startersAtPos = starterCountForPos(row.position, ctx);
@@ -379,16 +368,15 @@ export function buildWaiverBoard(
       if (posRank == null) return;
       const base = { position: pos, posRank };
       const safe = safeStrategy(base, ctx);
-      const aggressive = aggressiveStrategy(base, ctx);
       const starterWeeks = projectedStarterWeeks(base, ctx);
       const weeks = weeksStarterStrategy(base, ctx);
+      const pred = predictWinningBid(weeks, ctx.currentWeek);
       const playerVorp = calibration
         ? calculatePlayerVorp(sleeperRos?.get(p.playerId), calibration.replacementByPosition)
         : null;
       const vorp = playerVorp == null || !calibration
         ? null
         : Math.round(playerVorp * calibration.dollarsPerVorp);
-      const pred = predictWinningBid(weeks, ctx.currentWeek);
 
       rows.push({
         playerId: p.playerId,
@@ -404,7 +392,7 @@ export function buildWaiverBoard(
         suggestions: [
           mk('weeks-starter', 'Weeks-as-Starter', weeks, ctx.budget),
           mk('safe', 'Safe', safe, ctx.budget),
-          mk('aggressive', 'Aggressive', aggressive, ctx.budget),
+          mk('aggressive', 'Aggressive', pred.value, ctx.budget),
           mk('vorp', 'VoRP', vorp, ctx.budget),
         ],
         predictedWinningBid: pred.value,

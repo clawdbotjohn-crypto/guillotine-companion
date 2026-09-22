@@ -1,7 +1,12 @@
 /* @vitest-environment jsdom */
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { RankingSourceSelector, ReplacementTeamSelector, VorpSourceNotice } from './WaiversPage';
+import {
+  PredictedWinningBidFooter,
+  RankingSourceSelector,
+  ReplacementTeamSelector,
+  VorpSourceNotice,
+} from './WaiversPage';
 import {
   DEFAULT_WAIVER_STRATEGY,
   getWaiverStrategyExplanation,
@@ -75,6 +80,19 @@ describe('waiver controls', () => {
     expect(unavailable).not.toMatch(/\$0/);
   });
 
+  it('hides the redundant predicted-bid footer for Aggressive but preserves it for other strategies', () => {
+    const row = { predictedWinningBid: 275, predictedConfidence: 'medium' as const };
+    const { rerender } = render(<PredictedWinningBidFooter strategy="aggressive" row={row} />);
+
+    expect(screen.queryByText(/Predicted winning bid/i)).toBeNull();
+    expect(screen.queryByText('$275')).toBeNull();
+
+    rerender(<PredictedWinningBidFooter strategy="safe" row={row} />);
+    expect(screen.getByText(/Predicted winning bid/i)).toBeTruthy();
+    expect(screen.getByText('$275')).toBeTruthy();
+    expect(screen.getByText('medium')).toBeTruthy();
+  });
+
   it('uses the Aggressive strategy label and explains it as an intentional overpay ceiling', () => {
     expect(DEFAULT_WAIVER_STRATEGY).toBe('weeks-starter');
     expect(WAIVER_STRATEGIES).toEqual([
@@ -84,7 +102,8 @@ describe('waiver controls', () => {
       { key: 'vorp', label: 'VoRP' },
     ]);
     expect(WAIVER_STRATEGY_EXPLANATIONS.aggressive).toMatch(/maximum you should consider bidding/i);
-    expect(WAIVER_STRATEGY_EXPLANATIONS.aggressive).toMatch(/spending ceiling, not intrinsic player value/i);
+    expect(WAIVER_STRATEGY_EXPLANATIONS.aggressive).toMatch(/spending ceiling/i);
+    expect(WAIVER_STRATEGY_EXPLANATIONS.aggressive).toMatch(/not intrinsic player value/i);
     expect(WAIVER_STRATEGY_EXPLANATIONS.aggressive).toMatch(/intentionally accepts overpay risk to land elite players/i);
 
     const visibleCopy = [
