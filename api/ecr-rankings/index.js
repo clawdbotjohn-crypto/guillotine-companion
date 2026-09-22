@@ -1,5 +1,7 @@
 // Direct FantasyPros ECR integration, adapted from the proven Draft Assistant proxy.
 // Provenance: the selected scoring page on fantasypros.com; no other ranking feed is relabeled.
+const { FANTASYPROS_ROS_URLS } = require('./urls');
+
 const cache = new Map();
 const CACHE_TTL = 24 * 60 * 60 * 1000;
 
@@ -32,12 +34,9 @@ module.exports = async function (context, req) {
       return;
     }
 
-    const urls = {
-      ppr: 'https://www.fantasypros.com/nfl/rankings/ppr-overall.php',
-      half: 'https://www.fantasypros.com/nfl/rankings/half-point-ppr-overall.php',
-      standard: 'https://www.fantasypros.com/nfl/rankings/overall.php',
-    };
-    const sourceUrl = urls[scoring];
+    // FantasyPros has separate preseason/draft and in-season rest-of-season pages.
+    // Waiver values must use the ROS pages; the draft URLs redirect to consensus cheat sheets.
+    const sourceUrl = FANTASYPROS_ROS_URLS[scoring];
     const response = await fetch(sourceUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',

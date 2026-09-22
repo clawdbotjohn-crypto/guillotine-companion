@@ -18,7 +18,7 @@ describe('waiver controls', () => {
     expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual([
       'Sleeper rest-of-season projections',
       'FantasyCalc redraft market values',
-      'FantasyPros expert consensus rankings',
+      'FantasyPros rest-of-season expert consensus rankings',
     ]);
     expect(screen.queryByText(/Football Absurdity/i)).toBeNull();
     expect(screen.queryByText(/Active:/i)).toBeNull();

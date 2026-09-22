@@ -1,12 +1,22 @@
 # Handoff — PR #7 Review Changes (2026-09-22)
 
+## FantasyPros ROS source correction
+
+- Review found the first FantasyPros integration used draft/preseason ECR endpoints; the PPR URL redirects to FantasyPros' **2026 Fantasy Football Draft Rankings** consensus cheat sheet.
+- Corrected all scoring modes to verified current rest-of-season pages:
+  - PPR: `https://www.fantasypros.com/nfl/rankings/ros-ppr-overall.php`
+  - Half-PPR: `https://www.fantasypros.com/nfl/rankings/ros-half-point-ppr-overall.php`
+  - Standard: `https://www.fantasypros.com/nfl/rankings/ros-overall.php`
+- Renamed the source to **FantasyPros ROS ECR** and added endpoint regression coverage so draft URLs cannot silently return.
+- Direct handler probes succeeded for all formats: 349 PPR players, 350 half-PPR players, and 349 standard players; each returned the exact ROS source URL and Jahmyr Gibbs at current ROS ECR #1.
+
 ## Status
 Implemented on `feat/waiver-ranking-sources` for existing PR #7. No merge, production deployment, workflow dispatch, or push to `main` was performed.
 
 ## Source provenance and selector
 - Replaced the three source buttons with one native accessible `Player Values` select. It has Sleeper ROS, FantasyCalc, and FantasyPros ECR options and no redundant `Active:` copy.
 - Removed Football Absurdity from the UI, client, types, API route, and API dependencies. It was **not** relabeled.
-- Added a direct FantasyPros ECR Azure Function adapted from the proven Draft Assistant `api/ecr-rankings/index.js` integration. The function fetches FantasyPros itself at `https://www.fantasypros.com/nfl/rankings/{ppr-overall|half-point-ppr-overall|overall}.php`, parses that page's embedded `ecrData`, retains each actual `rank_ecr`, and reports the exact source URL. A live handler invocation returned HTTP 200, 132 QB/RB/WR/TE players, and FantasyPros' URL; the first result was Jahmyr Gibbs, ECR #1. The season-value score only converts ECR into descending positive numbers for model math; cards display the original ECR rank.
+- Added a direct FantasyPros ROS ECR Azure Function adapted from the proven Draft Assistant proxy pattern. The function fetches FantasyPros' verified `ros-ppr-overall.php`, `ros-half-point-ppr-overall.php`, or `ros-overall.php` page, parses embedded `ecrData`, retains each actual `rank_ecr`, and reports the exact source URL. Direct live handler invocations returned HTTP 200 and 349–350 eligible QB/RB/WR/TE players depending on scoring, led by Jahmyr Gibbs at current ROS ECR #1. The season-value score only converts ECR into descending positive numbers for model math; cards display the original ROS ECR rank.
 - League reception scoring selects the matching FantasyPros PPR, half-PPR, or standard page. No third-party feed is attributed to FantasyPros.
 
 ## Waiver UX/model changes
