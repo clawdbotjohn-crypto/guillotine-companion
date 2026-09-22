@@ -47,7 +47,8 @@ export function normalizePlayerName(name: string): string {
 /**
  * Convert an external ranking/value feed into the same complete player map consumed by waiver
  * math. FantasyCalc IDs are preferred; normalized name + position + team is the fallback.
- * `pointsPerWeek` is a 0-30 normalized source score used only for source-relative VoRP math.
+ * `pointsPerWeek` is a 0-30 normalized source score used by display-source rank strategies only;
+ * calibrated VoRP always receives a separate Sleeper ROS projection map.
  */
 export function buildExternalRankingMap(
   rankings: ExternalRanking[],

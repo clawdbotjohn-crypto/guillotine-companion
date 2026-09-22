@@ -30,20 +30,58 @@ import {
 } from '../logic';
 import {
   buildLeagueContext,
+  buildVorpCalibration,
   buildWaiverBoard,
   calculateRemainingFaab,
   computeAvailablePlayers,
+  getReplacementTeamBounds,
+  normalizeReplacementTeamTarget,
   sortWaiverRowsByStrategy,
   type StrategyKey,
 } from '../logic/waivers';
 import { getPlayerName } from '../store/players';
 import {
   DEFAULT_WAIVER_STRATEGY,
+  getWaiverStrategyExplanation,
   WAIVER_STRATEGIES,
-  WAIVER_STRATEGY_EXPLANATIONS,
 } from '../logic/waiverDisplay';
 
 const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE'];
+
+export function ReplacementTeamSelector({
+  value,
+  max,
+  onChange,
+}: {
+  value: number;
+  max: number;
+  onChange: (teams: number) => void;
+}) {
+  const options = Array.from({ length: Math.max(0, max - 3) }, (_, index) => max - index);
+  return (
+    <section className="mb-4">
+      <label
+        htmlFor="replacement-team-depth"
+        className="block text-[10px] uppercase tracking-wider text-[#6b6e99] mb-1.5"
+      >
+        Replacement/startable depth teams
+      </label>
+      <select
+        id="replacement-team-depth"
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="w-full rounded-lg border border-[#2a2e55] bg-[#0e1025] px-3 py-2.5 text-xs text-[#f0f0ff] outline-none focus:border-[#6366f1] focus:ring-1 focus:ring-[#6366f1]"
+      >
+        {options.map((teams) => (
+          <option key={teams} value={teams}>{teams} teams</option>
+        ))}
+      </select>
+      <p className="mt-1.5 text-[10px] text-[#4a4d77]">
+        Defines the optimized lineup pool used to set replacement level.
+      </p>
+    </section>
+  );
+}
 
 export function RankingSourceSelector({
   value,
@@ -71,6 +109,27 @@ export function RankingSourceSelector({
         ))}
       </select>
     </section>
+  );
+}
+
+export function VorpSourceNotice({
+  rankingSource,
+  unavailableReason,
+}: {
+  rankingSource: WaiverRankingSource;
+  unavailableReason?: string;
+}) {
+  if (rankingSource === 'sleeper' && !unavailableReason) return null;
+  return (
+    <div
+      role="status"
+      className={`mb-4 rounded-lg border px-3 py-2.5 text-[11px] leading-relaxed ${unavailableReason
+        ? 'border-[rgba(245,158,11,0.35)] bg-[rgba(245,158,11,0.08)] text-[#fbbf24]'
+        : 'border-[rgba(99,102,241,0.35)] bg-[rgba(99,102,241,0.08)] text-[#a5b4fc]'}`}
+    >
+      VoRP uses Sleeper ROS projected fantasy points independently of the selected Player Values source.
+      {unavailableReason ? ` VoRP is unavailable: ${unavailableReason}.` : ''}
+    </div>
   );
 }
 
@@ -110,7 +169,7 @@ export function WaiversPage() {
     league?.season ?? null,
     projectionStartWeek,
     18,
-    rankingSource === 'sleeper',
+    !!league && !!nflStateQuery.data && league.season === nflStateQuery.data.season,
   );
   const fantasyCalcQuery = useFantasyCalcRankings(league, rankingSource === 'fantasycalc');
   const fantasyProsQuery = useFantasyProsRankings(league, rankingSource === 'fantasypros');
@@ -122,18 +181,26 @@ export function WaiversPage() {
 
   const [strategy, setStrategy] = useState<StrategyKey>(DEFAULT_WAIVER_STRATEGY);
   const [posFilter, setPosFilter] = useState('ALL');
+  const [replacementTeamSelection, setReplacementTeamSelection] = useState<{
+    leagueId: string;
+    value: number;
+  } | null>(null);
+  const replacementTeamTarget = replacementTeamSelection?.leagueId === leagueId
+    ? replacementTeamSelection.value
+    : null;
+
+  const sleeperRosValues = useMemo(() => {
+    if (!playersQuery.data || !league || !projectionWeeksQuery.data) return null;
+    return sumRestOfSeasonProjections(
+      projectionWeeksQuery.data,
+      getProjectionScoring(league.scoring_settings?.rec),
+      (playerId) => playersQuery.data.get(playerId)?.position,
+    );
+  }, [projectionWeeksQuery.data, playersQuery.data, league]);
 
   const seasonValues = useMemo(() => {
     if (!playersQuery.data || !league) return null;
-    if (rankingSource === 'sleeper') {
-      if (!projectionWeeksQuery.data) return null;
-      const scoring = getProjectionScoring(league.scoring_settings?.rec);
-      return sumRestOfSeasonProjections(
-        projectionWeeksQuery.data,
-        scoring,
-        (playerId) => playersQuery.data.get(playerId)?.position,
-      );
-    }
+    if (rankingSource === 'sleeper') return sleeperRosValues;
     if (rankingSource === 'fantasycalc') {
       if (!fantasyCalcQuery.data) return null;
       return buildExternalRankingMap(fantasyCalcQuery.data.players, playersQuery.data).projections;
@@ -142,7 +209,7 @@ export function WaiversPage() {
     return buildExternalRankingMap(fantasyProsQuery.data.players, playersQuery.data).projections;
   }, [
     rankingSource,
-    projectionWeeksQuery.data,
+    sleeperRosValues,
     fantasyCalcQuery.data,
     fantasyProsQuery.data,
     playersQuery.data,
@@ -159,38 +226,53 @@ export function WaiversPage() {
     || (rankingSource === 'sleeper' && nflStateQuery.isLoading)
     || selectedSourceQuery.isLoading;
 
-  const valueStartWeek = rankingSource === 'sleeper'
-    ? projectionStartWeek ?? undefined
-    : nflStateQuery.data
-      ? getRestOfSeasonStartWeek(nflStateQuery.data)
-      : undefined;
+  const waiverContext = useMemo(() => {
+    if (!matchups || !rosters || !users || !league) return null;
+    const elim = computeEliminations(matchups, rosters, users);
+    return { elim, ctx: buildLeagueContext(league, elim, projectionStartWeek ?? undefined) };
+  }, [matchups, rosters, users, league, projectionStartWeek]);
+
+  const replacementBounds = getReplacementTeamBounds(waiverContext?.ctx.teamsRemaining ?? 4);
+  const normalizedReplacementTarget = normalizeReplacementTeamTarget(
+    replacementTeamTarget,
+    waiverContext?.ctx.teamsRemaining ?? 4,
+  );
 
   const board = useMemo(() => {
-    if (!matchups || !rosters || !users || !league || !seasonValues) {
-      return null;
-    }
-    const elim = computeEliminations(matchups, rosters, users);
+    if (!waiverContext || !rosters || !seasonValues) return null;
+    const { elim, ctx } = waiverContext;
     const bids = transactions ? extractBids(transactions) : [];
-    const ctx = buildLeagueContext(league, elim, valueStartWeek);
     const selectedRoster = rosterId == null
       ? undefined
       : rosters.find((roster) => roster.roster_id === rosterId);
     const remainingFaab = calculateRemainingFaab(ctx.budget, selectedRoster);
     const available = computeAvailablePlayers(rosters, seasonValues, elim);
+    const vorpCalibration = sleeperRosValues
+      ? buildVorpCalibration(
+        sleeperRosValues,
+        ctx.startersPerPos,
+        normalizedReplacementTarget,
+        ctx.budget,
+      )
+      : null;
     return {
       ctx,
       remainingFaab,
-      rows: buildWaiverBoard(available, seasonValues, ctx, bids, getPlayerName),
+      vorpCalibration,
+      rows: buildWaiverBoard(available, seasonValues, ctx, bids, getPlayerName, {
+        sleeperRosProjections: sleeperRosValues ?? undefined,
+        replacementTeamCount: normalizedReplacementTarget,
+        vorpCalibration,
+      }),
     };
   }, [
-    matchups,
+    waiverContext,
     rosters,
-    users,
-    league,
     seasonValues,
-    valueStartWeek,
     transactions,
     rosterId,
+    sleeperRosValues,
+    normalizedReplacementTarget,
   ]);
 
   if (!leagueId) {
@@ -211,6 +293,7 @@ export function WaiversPage() {
         Waivers
       </h1>
       <RankingSourceSelector value={rankingSource} onChange={setRankingSource} />
+      <VorpSourceNotice rankingSource={rankingSource} />
       {content}
     </div>
   );
@@ -267,7 +350,20 @@ export function WaiversPage() {
     );
   }
 
-  const { ctx, remainingFaab, rows } = board;
+  const { ctx, remainingFaab, rows, vorpCalibration } = board;
+  const sleeperUnavailableReason = vorpCalibration
+    ? undefined
+    : projectionWeeksQuery.isLoading || nflStateQuery.isLoading
+      ? 'Sleeper ROS projections are still loading'
+      : league && nflStateQuery.data && league.season !== nflStateQuery.data.season
+        ? `Sleeper ROS projections are not available for historical season ${league.season}`
+        : projectionStartWeek != null && projectionStartWeek > 18
+          ? 'the current NFL season has no remaining projection weeks'
+          : projectionWeeksQuery.error || nflStateQuery.error
+            ? 'Sleeper ROS projections could not be loaded'
+            : !sleeperRosValues || sleeperRosValues.size === 0
+              ? 'Sleeper returned no usable remaining-season point projections'
+              : 'Sleeper ROS projections could not fill every required lineup slot or produce a valid championship calibration';
   const positionRows = posFilter === 'ALL' ? rows : rows.filter((r) => r.position === posFilter);
   const filtered = sortWaiverRowsByStrategy(positionRows, strategy);
   const weeklyContext = weeklyProjectionQuery.data && playersQuery.data && league
@@ -289,6 +385,16 @@ export function WaiversPage() {
       </p>
 
       <RankingSourceSelector value={rankingSource} onChange={setRankingSource} />
+      <ReplacementTeamSelector
+        value={normalizedReplacementTarget}
+        max={replacementBounds.max}
+        onChange={(value) => setReplacementTeamSelection({ leagueId, value })}
+      />
+
+      <VorpSourceNotice
+        rankingSource={rankingSource}
+        unavailableReason={sleeperUnavailableReason}
+      />
 
       {/* Strategy toggle */}
       <div className="flex gap-1 bg-[#0a0d1a] rounded-lg p-1 mb-3 overflow-x-auto">
@@ -323,7 +429,14 @@ export function WaiversPage() {
 
       <div className="flex items-start gap-1.5 mb-4 text-[10px] text-[#6b6e99]">
         <Info size={12} className="mt-0.5 shrink-0" />
-        <span>{WAIVER_STRATEGY_EXPLANATIONS[strategy]}</span>
+        <span>
+          {getWaiverStrategyExplanation(
+            strategy,
+            normalizedReplacementTarget,
+            !!vorpCalibration,
+            sleeperUnavailableReason,
+          )}
+        </span>
       </div>
 
       {/* Board */}
@@ -384,11 +497,11 @@ export function WaiversPage() {
                 </div>
                 <div className="text-right shrink-0 ml-2">
                   <div className="flex items-center justify-end gap-1.5 font-['Space_Mono'] text-base text-[#10b981] font-bold tabular-nums">
-                    {remainingFaab != null && sug.value > remainingFaab && <FaabOverBudgetWarning />}
-                    <span>${sug.value}</span>
+                    {remainingFaab != null && sug.value != null && sug.value > remainingFaab && <FaabOverBudgetWarning />}
+                    <span>{sug.value == null ? 'Unavailable' : `$${sug.value}`}</span>
                   </div>
                   <div className="text-[9px] text-[#4a4d77] uppercase tracking-wide">
-                    {sug.pctOfBudget.toFixed(0)}% · {sug.label}
+                    {sug.pctOfBudget == null ? 'Sleeper ROS required' : `${sug.pctOfBudget.toFixed(0)}% · ${sug.label}`}
                   </div>
                 </div>
               </div>

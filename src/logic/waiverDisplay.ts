@@ -9,9 +9,22 @@ export const WAIVER_STRATEGIES: { key: StrategyKey; label: string }[] = [
   { key: 'vorp', label: 'VoRP' },
 ];
 
-export const WAIVER_STRATEGY_EXPLANATIONS: Record<StrategyKey, string> = {
+export const WAIVER_STRATEGY_EXPLANATIONS: Record<Exclude<StrategyKey, 'vorp'>, string> = {
   'weeks-starter': 'Values players by how many remaining weeks they project to stay in a starting lineup.',
   safe: 'Uses a conservative position-and-rank baseline for steady bidding.',
   aggressive: 'The maximum you should consider bidding: a spending ceiling, not intrinsic player value. It intentionally accepts overpay risk to land elite players, with a lower ceiling later in the season.',
-  vorp: 'Values each player by projected weekly advantage over the replacement option at their position.',
 };
+
+export function getWaiverStrategyExplanation(
+  strategy: StrategyKey,
+  replacementTeamCount: number,
+  vorpAvailable: boolean,
+  unavailableReason?: string,
+): string {
+  if (strategy !== 'vorp') return WAIVER_STRATEGY_EXPLANATIONS[strategy];
+  const basis = `VoRP uses Sleeper rest-of-season projected fantasy points and the last startable player in the optimized ${replacementTeamCount}-team lineup pool as each position's replacement baseline.`;
+  if (vorpAvailable) {
+    return `${basis} Dollar values are calibrated to the average final-four starter pool using one full league FAAB budget.`;
+  }
+  return `${basis} VoRP is unavailable${unavailableReason ? `: ${unavailableReason}` : ' because a valid Sleeper ROS calibration could not be built'}.`;
+}

@@ -1,9 +1,10 @@
 /* @vitest-environment jsdom */
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { RankingSourceSelector } from './WaiversPage';
+import { RankingSourceSelector, ReplacementTeamSelector, VorpSourceNotice } from './WaiversPage';
 import {
   DEFAULT_WAIVER_STRATEGY,
+  getWaiverStrategyExplanation,
   WAIVER_STRATEGIES,
   WAIVER_STRATEGY_EXPLANATIONS,
 } from '../logic/waiverDisplay';
@@ -25,6 +26,53 @@ describe('waiver controls', () => {
 
     fireEvent.change(select, { target: { value: 'fantasypros' } });
     expect(onChange).toHaveBeenCalledWith('fantasypros');
+  });
+
+  it('changes the accessible replacement/startable-depth target across every integer down to four', () => {
+    const onChange = vi.fn();
+    render(<ReplacementTeamSelector value={8} max={8} onChange={onChange} />);
+
+    const select = screen.getByLabelText('Replacement/startable depth teams');
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual([
+      '8 teams', '7 teams', '6 teams', '5 teams', '4 teams',
+    ]);
+    expect(screen.getByText(/optimized lineup pool used to set replacement level/i)).toBeTruthy();
+
+    fireEvent.change(select, { target: { value: '5' } });
+    expect(onChange).toHaveBeenCalledWith(5);
+  });
+
+  it('shows that external Player Values cannot replace Sleeper ROS for VoRP', () => {
+    const { rerender } = render(<VorpSourceNotice rankingSource="fantasycalc" />);
+    expect(screen.getByRole('status').textContent).toMatch(
+      /VoRP uses Sleeper ROS projected fantasy points independently of the selected Player Values source/i,
+    );
+
+    rerender(
+      <VorpSourceNotice
+        rankingSource="fantasypros"
+        unavailableReason="Sleeper returned no usable remaining-season point projections"
+      />,
+    );
+    expect(screen.getByRole('status').textContent).toMatch(/VoRP is unavailable/i);
+    expect(screen.getByRole('status').textContent).not.toMatch(/\$0/);
+  });
+
+  it('describes VoRP with the selected depth, independent Sleeper source, and honest unavailability', () => {
+    const available = getWaiverStrategyExplanation('vorp', 16, true);
+    expect(available).toMatch(/Sleeper rest-of-season projected fantasy points/i);
+    expect(available).toMatch(/optimized 16-team lineup pool/i);
+    expect(available).toMatch(/final-four starter pool/i);
+
+    const unavailable = getWaiverStrategyExplanation(
+      'vorp',
+      4,
+      false,
+      'Sleeper returned no usable remaining-season point projections',
+    );
+    expect(unavailable).toMatch(/VoRP is unavailable/i);
+    expect(unavailable).toMatch(/no usable remaining-season point projections/i);
+    expect(unavailable).not.toMatch(/\$0/);
   });
 
   it('uses the Aggressive strategy label and explains it as an intentional overpay ceiling', () => {
