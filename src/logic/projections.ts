@@ -10,6 +10,8 @@ export interface RosPlayerProjection {
   /** totalPoints divided by all requested weeks, including bye/zero-projection weeks. */
   pointsPerWeek: number;
   projectedWeeks: number;
+  /** Raw metric supplied by the active season-long source (ROS points, market value, or VoRP). */
+  sourceValue?: number;
 }
 
 /** Match Sleeper's three projection totals to the league's reception scoring. */

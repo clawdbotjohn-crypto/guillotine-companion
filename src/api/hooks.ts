@@ -12,7 +12,10 @@ import type {
   UserLeague,
   NflState,
   WeeklyProjectionMap,
+  FantasyCalcResponse,
+  FootballAbsurdityResponse,
 } from './types';
+import { getReceptionScoring, hasSuperflex, mapLeagueToFootballAbsurdity } from '../logic/rankingSources';
 
 const STALE_30M = 1000 * 60 * 30;
 const STALE_1H = 1000 * 60 * 60;
@@ -144,6 +147,7 @@ export function useRestOfSeasonProjectionWeeks(
   season: string | null,
   startWeek: number | null,
   endWeek = 18,
+  enabled = true,
 ) {
   return useQuery<Map<number, WeeklyProjectionMap>>({
     queryKey: ['sleeper-ros-projections', season, startWeek, endWeek],
@@ -154,8 +158,40 @@ export function useRestOfSeasonProjectionWeeks(
       );
       return api.getProjectionWeeks(season!, weeks, 4);
     },
-    enabled: !!season && startWeek != null && startWeek >= 1 && startWeek <= endWeek,
+    enabled: enabled && !!season && startWeek != null && startWeek >= 1 && startWeek <= endWeek,
     staleTime: STALE_30M,
+    gcTime: STALE_6H,
+    retry: 1,
+  });
+}
+
+export function useFantasyCalcRankings(league: League | undefined, enabled = true) {
+  return useQuery<FantasyCalcResponse>({
+    queryKey: [
+      'fantasycalc-redraft-rankings',
+      league?.total_rosters,
+      league ? getReceptionScoring(league) : null,
+      league ? hasSuperflex(league) : null,
+    ],
+    queryFn: () => api.getFantasyCalcRankings({
+      teams: league!.total_rosters,
+      ppr: getReceptionScoring(league!),
+      superflex: hasSuperflex(league!),
+    }),
+    enabled: enabled && !!league,
+    staleTime: STALE_6H,
+    gcTime: STALE_6H,
+    retry: 1,
+  });
+}
+
+export function useFootballAbsurdityRankings(league: League | undefined, enabled = true) {
+  const params = league ? mapLeagueToFootballAbsurdity(league) : null;
+  return useQuery<FootballAbsurdityResponse>({
+    queryKey: ['football-absurdity-rankings', params],
+    queryFn: () => api.getFootballAbsurdityRankings(params!),
+    enabled: enabled && !!params,
+    staleTime: STALE_6H,
     gcTime: STALE_6H,
     retry: 1,
   });

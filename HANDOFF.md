@@ -1,3 +1,35 @@
+# Handoff — Selectable Waiver Ranking Sources (PR #7)
+
+## Status
+Implemented on `feat/waiver-ranking-sources` from merged `origin/main` (`9f2eda1`). Sleeper ROS remains the default source. FantasyCalc redraft market value and Football Absurdity league-adjusted VoRP are both implemented with live upstream data; neither source was blocked.
+
+## What changed
+- Added a visible three-way source selector that remains available during loading and source-specific error/unavailable states.
+- FantasyCalc endpoint uses redraft mode plus league team count, reception scoring (standard/half/full PPR), and 1QB/superflex setting; direct Sleeper IDs are preferred for matching.
+- Football Absurdity endpoint now uses its proven POST form integration and maps full Sleeper scoring/lineup settings; normalized name+position+team fallback handles player matching.
+- External raw values are displayed honestly as `FC value` / `FA VoRP`. A source-relative normalized score drives VoRP calculations, while every rank-based strategy is recalculated from the selected source's complete player pool. Weekly Sleeper projections are not mixed into these season-long rankings.
+- Added source conversion/scoring tests proving source changes reverse ordering, positional ranks, and strategy outputs.
+
+## Exact browser verification
+Verified in headless Chromium against real Sleeper league **#SFB15 - Dallas Wings** (`1237312439318478848`, 2025), through the running Vite app plus local API functions. Captures were written to `/tmp/waivers-sleeper.jpg`, `/tmp/waivers-fantasycalc.jpg`, and `/tmp/waivers-fa.jpg` during the session.
+- Default **Sleeper ROS** was selected and honestly showed unavailable because this is a historical 2025 league while Sleeper state is 2026; the source selector remained usable.
+- Switching to **FantasyCalc** loaded live values and a full board: Jahmyr Gibbs RB1 (`10507`), Jaxon Smith-Njigba WR1 (`9491`), Puka Nacua WR4 (`8172`).
+- Switching to **Football Absurdity** loaded live league-adjusted VoRP and changed ordering/ranks: Jahmyr Gibbs RB1 (`28.5`), Puka Nacua WR1 (`23.3`), while Jaxon Smith-Njigba moved to WR4 (`20.6`).
+- Live handler checks returned 199 FantasyCalc players and 132 Football Absurdity rankings.
+
+## Verification
+- Targeted source regression tests: PASS (3/3)
+- Existing waiver/projection tests: PASS (13/13)
+- Full test suite: PASS (26/26)
+- Lint: PASS (0 warnings/errors)
+- Production build: PASS
+- `git diff --check`: PASS
+
+## Remaining follow-ups
+Continue with the next uncompleted P0 follow-up in project `PROGRESS.md`: League Bids/List position filters, then waiver availability toggle, strategy explanations, and separate next-week/bye context.
+
+---
+
 # PR #6 Sleeper ROS Waiver Handoff
 
 ## Follow-up season-deflation prediction model (2026-09-22)

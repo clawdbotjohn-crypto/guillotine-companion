@@ -19,6 +19,16 @@ export {
 } from './projections';
 
 export {
+  RANKING_SOURCES,
+  getReceptionScoring,
+  hasSuperflex,
+  mapLeagueToFootballAbsurdity,
+  normalizePlayerName,
+  buildExternalRankingMap,
+  type WaiverRankingSource,
+} from './rankingSources';
+
+export {
   buildPlayerSeasons,
   parseLineupSlots,
   projectBestLineup,

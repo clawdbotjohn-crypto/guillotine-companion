@@ -23,6 +23,7 @@ export interface WaiverPlayerRow {
   posRank: number; // league-wide rank at that position (by Sleeper ROS projection)
   rosPoints: number;
   projectedPointsPerWeek: number;
+  sourceValue: number;
   starterWeeks: number;
   possibleStarterWeeks: number;
   suggestions: BidSuggestion[];
@@ -244,6 +245,7 @@ export function buildWaiverBoard(
         posRank,
         rosPoints: p.rosPoints,
         projectedPointsPerWeek: p.pointsPerWeek,
+        sourceValue: projections.get(p.playerId)?.sourceValue ?? p.rosPoints,
         starterWeeks,
         possibleStarterWeeks: ctx.weeksRemaining,
         suggestions,
