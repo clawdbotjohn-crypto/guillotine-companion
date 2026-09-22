@@ -1,3 +1,50 @@
+# Handoff — Dynamic Championship-Calibrated VoRP (2026-09-22)
+
+- **Timestamp:** 2026-09-22 15:49 PDT
+- **Task:** Replace the arbitrary `$30 per weekly point` VoRP model with independent Sleeper ROS point projections calibrated to championship roster value.
+- **Status:** COMPLETE on `feat/waiver-ranking-sources` for existing open PR #7. No merge, production deploy, workflow dispatch, force push, or main-branch push was performed.
+- **Implementation commit:** `fb2f571` — `Implement championship-calibrated Sleeper VoRP`
+
+## Exact algorithm
+
+- VoRP exclusively consumes an independent `Map<string, RosPlayerProjection>` built from actual Sleeper remaining-season weekly projections. `totalPoints` is the single basis for player values, replacement baselines, and championship calibration; FantasyCalc normalized values and FantasyPros ECR never enter VoRP math.
+- The target-N optimized pool first fills `N ×` actual QB/RB/WR/TE base slots. It then fills all `N × FLEX` slots from one shared pool of the best remaining RB/WR/TE players and all `N × SUPER_FLEX/QB_FLEX` slots from one shared best-remaining QB/RB/WR/TE pool, without duplicate players. Projection ties break by Sleeper player ID.
+- Each positional replacement baseline is the lowest-point player of that position actually selected into the optimized target-N pool: the last starter (for example QB28), never the first excluded player. Player VoRP is `max(0, player Sleeper ROS totalPoints - positional replacement Sleeper ROS totalPoints)`.
+- A separate optimized starter pool is built for exactly four teams from the same lineup settings. Its player VoRPs are summed against the selected target-N baselines and divided by four. `dollarsPerVorp = initial league FAAB / average championship-team VoRP`; each bid is rounded from `playerVorp × dollarsPerVorp`. The model uses `ctx.budget`, not a roster's remaining FAAB, and returns unavailable for missing projections, incomplete pools, or zero/invalid calibration denominators.
+
+## UX
+
+- Added an accessible **Replacement/startable depth teams** selector with individual integer choices from the current surviving-team count down to four. Default/max are `max(4, surviving teams)` and effective values are normalized safely as league/team counts change.
+- External Player Values sources keep controlling display ranks/source metrics and non-VoRP strategies, while a visible status bar states that VoRP independently uses Sleeper ROS projected fantasy points.
+- VoRP strategy copy dynamically names Sleeper, the selected N-team optimized pool, the last-startable baseline, and final-four calibration. Missing Sleeper ROS shows a specific unavailable reason; card values render **Unavailable / Sleeper ROS required**, never `$0`. Other source-driven strategies remain usable.
+- Preserved Aggressive semantics/math, selected-strategy sorting, FantasyPros ROS behavior, next-week projections, bye/injury display, and the remaining FAAB warning.
+
+## Files changed
+
+- `src/logic/waivers.ts`
+- `src/logic/waiverDisplay.ts`
+- `src/logic/rankingSources.ts`
+- `src/logic/__tests__/waivers.test.ts`
+- `src/pages/WaiversPage.tsx`
+- `src/pages/WaiversPage.test.tsx`
+
+## Verification
+
+- `npm test -- --run`: **PASS** — 8 test files, 46 tests passed (expanded from 35). Focused tests cover base+shared FLEX, shared SUPER_FLEX, deterministic non-duplication, QB28 replacement, target-depth changes and normalization including fewer than four survivors, final-four calibration, exact `500 / 900` and 90 VoRP → `$50`, external-source isolation, and honest unavailable/source UI.
+- `npm run lint`: **PASS** — 0 warnings, 0 errors across 47 files.
+- `npm run build`: **PASS** — TypeScript and Vite production build completed; 2,467 modules transformed.
+- `git diff --check`: **PASS**.
+- Focused scan of `src/logic/waivers.ts`: no `30`, replacement-index, points-per-week replacement, or per-position FLEX replacement expression remains. Shared-pool evidence is in `selectShared(FLEX_POSITIONS, ...)` and `selectShared(SUPER_FLEX_POSITIONS, ...)`; dollar conversion is explicit at `initialLeagueFaab / averageChampionshipTeamVorp`.
+
+## Preview / checks / browser evidence
+
+- Implementation commit pushed only to `origin/feat/waiver-ranking-sources`; PR #7 remained **OPEN** and unmerged with head `fb2f571`.
+- GitHub CI `build`: **PASS** (19s). Azure SWA `Build and Deploy`: **PASS** (1m07s). Preview environment: <https://nice-moss-07ec56310-7.centralus.7.azurestaticapps.net>.
+- Browser-tested the deployed preview using the persisted real historical league `#SFB15 - Dallas Wings` (2025, two teams surviving). FantasyPros loaded and remained usable; the replacement selector correctly defaulted/maxed to **4 teams** despite fewer than four survivors. The visible status bar said VoRP independently uses Sleeper ROS and was unavailable for historical season 2025. Selecting VoRP changed the dynamic copy to the optimized **4-team** baseline and rendered all 48 shown recommendations as **Unavailable / Sleeper ROS required**, not `$0`.
+- **Limitation:** the available real browser league is historical, so live positive 2026 Sleeper calibration could not be visually proven there. The historical preview did exercise the required unavailable path and external-source independence; full positive calibration and selector math are covered by focused pure/UI tests.
+
+---
+
 # Handoff — PR #7 Aggressive Maximum-Bid Reframe (2026-09-22)
 
 - **Timestamp:** 2026-09-22 15:34:05 PDT
