@@ -1,3 +1,38 @@
+# Handoff — PR #7 Aggressive Maximum-Bid Reframe (2026-09-22)
+
+- **Timestamp:** 2026-09-22 15:34:05 PDT
+- **Task:** Replace the misleading maximum-bid strategy presentation and implementation naming with **Aggressive** while preserving its current math.
+- **Status:** COMPLETE on `feat/waiver-ranking-sources` for existing PR #7. No VoRP, ranking-source, endpoint, merge, deploy, workflow-dispatch, or main-branch changes were made.
+- **Implementation commit:** `1656925` — `Reframe maximum waiver bid as Aggressive`
+
+## Summary
+
+- Renamed the strategy key, calculation function, suggestion label, and tab to semantic `aggressive` / **Aggressive** naming.
+- Reframed the dynamic explanation as the maximum bid to consider: a spending ceiling, not intrinsic player value. It explicitly says the strategy intentionally accepts overpay risk to land elite players.
+- Preserved the existing ceiling math exactly: 50% of FAAB in weeks 1–8, 25% in weeks 9–12, and 12.5% thereafter, with the unchanged positional-rank factor.
+- Preserved strategy-selected sorting and displayed recommendation lookup by the new key.
+- Added Zustand persist version 1 migration so a legacy stored strategy key hydrates as `aggressive` instead of becoming invalid.
+- Added focused coverage for strategy order/label/copy, unchanged representative early/mid/late and rank-adjusted values, Aggressive sorting, absence of stale visible wording, and legacy state migration.
+
+## Files changed
+
+- `src/logic/waiverDisplay.ts`
+- `src/logic/waivers.ts`
+- `src/store/appStore.ts`
+- `src/store/appStore.test.ts`
+- `src/logic/__tests__/waivers.test.ts`
+- `src/pages/WaiversPage.test.tsx`
+
+## Exact verification results
+
+- `npm test -- --run`: **PASS** — 8 test files, 35 tests passed.
+- `npm run lint`: **PASS** — 0 warnings, 0 errors across 47 files.
+- `npm run build`: **PASS** — TypeScript and Vite production build completed; 2,467 modules transformed.
+- `git diff --check`: **PASS** — no whitespace errors.
+- Stale wording search over source/docs/public: only `src/store/appStore.ts` contains the legacy lowercase key, exclusively in the required persistence migration. No user-facing `Exp. Starter` or `Exponential` wording remains.
+
+---
+
 # Handoff — PR #7 Review Changes (2026-09-22)
 
 ## FantasyPros ROS source correction
