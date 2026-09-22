@@ -20,7 +20,7 @@ export interface WaiverPlayerRow {
   playerId: string;
   name: string;
   position: string;
-  posRank: number; // rank among available at that position (by season avg)
+  posRank: number; // league-wide rank at that position (by season avg)
   avgPoints: number;
   suggestions: BidSuggestion[];
   predictedWinningBid: number;
@@ -128,6 +128,12 @@ function predictWinningBid(
   return { value: Math.round(Math.max(q3, safeValue)), confidence };
 }
 
+/** Remaining FAAB for the selected roster, based on the league budget and Sleeper spend. */
+export function calculateRemainingFaab(budget: number, roster: Roster | undefined): number | null {
+  if (!roster) return null;
+  return Math.max(0, budget - (roster.settings.waiver_budget_used ?? 0));
+}
+
 /** Apply a user budget floor: never let a suggestion drop remaining below the floor. */
 export function applyBudgetFloor(value: number, remaining: number, floor: number): number {
   const spendable = Math.max(0, remaining - floor);
@@ -170,6 +176,10 @@ export function buildWaiverBoard(
   getName: (id: string) => string,
   opts?: { budgetFloor?: number; remaining?: number; maxPerPos?: number },
 ): WaiverPlayerRow[] {
+  // Rank against the complete season pool before filtering for availability. Availability
+  // determines which rows are shown, never the rank/value basis used by strategies.
+  const leagueWideRanks = computeLeagueWidePositionRanks(seasons);
+
   // Replacement level per position = avg of the "first player past the last starter"
   const replacementByPos = computeReplacementLevels(seasons, ctx);
 
@@ -187,9 +197,10 @@ export function buildWaiverBoard(
   const rows: WaiverPlayerRow[] = [];
   const maxPerPos = opts?.maxPerPos ?? 12;
   for (const [pos, arr] of byPos.entries()) {
-    arr.sort((a, b) => b.avg - a.avg);
-    arr.slice(0, maxPerPos).forEach((p, idx) => {
-      const posRank = idx + 1;
+    arr.sort((a, b) => b.avg - a.avg || a.playerId.localeCompare(b.playerId));
+    arr.slice(0, maxPerPos).forEach((p) => {
+      const posRank = leagueWideRanks.get(p.playerId);
+      if (posRank == null) return;
       const base = { position: pos, posRank, avgPoints: p.avg };
       const safe = safeStrategy(base, ctx);
       const exp = exponentialStrategy(base, ctx);
@@ -228,6 +239,25 @@ export function buildWaiverBoard(
 
 function mk(strategy: StrategyKey, label: string, value: number, budget: number): BidSuggestion {
   return { strategy, label, value: Math.max(0, value), pctOfBudget: budget > 0 ? (value / budget) * 100 : 0 };
+}
+
+/** League-wide positional ranks from the complete season scoring-average pool. */
+function computeLeagueWidePositionRanks(seasons: Map<string, PlayerSeason>): Map<string, number> {
+  const byPos = new Map<string, { playerId: string; avg: number }[]>();
+  for (const [playerId, season] of seasons.entries()) {
+    if (!['QB', 'RB', 'WR', 'TE'].includes(season.position)) continue;
+    const players = byPos.get(season.position) ?? [];
+    players.push({ playerId, avg: season.avgPoints });
+    byPos.set(season.position, players);
+  }
+
+  const ranks = new Map<string, number>();
+  for (const players of byPos.values()) {
+    players
+      .sort((a, b) => b.avg - a.avg || a.playerId.localeCompare(b.playerId))
+      .forEach((player, index) => ranks.set(player.playerId, index + 1));
+  }
+  return ranks;
 }
 
 /** Replacement level: the season avg of the last "startable" player per position. */

@@ -2,12 +2,14 @@
 import { useMemo, useState } from 'react';
 import { ShoppingCart, Info } from 'lucide-react';
 import { Card, Skeleton, PositionBadge } from '../components/ui';
+import { FaabOverBudgetWarning } from '../components/FaabOverBudgetWarning';
 import { useAppStore, usePlayers } from '../store';
 import { useLeague, useLeagueUsers, useRosters, useAllMatchups, useAllTransactions } from '../api';
 import { computeEliminations, extractBids, buildPlayerSeasons } from '../logic';
 import {
   buildLeagueContext,
   buildWaiverBoard,
+  calculateRemainingFaab,
   computeAvailablePlayers,
   type StrategyKey,
 } from '../logic/waivers';
@@ -23,7 +25,7 @@ const STRATEGIES: { key: StrategyKey; label: string }[] = [
 const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE'];
 
 export function WaiversPage() {
-  const { leagueId } = useAppStore();
+  const { leagueId, rosterId } = useAppStore();
   const { data: league } = useLeague(leagueId);
   const { data: users } = useLeagueUsers(leagueId);
   const { data: rosters } = useRosters(leagueId);
@@ -43,15 +45,20 @@ export function WaiversPage() {
     const seasons = buildPlayerSeasons(matchups);
     const bids = transactions ? extractBids(transactions) : [];
     const ctx = buildLeagueContext(league, elim);
+    const selectedRoster = rosterId == null
+      ? undefined
+      : rosters.find((roster) => roster.roster_id === rosterId);
+    const remainingFaab = calculateRemainingFaab(ctx.budget, selectedRoster);
     const available = computeAvailablePlayers(rosters, seasons, elim);
     return {
       ctx,
+      remainingFaab,
       rows: buildWaiverBoard(available, seasons, ctx, bids, getPlayerName, {
         budgetFloor: budgetFloor || undefined,
-        remaining: ctx.budget, // per-player; UI note explains this is generic FA board
+        remaining: remainingFaab ?? undefined,
       }),
     };
-  }, [matchups, rosters, users, league, transactions, budgetFloor]);
+  }, [matchups, rosters, users, league, transactions, budgetFloor, rosterId]);
 
   if (!leagueId) {
     return (
@@ -69,7 +76,7 @@ export function WaiversPage() {
     );
   }
 
-  const { ctx, rows } = board;
+  const { ctx, remainingFaab, rows } = board;
   const filtered = posFilter === 'ALL' ? rows : rows.filter((r) => r.position === posFilter);
   const stratIdx = STRATEGIES.findIndex((s) => s.key === strategy);
 
@@ -79,7 +86,8 @@ export function WaiversPage() {
         Waivers
       </h1>
       <p className="text-xs text-[#6b6e99] mb-4">
-        Budget ${ctx.budget} · {ctx.teamsRemaining} teams left · ~{ctx.weeksRemaining} wks to final
+        Budget ${ctx.budget} · Your FAAB remaining {remainingFaab == null ? '—' : `$${remainingFaab}`} ·{' '}
+        {ctx.teamsRemaining} teams left · ~{ctx.weeksRemaining} wks to final
       </p>
 
       {/* Strategy toggle */}
@@ -157,8 +165,9 @@ export function WaiversPage() {
                   </div>
                 </div>
                 <div className="text-right shrink-0 ml-2">
-                  <div className="font-['Space_Mono'] text-base text-[#10b981] font-bold tabular-nums">
-                    ${sug.value}
+                  <div className="flex items-center justify-end gap-1.5 font-['Space_Mono'] text-base text-[#10b981] font-bold tabular-nums">
+                    {remainingFaab != null && sug.value > remainingFaab && <FaabOverBudgetWarning />}
+                    <span>${sug.value}</span>
                   </div>
                   <div className="text-[9px] text-[#4a4d77] uppercase tracking-wide">
                     {sug.pctOfBudget.toFixed(0)}% · {sug.label}
