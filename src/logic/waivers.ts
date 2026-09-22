@@ -119,15 +119,12 @@ function scale(value1000: number, budget: number): number {
 
 /**
  * Market-deflation curve for a standard 17-week fantasy season.
- * Week 1 = 2x, Week 9 (halfway) = 1x, Week 13 (three-quarters) = 0.5x.
- * Interpolation is exponential: linear movement in log2(multiplier) between anchors.
+ * Multiplier = 2 × season fraction remaining, giving exact anchors:
+ * Week 1 = 2x, Week 9 = 1x, Week 13 = 0.5x, Week 15 = 0.25x, Week 17 = 0x.
  */
 export function predictedBidMultiplier(currentWeek: number): number {
   const seasonProgress = Math.min(1, Math.max(0, (currentWeek - 1) / 16));
-  const exponent = seasonProgress <= 0.5
-    ? 1 - (2 * seasonProgress)
-    : -4 * (seasonProgress - 0.5);
-  return 2 ** exponent;
+  return 2 * (1 - seasonProgress);
 }
 
 function predictWinningBid(

@@ -3,8 +3,9 @@
 ## Follow-up season-deflation prediction model (2026-09-22)
 
 - Replaced the temporary historical-ratio predictor with John's deterministic Weeks-as-Starter season curve.
-- Exact anchors for a 17-week fantasy season: Week 1 = `2.0×`, Week 9 = `1.0×`, Week 13 = `0.5×`, Week 17 = `0.25×`; interpolation is exponential (linear in log2 multiplier).
-- Predicted bid is now simply `Weeks-as-Starter value × current-week multiplier`, preserving player quality and `$0 → $0` behavior.
+- Exact anchors for a 17-week fantasy season: Week 1 = `2.0×`, Week 9 = `1.0×`, Week 13 = `0.5×`, Week 15 = `0.25×`, Week 17 = `0×`.
+- The sequence simplifies exactly to `multiplier = 2 × season fraction remaining`, or `2 × (17 - currentWeek) / 16` for Weeks 1–17.
+- Predicted bid is `Weeks-as-Starter value × current-week multiplier`, preserving player quality and `$0 → $0` behavior while converging to zero at season end.
 - Historical 2025 report supports strong deflation (average winning bid $88 W1 → $12 W9 → $3 W13), but exact bid/WAS ratios cannot be backtested without weekly projection snapshots.
 - Added exact multiplier-anchor unit tests. Verification: targeted 10/10, full 23/23, lint clean, build and diff-check passed.
 

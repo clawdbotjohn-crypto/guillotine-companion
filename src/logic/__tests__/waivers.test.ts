@@ -133,11 +133,12 @@ describe('buildWaiverBoard', () => {
       .toBeGreaterThan(suggestionValue([weeksSorted[1]], 'weeks-starter'));
   });
 
-  it('uses the requested season-deflation multiplier anchors', () => {
+  it('uses the requested season-remaining multiplier anchors', () => {
     expect(predictedBidMultiplier(1)).toBeCloseTo(2);
     expect(predictedBidMultiplier(9)).toBeCloseTo(1);
     expect(predictedBidMultiplier(13)).toBeCloseTo(0.5);
-    expect(predictedBidMultiplier(17)).toBeCloseTo(0.25);
+    expect(predictedBidMultiplier(15)).toBeCloseTo(0.25);
+    expect(predictedBidMultiplier(17)).toBeCloseTo(0);
   });
 
   it('scales predicted winning bids by Weeks-as-Starter instead of one flat position bid', () => {
