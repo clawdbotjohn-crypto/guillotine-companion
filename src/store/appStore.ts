@@ -2,6 +2,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { StrategyKey } from '../logic/waivers';
 
 interface AppState {
   // User info
@@ -17,7 +18,7 @@ interface AppState {
   teamName: string | null;
 
   // Strategy preference
-  activeStrategy: 'safe' | 'exponential' | 'vorp' | 'weeks-starter';
+  activeStrategy: StrategyKey;
 
   // Actions
   setUser: (username: string, userId: string) => void;
@@ -26,6 +27,18 @@ interface AppState {
   setTeam: (rosterId: number, teamName: string) => void;
   setStrategy: (s: AppState['activeStrategy']) => void;
   reset: () => void;
+}
+
+export function migratePersistedAppState(persistedState: unknown): unknown {
+  if (!persistedState || typeof persistedState !== 'object') return persistedState;
+
+  const state = persistedState as Record<string, unknown>;
+  // Version 0 persisted the old strategy key. Map it to the honest semantic name so
+  // existing users keep the same selected ceiling and hydration never yields an invalid key.
+  if (state.activeStrategy === 'exponential') {
+    return { ...state, activeStrategy: 'aggressive' };
+  }
+  return state;
 }
 
 const initialState = {
@@ -68,6 +81,8 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'guillotine-companion-store',
+      version: 1,
+      migrate: (persistedState) => migratePersistedAppState(persistedState) as AppState,
     },
   ),
 );

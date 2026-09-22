@@ -27,9 +27,23 @@ describe('waiver controls', () => {
     expect(onChange).toHaveBeenCalledWith('fantasypros');
   });
 
-  it('puts Weeks-as-Starter first and makes it the initial strategy key', () => {
+  it('uses the Aggressive strategy label and explains it as an intentional overpay ceiling', () => {
     expect(DEFAULT_WAIVER_STRATEGY).toBe('weeks-starter');
-    expect(WAIVER_STRATEGIES[0]).toEqual({ key: 'weeks-starter', label: 'Weeks-as-Starter' });
-    expect(WAIVER_STRATEGY_EXPLANATIONS.safe).not.toBe(WAIVER_STRATEGY_EXPLANATIONS.vorp);
+    expect(WAIVER_STRATEGIES).toEqual([
+      { key: 'weeks-starter', label: 'Weeks-as-Starter' },
+      { key: 'safe', label: 'Safe' },
+      { key: 'aggressive', label: 'Aggressive' },
+      { key: 'vorp', label: 'VoRP' },
+    ]);
+    expect(WAIVER_STRATEGY_EXPLANATIONS.aggressive).toMatch(/maximum you should consider bidding/i);
+    expect(WAIVER_STRATEGY_EXPLANATIONS.aggressive).toMatch(/spending ceiling, not intrinsic player value/i);
+    expect(WAIVER_STRATEGY_EXPLANATIONS.aggressive).toMatch(/intentionally accepts overpay risk to land elite players/i);
+
+    const visibleCopy = [
+      ...WAIVER_STRATEGIES.map((strategy) => strategy.label),
+      ...Object.values(WAIVER_STRATEGY_EXPLANATIONS),
+    ].join(' ');
+    const legacyTerms = [['Exp.', 'Starter'].join(' '), ['Exponent', 'ial'].join('')];
+    for (const legacyTerm of legacyTerms) expect(visibleCopy).not.toContain(legacyTerm);
   });
 });

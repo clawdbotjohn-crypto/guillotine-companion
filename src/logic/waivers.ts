@@ -6,7 +6,7 @@ import type { League, Roster } from '../api/types';
 import type { RosPlayerProjection } from './projections';
 import type { BidInfo, EliminationResult } from './elimination';
 
-export type StrategyKey = 'safe' | 'exponential' | 'weeks-starter' | 'vorp';
+export type StrategyKey = 'safe' | 'aggressive' | 'weeks-starter' | 'vorp';
 
 export interface BidSuggestion {
   strategy: StrategyKey;
@@ -55,8 +55,8 @@ function safeStrategy(row: { posRank: number; position: string }, ctx: LeagueCon
   return scale(value1000, ctx.budget);
 }
 
-/** Exponential: front-load. Up to 1/2 budget for a starter in first 8 wks, then 1/4, 1/8. */
-function exponentialStrategy(row: { posRank: number; position: string }, ctx: LeagueContext): number {
+/** Aggressive maximum-bid ceiling: up to 1/2 budget in weeks 1-8, then 1/4 and 1/8. */
+function aggressiveStrategy(row: { posRank: number; position: string }, ctx: LeagueContext): number {
   if ((VORP_WEIGHTS[row.position] ?? 0) < 0.5) return 0; // starters only
   let cap: number;
   if (ctx.currentWeek <= 8) cap = ctx.budget * 0.5;
@@ -216,7 +216,7 @@ export function buildWaiverBoard(
       if (posRank == null) return;
       const base = { position: pos, posRank, projectedPointsPerWeek: p.pointsPerWeek };
       const safe = safeStrategy(base, ctx);
-      const exp = exponentialStrategy(base, ctx);
+      const aggressive = aggressiveStrategy(base, ctx);
       const starterWeeks = projectedStarterWeeks(base, ctx);
       const weeks = weeksStarterStrategy(base, ctx);
       const vorp = vorpStrategy(base, replacementByPos, ctx);
@@ -225,7 +225,7 @@ export function buildWaiverBoard(
       const suggestions: BidSuggestion[] = [
         mk('weeks-starter', 'Weeks-as-Starter', weeks, ctx.budget),
         mk('safe', 'Safe', safe, ctx.budget),
-        mk('exponential', 'Exp. Starter', exp, ctx.budget),
+        mk('aggressive', 'Aggressive', aggressive, ctx.budget),
         mk('vorp', 'VoRP', vorp, ctx.budget),
       ];
 

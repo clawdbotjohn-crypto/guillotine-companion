@@ -7,6 +7,7 @@ import {
   predictedBidMultiplier,
   sortWaiverRowsByStrategy,
   type LeagueContext,
+  type StrategyKey,
 } from '../waivers';
 
 const context: LeagueContext = {
@@ -34,7 +35,7 @@ function projection(
 
 function suggestionValue(
   rows: ReturnType<typeof buildWaiverBoard>,
-  strategy: 'safe' | 'exponential' | 'weeks-starter' | 'vorp',
+  strategy: StrategyKey,
 ): number {
   return rows[0].suggestions.find((suggestion) => suggestion.strategy === strategy)!.value;
 }
@@ -77,11 +78,56 @@ describe('buildWaiverBoard', () => {
     // Rank 22 drives each rank-based strategy; available-only QB1 would be $188/$500/$188.
     // Safe has no artificial rank floor, so a QB this far below the starter pool is worth $0.
     expect(suggestionValue(rows, 'safe')).toBe(0);
-    expect(suggestionValue(rows, 'exponential')).toBe(150);
+    expect(suggestionValue(rows, 'aggressive')).toBe(150);
     expect(suggestionValue(rows, 'weeks-starter')).toBe(0);
     expect(rows[0].starterWeeks).toBe(0);
     // Season timing must not assign a large position-wide prediction to this deep QB.
     expect(rows[0].predictedWinningBid).toBe(0);
+  });
+
+  it('preserves the aggressive early, mid, and late ceilings plus rank adjustment', () => {
+    const projections = new Map([
+      ['qb-1-available', projection('qb-1-available', 'QB', 30)],
+      ['qb-2', projection('qb-2', 'QB', 20)],
+      ['qb-3-available', projection('qb-3-available', 'QB', 10)],
+    ]);
+
+    const valuesAtWeek = (currentWeek: number) => {
+      const rows = buildWaiverBoard(
+        ['qb-1-available', 'qb-3-available'],
+        projections,
+        { ...context, currentWeek },
+        [],
+        (id) => id,
+      );
+      return Object.fromEntries(rows.map((row) => [
+        row.playerId,
+        row.suggestions.find((item) => item.strategy === 'aggressive')!.value,
+      ]));
+    };
+
+    expect(valuesAtWeek(4)).toEqual({ 'qb-1-available': 500, 'qb-3-available': 380 });
+    expect(valuesAtWeek(10)).toEqual({ 'qb-1-available': 250, 'qb-3-available': 190 });
+    expect(valuesAtWeek(14)).toEqual({ 'qb-1-available': 125, 'qb-3-available': 95 });
+  });
+
+  it('sorts by the aggressive ceiling when that strategy is selected', () => {
+    const projections = new Map([
+      ['qb-1-available', projection('qb-1-available', 'QB', 30)],
+      ['qb-2', projection('qb-2', 'QB', 20)],
+      ['qb-3-available', projection('qb-3-available', 'QB', 10)],
+    ]);
+    const rows = buildWaiverBoard(
+      ['qb-1-available', 'qb-3-available'],
+      projections,
+      context,
+      [],
+      (id) => id,
+    );
+
+    const sorted = sortWaiverRowsByStrategy([...rows].reverse(), 'aggressive');
+    expect(sorted.map((row) => row.playerId)).toEqual(['qb-1-available', 'qb-3-available']);
+    expect(sorted.map((row) => suggestionValue([row], 'aggressive'))).toEqual([500, 380]);
   });
 
   it('values the top positional player as a starter for every remaining week', () => {
@@ -227,7 +273,7 @@ describe('buildWaiverBoard', () => {
     expect(suggestionValue(rows, 'safe')).toBe(188);
     expect(suggestionValue(rows, 'safe')).toBeGreaterThan(20);
     expect(rows[0].suggestions.map((item) => item.strategy)).toEqual([
-      'weeks-starter', 'safe', 'exponential', 'vorp',
+      'weeks-starter', 'safe', 'aggressive', 'vorp',
     ]);
   });
 });
