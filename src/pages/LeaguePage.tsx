@@ -8,6 +8,7 @@ import { computeEliminations, extractBids } from '../logic';
 import { Card, Skeleton, StatusBadge, PositionBadge } from '../components/ui';
 import { Trophy, Medal, Calendar } from 'lucide-react';
 import { BidGrid } from '../components/BidGrid';
+import { ScoresChart } from '../components/ScoresChart';
 import { FaabTracker } from '../components/FaabTracker';
 import { SeasonPicker } from '../components/SeasonPicker';
 import { useSwitchSeason } from '../hooks/useSwitchSeason';
@@ -147,6 +148,9 @@ export function LeaguePage() {
       {/* Scoreboard View — Full Season Table */}
       {activeView === 'scoreboard' && hasWeekData && (
         <div>
+          {/* Scores-by-week chart with user's team highlighted */}
+          <ScoresChart elim={elimResult} selectedRosterId={selectedRosterId} />
+
           {/* Season aggregate stats */}
           {(() => {
             const seasonTop = Math.max(...elimResult.weeks.map((w) => w.topScore));
