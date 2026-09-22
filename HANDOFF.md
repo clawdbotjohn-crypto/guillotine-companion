@@ -1,3 +1,45 @@
+# Handoff — Aggressive Equals Predicted Winning Bid (2026-09-22)
+
+- **Timestamp:** 2026-09-22 16:02 PDT
+- **Task:** Correct the P0 Aggressive formula to use the established player-sensitive Predicted Winning Bid logic and remove the obsolete step caps.
+- **Status:** COMPLETE on `feat/waiver-ranking-sources` for existing open PR #7. No merge, production deploy, workflow dispatch, force push, or main-branch push was performed.
+- **Implementation commit:** `88c8cac` — `Fix Aggressive waiver bids to match predicted values`
+
+## Exact formula and behavior
+
+- Each row computes Weeks-as-Starter once, passes that exact value through the existing `predictWinningBid` helper, and uses the returned value for both `row.predictedWinningBid` and the **Aggressive** suggestion. Therefore `Aggressive === row.predictedWinningBid` exactly for every player.
+- The established continuous Weeks 1–17 season multiplier remains `2 × (17 - currentWeek) / 16`; no duplicate formula was added to production code.
+- Removed `aggressiveStrategy` and all of its 50% / 25% / 12.5% step-cap and rank-factor behavior. Deep players with zero Weeks-as-Starter now correctly have both Aggressive and Predicted Winning Bid equal to `$0`.
+- Preserved the Aggressive name/tab, persisted legacy-key migration, selected-strategy sorting, player-sensitive Weeks-as-Starter basis, and honest maximum-bid/spending-ceiling, non-intrinsic-value, overpay-risk semantics.
+
+## UX change
+
+- When **Aggressive** is selected, cards no longer render a second redundant **Predicted winning bid** footer because the two values are identical. The footer remains visible, including confidence, for every other strategy.
+- Updated the strategy explanation to say explicitly that Aggressive equals Predicted Winning Bid and declines continuously as the season advances.
+
+## Files changed
+
+- `src/logic/waivers.ts`
+- `src/logic/waiverDisplay.ts`
+- `src/logic/__tests__/waivers.test.ts`
+- `src/pages/WaiversPage.tsx`
+- `src/pages/WaiversPage.test.tsx`
+
+## Verification
+
+- `npm test -- --run`: **PASS** — 8 test files, 48 tests passed. Coverage proves exact Aggressive/predicted equality across representative players and Weeks 1, 6, 14, and 17; Week 6 continuous interpolation; player-sensitive Aggressive sorting; removal of old thresholds; explanation semantics; and strategy-specific footer visibility.
+- `npm run lint`: **PASS** — 0 warnings, 0 errors across 47 files.
+- `npm run build`: **PASS** — TypeScript and Vite production build completed; 2,467 modules transformed.
+- `git diff --check`: **PASS**.
+- Scoped grep over the five relevant source/test files found no old `1/2 budget`, `1/4`, `1/8`, `50%`, `25%`, `12.5%`, or `aggressiveStrategy` implementation/copy.
+
+## Preview / checks state
+
+- Implementation commit pushed only to `origin/feat/waiver-ranking-sources`. PR #7 is **OPEN**, unmerged, and its head advanced from `e2ff7d7` to `88c8cac`.
+- GitHub `build` and Azure SWA `Build and Deploy` checks were **QUEUED** immediately after the feature-branch push. Existing PR preview environment: <https://nice-moss-07ec56310-7.centralus.7.azurestaticapps.net>.
+
+---
+
 # Handoff — Dynamic Championship-Calibrated VoRP (2026-09-22)
 
 - **Timestamp:** 2026-09-22 15:49 PDT
