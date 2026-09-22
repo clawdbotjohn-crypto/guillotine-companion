@@ -268,6 +268,11 @@ export function WaiversPage() {
                       {row.position}#{row.posRank} · {row.rosPoints.toFixed(1)} ROS pts ·{' '}
                       {row.projectedPointsPerWeek.toFixed(1)}/wk
                     </div>
+                    {strategy === 'weeks-starter' ? (
+                      <div className="text-[10px] text-[#8b8ec7] font-['Space_Mono']">
+                        {row.starterWeeks}/{row.possibleStarterWeeks} weeks as starter
+                      </div>
+                    ) : null}
                   </div>
                 </div>
                 <div className="text-right shrink-0 ml-2">

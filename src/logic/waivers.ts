@@ -23,6 +23,8 @@ export interface WaiverPlayerRow {
   posRank: number; // league-wide rank at that position (by Sleeper ROS projection)
   rosPoints: number;
   projectedPointsPerWeek: number;
+  starterWeeks: number;
+  possibleStarterWeeks: number;
   suggestions: BidSuggestion[];
   predictedWinningBid: number;
   predictedConfidence: 'low' | 'medium' | 'high';
@@ -46,7 +48,7 @@ function safeStrategy(row: { posRank: number; position: string }, ctx: LeagueCon
   // Rank premium: #1 at position gets ~25% premium, decays toward last starter
   const startersAtPos = starterCountForPos(row.position, ctx);
   const totalStarterSlots = Math.max(1, startersAtPos * ctx.teamsRemaining);
-  const premium = row.posRank <= 1 ? 1.25 : Math.max(0.4, 1.1 - (row.posRank / totalStarterSlots));
+  const premium = row.posRank <= 1 ? 1.25 : Math.max(0, 1.1 - (row.posRank / totalStarterSlots));
   const value1000 = base1000 * weight * premium;
   return scale(value1000, ctx.budget);
 }
@@ -63,21 +65,27 @@ function exponentialStrategy(row: { posRank: number; position: string }, ctx: Le
   return Math.round(cap * eliteFactor);
 }
 
-/** Weeks-as-starter: value scales with how many remaining weeks the player would start. */
-function weeksStarterStrategy(row: { posRank: number; position: string }, ctx: LeagueContext): number {
+/** Estimate how many remaining guillotine weeks a player stays above the starter cutoff. */
+function projectedStarterWeeks(row: { posRank: number; position: string }, ctx: LeagueContext): number {
   const startersAtPos = starterCountForPos(row.position, ctx);
-  // A player who is top (startersAtPos * teamsRemaining) is a starter now; as teams get
-  // eliminated (1-2/wk), the required rank tightens. Estimate weeks he stays a starter.
+  // Include the two-team championship week. A positional #1 remains a starter for every
+  // possible week; stopping at teams > 2 incorrectly discounted the best player.
   const elimsPerWeek = ctx.teamsRemaining > 16 ? 2 : 1;
   let weeks = 0;
   let teams = ctx.teamsRemaining;
-  for (let w = 0; w < ctx.weeksRemaining && teams > 2; w++) {
+  for (let w = 0; w < ctx.weeksRemaining && teams > 1; w++) {
     const starterCutoff = startersAtPos * teams;
     if (row.posRank <= starterCutoff) weeks++;
-    teams -= elimsPerWeek;
+    teams = Math.max(1, teams - elimsPerWeek);
   }
+  return weeks;
+}
+
+/** Weeks-as-starter: value scales with how many remaining weeks the player would start. */
+function weeksStarterStrategy(row: { posRank: number; position: string }, ctx: LeagueContext): number {
+  const weeks = projectedStarterWeeks(row, ctx);
   const frac = ctx.weeksRemaining > 0 ? weeks / ctx.weeksRemaining : 0;
-  // Scale: full-season starter ~= safe value; fewer weeks discounts proportionally
+  // Scale: full-season starter equals safe value; fewer weeks discounts proportionally.
   return Math.round(safeStrategy(row, ctx) * frac);
 }
 
@@ -212,6 +220,7 @@ export function buildWaiverBoard(
       const base = { position: pos, posRank, projectedPointsPerWeek: p.pointsPerWeek };
       const safe = safeStrategy(base, ctx);
       const exp = exponentialStrategy(base, ctx);
+      const starterWeeks = projectedStarterWeeks(base, ctx);
       const weeks = weeksStarterStrategy(base, ctx);
       const vorp = vorpStrategy(base, replacementByPos, ctx);
       const pred = predictWinningBid(pos, safe, bids);
@@ -235,6 +244,8 @@ export function buildWaiverBoard(
         posRank,
         rosPoints: p.rosPoints,
         projectedPointsPerWeek: p.pointsPerWeek,
+        starterWeeks,
+        possibleStarterWeeks: ctx.weeksRemaining,
         suggestions,
         predictedWinningBid: pred.value,
         predictedConfidence: pred.confidence,

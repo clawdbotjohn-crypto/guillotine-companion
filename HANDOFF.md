@@ -1,5 +1,13 @@
 # PR #6 Sleeper ROS Waiver Handoff
 
+## Follow-up Safe / Weeks-as-Starter corrections (2026-09-22)
+
+- Removed Safe's artificial `0.4` minimum rank premium; sufficiently deep players now decay to `$0` rather than retaining a position-specific dollar floor.
+- Fixed Weeks-as-Starter to include the two-team championship week. Positional rank #1 now starts every remaining week and exactly matches Safe value.
+- Waiver rows expose and display `starterWeeks / possibleStarterWeeks` when Weeks-as-Starter is selected.
+- Regression coverage includes a QB22 worth `$0` under Safe and QB1 receiving full Safe value for 11/11 starter weeks.
+- Verification: targeted tests 7/7, full tests 20/20, lint clean, production build passed, `git diff --check` passed.
+
 ## Branch / PR
 
 - Branch: `feat/john-feedback-batch-0922`

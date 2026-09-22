@@ -69,9 +69,36 @@ describe('buildWaiverBoard', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].posRank).toBe(22);
     // Rank 22 drives each rank-based strategy; available-only QB1 would be $188/$500/$188.
-    expect(suggestionValue(rows, 'safe')).toBe(60);
+    // Safe has no artificial rank floor, so a QB this far below the starter pool is worth $0.
+    expect(suggestionValue(rows, 'safe')).toBe(0);
     expect(suggestionValue(rows, 'exponential')).toBe(150);
     expect(suggestionValue(rows, 'weeks-starter')).toBe(0);
+    expect(rows[0].starterWeeks).toBe(0);
+  });
+
+  it('values the top positional player as a starter for every remaining week', () => {
+    const championshipContext: LeagueContext = {
+      ...context,
+      teamsRemaining: 12,
+      weeksRemaining: 11,
+    };
+    const projections = new Map([
+      ['qb-1-available', projection('qb-1-available', 'QB', 30, 11)],
+      ['qb-2', projection('qb-2', 'QB', 25, 11)],
+    ]);
+
+    const rows = buildWaiverBoard(
+      ['qb-1-available'],
+      projections,
+      championshipContext,
+      [],
+      (id) => id,
+    );
+
+    expect(rows[0].posRank).toBe(1);
+    expect(rows[0].starterWeeks).toBe(11);
+    expect(rows[0].possibleStarterWeeks).toBe(11);
+    expect(suggestionValue(rows, 'weeks-starter')).toBe(suggestionValue(rows, 'safe'));
   });
 
   it('uses projected ROS values for replacement level and VoRP', () => {
