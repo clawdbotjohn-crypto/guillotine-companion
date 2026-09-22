@@ -1,3 +1,39 @@
+# Handoff — Active-Team Positional Standings (2026-09-22)
+
+- **Timestamp:** 2026-09-22 16:10:51 PDT
+- **Task:** Fix the final documented P0 so current QB/RB/WR/TE/FLEX/K/DEF standings exclude eliminated teams.
+- **Status:** COMPLETE on `feat/waiver-ranking-sources` for existing open PR #7. No merge, production deploy, workflow dispatch, force push, main-branch push, or Discord post was performed.
+- **Implementation commit:** `a8da8a2` — `Exclude eliminated teams from positional ranks`
+
+## Exact behavior
+
+- `TeamsPage` derives `activeRosterIds` directly from the existing `computeEliminations(...)` result by selecting only `TeamInfo` entries where `eliminatedWeek == null`, then passes that required set into `computePositionGroupRanks`.
+- `computePositionGroupRanks` still accumulates each team's actual historical `starters_points` and preserves fixed-slot/FLEX allocation, but constructs every current positional comparator from active roster IDs only. `outOf` is therefore exactly the active-team count, eliminated totals cannot shift an active rank, and no active rank can exceed that count.
+- Equal position totals now explicitly sort by numeric roster ID ascending after points descending, so ties do not depend on Map/Set insertion order.
+- Eliminated rosters are omitted from the rank result. Their expanded Teams card now says **“Eliminated — no current positional standing.”** and cannot display stale/misleading current rank cells. Active cards retain the existing rank colors and points UI.
+- Production call-site search found exactly one current positional-standings caller (`src/pages/TeamsPage.tsx`), and it passes `activeRosterIds`. The helper's required third argument also prevents an unfiltered production call from compiling. Historical weekly total ranks were not changed.
+
+## Regression coverage
+
+- Added a realistic four-roster guillotine fixture where roster 4 is eliminated despite extreme 100-point historical totals in every position. Tests prove only rosters 1–3 are returned, all `outOf` values equal 3, every rank is at most 3, and the eliminated totals do not push active teams to rank 4.
+- The same regression covers QB/RB/WR/TE/FLEX/K/DEF, historical point totals, distinct FLEX allocation from an extra RB starter, and equal QB totals with active IDs deliberately supplied in reverse order to prove numeric-roster-ID tie-breaking.
+- Added Teams-card UI coverage proving eliminated cards suppress rank cells even if rank data is supplied, while active cards continue rendering position, rank, and points.
+
+## Verification
+
+- `npm test -- --run`: **PASS** — 10 test files, 51 tests.
+- `npm run lint`: **PASS** — 0 warnings, 0 errors across 49 files.
+- `npm run build`: **PASS** — TypeScript and Vite production build completed; 2,467 modules transformed.
+- `git diff --check`: **PASS**.
+- `grep -RIn "computePositionGroupRanks" src`: **PASS** — the production call in `TeamsPage.tsx` and focused analytics test both pass active roster IDs; no other caller exists.
+
+## Preview / checks state
+
+- Implementation commit pushed only to `origin/feat/waiver-ranking-sources`; PR #7 remained **OPEN**, unmerged, with head advanced from `1706c0a` to `a8da8a2`.
+- Immediately after that push, GitHub `build` and Azure SWA `Build and Deploy` were **QUEUED**. The existing PR #7 preview environment remained **Ready** at <https://nice-moss-07ec56310-7.centralus.7.azurestaticapps.net>; the fresh deployment had not completed at handoff time.
+
+---
+
 # Handoff — Aggressive Equals Predicted Winning Bid (2026-09-22)
 
 - **Timestamp:** 2026-09-22 16:02 PDT
