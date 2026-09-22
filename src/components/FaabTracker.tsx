@@ -1,7 +1,7 @@
 // FAAB Budget Remaining tracker — shows all teams sorted by remaining budget
 
-import { useMemo } from 'react';
-import { DollarSign, TrendingDown } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { DollarSign, TrendingDown, EyeOff, Eye } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card, StatusBadge } from './ui';
 import type { Roster, SleeperUser } from '../api/types';
@@ -33,6 +33,9 @@ function getTeamStatus(team: TeamInfo | undefined): 'champion' | 'runner-up' | '
 }
 
 export function FaabTracker({ rosters, users, teams, totalBudget, bids }: FaabTrackerProps) {
+  // Hide eliminated teams by default (John feedback 2026-09-22)
+  const [hideEliminated, setHideEliminated] = useState(true);
+
   const { sorted, leagueTotal, avgRemaining, medianRemaining } = useMemo(() => {
     const userMap = new Map(users.map((u) => [u.user_id, u]));
 
@@ -72,6 +75,11 @@ export function FaabTracker({ rosters, users, teams, totalBudget, bids }: FaabTr
 
     return { sorted, leagueTotal, avgRemaining, medianRemaining };
   }, [rosters, users, teams, totalBudget]);
+
+  const eliminatedCount = sorted.filter((e) => getTeamStatus(e.team) === 'eliminated').length;
+  const visibleTeams = hideEliminated
+    ? sorted.filter((e) => getTeamStatus(e.team) !== 'eliminated')
+    : sorted;
 
   const deflationData = useMemo(() => {
     if (!bids || bids.length === 0) return [];
@@ -115,17 +123,29 @@ export function FaabTracker({ rosters, users, teams, totalBudget, bids }: FaabTr
       </div>
 
       {/* Header */}
-      <div className="flex items-center gap-2 mb-3">
-        <DollarSign size={16} className="text-[#a5b4fc]" />
-        <h2 className="font-['Orbitron'] text-xs font-bold uppercase tracking-wider text-[#a5b4fc]">
-          FAAB Budget Remaining
-        </h2>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <DollarSign size={16} className="text-[#a5b4fc]" />
+          <h2 className="font-['Orbitron'] text-xs font-bold uppercase tracking-wider text-[#a5b4fc]">
+            FAAB Budget Remaining
+          </h2>
+        </div>
+        {eliminatedCount > 0 && (
+          <button
+            onClick={() => setHideEliminated((v) => !v)}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#161a3a] text-[10px]
+              font-semibold uppercase tracking-wider text-[#6b6e99] hover:text-[#a5b4fc] transition-colors"
+          >
+            {hideEliminated ? <EyeOff size={12} /> : <Eye size={12} />}
+            {hideEliminated ? `Show eliminated (${eliminatedCount})` : 'Hide eliminated'}
+          </button>
+        )}
       </div>
 
       {/* Team list */}
       <Card hover={false} className="p-4">
         <div className="space-y-3">
-          {sorted.map((entry, i) => {
+          {visibleTeams.map((entry, i) => {
             const status = getTeamStatus(entry.team);
             const isEliminated = status === 'eliminated';
 

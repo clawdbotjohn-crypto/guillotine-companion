@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BarChart3, Shield, Users, ShoppingCart, ChevronRight } from 'lucide-react';
 import { Button, Card } from '../components/ui';
@@ -10,7 +10,13 @@ export function HomePage() {
   const [showLeagueId, setShowLeagueId] = useState(false);
   const [leagueIdInput, setLeagueIdInput] = useState('');
   const navigate = useNavigate();
-  const { setUser, setLeague, leagueId, leagueName, teamName } = useAppStore();
+  const { setUser, setLeague, leagueId, leagueName, teamName, username } = useAppStore();
+
+  // Prefill the last-used username so returning users don't retype (persisted via zustand)
+  useEffect(() => {
+    if (username) setInput((prev) => prev || username);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [username]);
 
   // Username lookup
   const [searchUsername, setSearchUsername] = useState<string | null>(null);
