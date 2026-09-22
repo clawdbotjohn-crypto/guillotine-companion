@@ -10,7 +10,7 @@ import {
   useAllTransactions,
   useLeagueHistory,
 } from '../api';
-import { computeEliminations, extractBids } from '../logic';
+import { computeEliminations, extractBids, formatCurrentRank } from '../logic';
 import { Card, StatCard, StatusBadge, Skeleton, PositionBadge } from '../components/ui';
 import { SeasonPicker } from '../components/SeasonPicker';
 import { useSwitchSeason } from '../hooks/useSwitchSeason';
@@ -191,6 +191,7 @@ export function HubPage() {
   // Find my current stats
   const lastWeek = elimResult.weeks[elimResult.weeks.length - 1];
   const myLastScore = lastWeek?.scores.find((s) => s.rosterId === rosterId);
+  const activeTeamCount = elimResult.activeTeamCount || league?.total_rosters || 0;
 
   // Total points scored
   const totalPoints = elimResult.weeks.reduce((sum, w) => {
@@ -205,7 +206,7 @@ export function HubPage() {
   else if (myTeam?.eliminatedWeek) status = 'eliminated';
   else if (myLastScore) {
     const rank = myLastScore.rank;
-    const total = lastWeek.teamsRemaining;
+    const total = activeTeamCount;
     if (rank <= Math.ceil(total / 3)) status = 'safe';
     else if (rank >= Math.ceil((total * 2) / 3)) status = 'at-risk';
   }
@@ -252,7 +253,7 @@ export function HubPage() {
       <div className="grid grid-cols-2 gap-3 mb-6">
         <StatCard
           label="Current Rank"
-          value={myLastScore ? `${myLastScore.rank}/${lastWeek.teamsRemaining}` : '—'}
+          value={formatCurrentRank(myLastScore?.rank, activeTeamCount)}
           accentColor={status === 'safe' ? '#10b981' : status === 'at-risk' ? '#f43f5e' : '#6366f1'}
         />
         <StatCard

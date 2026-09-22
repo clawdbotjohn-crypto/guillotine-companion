@@ -1,3 +1,14 @@
+# Follow-up — Post-Elimination Active-Team Count (2026-09-22)
+
+- **Status:** COMPLETE on PR #7 branch.
+- Root cause: `WeekResult.teamsRemaining` intentionally records how many teams entered/scored in that historical week before its cuts. Current Waiver and Hub UI incorrectly reused that pre-cut value, so a 30-team week with two eliminations displayed 30 instead of the 28 survivors.
+- `EliminationResult.activeTeamCount` now records the post-elimination active set. Waivers uses it for `teams left`, VoRP replacement-depth default/max, and weeks-to-final calculations. Hub uses it for the current-rank denominator and current safe/at-risk tiers. Historical weekly results retain the pre-elimination denominator.
+- Added exact 30→28 elimination coverage, league-context coverage, and Hub rank-label coverage (`12/28`).
+- Verification: focused 34/34 passed; full suite 11 files / 56 tests passed; lint 0 warnings/errors; production build and `git diff --check` passed.
+- No merge, main push, force-push, production deploy, or workflow dispatch was performed.
+
+---
+
 # Follow-up — VoRP-Only Controls (2026-09-22)
 
 - **Status:** COMPLETE on PR #7 branch; implementation commit `5cd0778`.

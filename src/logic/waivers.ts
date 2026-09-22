@@ -319,8 +319,9 @@ export function buildLeagueContext(
     FLEX: count('FLEX') + count('WRRB_FLEX') + count('REC_FLEX'),
     SUPER_FLEX: count('SUPER_FLEX') + count('QB_FLEX'),
   };
-  const teamsRemaining = elim.weeks[elim.weeks.length - 1]?.teamsRemaining
-    ?? league?.total_rosters ?? 12;
+  const teamsRemaining = elim.activeTeamCount > 0
+    ? elim.activeTeamCount
+    : (league?.total_rosters ?? 12);
   const currentWeek = projectionStartWeek ?? (elim.currentWeek || 1);
   const elimsPerWeek = teamsRemaining > 16 ? 2 : 1;
   const weeksToFinal = Math.max(1, Math.ceil((teamsRemaining - 1) / elimsPerWeek));

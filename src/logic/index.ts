@@ -33,6 +33,7 @@ export {
 
 export {
   buildPlayerSeasons,
+  formatCurrentRank,
   parseLineupSlots,
   projectBestLineup,
   projectAllTeams,

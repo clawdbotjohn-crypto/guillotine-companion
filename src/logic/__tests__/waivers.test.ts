@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { Roster } from '../../api/types';
+import type { League, Roster } from '../../api/types';
+import type { EliminationResult } from '../elimination';
 import type { RosPlayerProjection } from '../projections';
 import {
   buildOptimizedStarterPool,
   buildVorpCalibration,
+  buildLeagueContext,
   buildWaiverBoard,
   calculateCalibratedVorpBid,
   calculateDollarsPerVorp,
@@ -73,6 +75,38 @@ describe('calculateRemainingFaab', () => {
     expect(calculateRemainingFaab(1000, roster)).toBe(275);
     expect(calculateRemainingFaab(500, roster)).toBe(0);
     expect(calculateRemainingFaab(1000, undefined)).toBeNull();
+  });
+});
+
+describe('buildLeagueContext', () => {
+  it('uses the post-elimination active count instead of the teams that entered the week', () => {
+    const league: League = {
+      league_id: 'league-30',
+      name: 'Thirty Team Guillotine',
+      total_rosters: 30,
+      settings: { waiver_budget: 500 },
+      scoring_settings: { rec: 1 },
+      season: '2026',
+      season_type: 'regular',
+      status: 'in_season',
+      draft_id: 'draft-30',
+      previous_league_id: null,
+      roster_positions: ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX'],
+    };
+    const elimination: EliminationResult = {
+      weeks: [],
+      teams: new Map(),
+      activeTeamCount: 28,
+      champion: null,
+      runnerUp: null,
+      isComplete: false,
+      currentWeek: 1,
+    };
+
+    const result = buildLeagueContext(league, elimination, 2);
+
+    expect(result.teamsRemaining).toBe(28);
+    expect(result.budget).toBe(500);
   });
 });
 

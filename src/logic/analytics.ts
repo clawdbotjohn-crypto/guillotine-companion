@@ -12,6 +12,10 @@ import type { Matchup, Roster, League } from '../api/types';
 import { getPlayerPosition } from '../store/players';
 import type { EliminationResult } from './elimination';
 
+export function formatCurrentRank(rank: number | undefined, activeTeamCount: number): string {
+  return rank == null || activeTeamCount <= 0 ? '—' : `${rank}/${activeTeamCount}`;
+}
+
 export interface PlayerSeason {
   playerId: string;
   position: string;
