@@ -245,7 +245,7 @@ export function WaiversPage() {
         <Info size={12} className="mt-0.5 shrink-0" />
         <span>
           Values use Sleeper rest-of-season projections (weekly totals from week {projectionStartWeek} through 18)
-          in your league's scoring format. "Predicted" scales each player's Weeks-as-Starter value by this league's historical position-market aggressiveness.
+          in your league's scoring format. "Predicted" applies a season-deflation curve to Weeks-as-Starter: 2× in Week 1, 1× halfway through, and 0.5× around Week 13.
         </span>
       </div>
 

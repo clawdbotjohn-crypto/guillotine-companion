@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { Roster } from '../../api/types';
-import type { BidInfo } from '../elimination';
 import type { RosPlayerProjection } from '../projections';
 import {
   buildWaiverBoard,
   calculateRemainingFaab,
+  predictedBidMultiplier,
   sortWaiverRowsByStrategy,
   type LeagueContext,
 } from '../waivers';
@@ -63,21 +63,12 @@ describe('buildWaiverBoard', () => {
       projections.set(id, projection(id, 'QB', 40 - rank));
     }
     projections.set('available-qb', projection('available-qb', 'QB', 10));
-    const historicalBids: BidInfo[] = [1, 2, 3].map((rank) => ({
-      week: rank,
-      rosterId: rank,
-      playerId: `rostered-qb-${String(rank).padStart(2, '0')}`,
-      playerName: `QB ${rank}`,
-      position: 'QB',
-      amount: 153,
-      status: 'complete',
-    }));
 
     const rows = buildWaiverBoard(
       ['available-qb'],
       projections,
       context,
-      historicalBids,
+      [],
       (id) => id,
     );
 
@@ -89,7 +80,7 @@ describe('buildWaiverBoard', () => {
     expect(suggestionValue(rows, 'exponential')).toBe(150);
     expect(suggestionValue(rows, 'weeks-starter')).toBe(0);
     expect(rows[0].starterWeeks).toBe(0);
-    // Position-level bid history must not assign the same $153 prediction to this deep QB.
+    // Season timing must not assign a large position-wide prediction to this deep QB.
     expect(rows[0].predictedWinningBid).toBe(0);
   });
 
@@ -142,27 +133,24 @@ describe('buildWaiverBoard', () => {
       .toBeGreaterThan(suggestionValue([weeksSorted[1]], 'weeks-starter'));
   });
 
-  it('scales predicted winning bids by player quality instead of one flat position bid', () => {
+  it('uses the requested season-deflation multiplier anchors', () => {
+    expect(predictedBidMultiplier(1)).toBeCloseTo(2);
+    expect(predictedBidMultiplier(9)).toBeCloseTo(1);
+    expect(predictedBidMultiplier(13)).toBeCloseTo(0.5);
+    expect(predictedBidMultiplier(17)).toBeCloseTo(0.25);
+  });
+
+  it('scales predicted winning bids by Weeks-as-Starter instead of one flat position bid', () => {
     const projections = new Map<string, RosPlayerProjection>();
     for (let rank = 1; rank <= 8; rank++) {
       const id = `market-qb-${rank}`;
       projections.set(id, projection(id, 'QB', 31 - rank));
     }
-    const bids: BidInfo[] = [2, 3, 4].map((rank) => ({
-      week: rank,
-      rosterId: rank,
-      playerId: `market-qb-${rank}`,
-      playerName: `Market QB ${rank}`,
-      position: 'QB',
-      amount: 100,
-      status: 'complete',
-    }));
-
     const rows = buildWaiverBoard(
       ['market-qb-1', 'market-qb-8'],
       projections,
       context,
-      bids,
+      [],
       (id) => id,
     );
     const elite = rows.find((row) => row.playerId === 'market-qb-1')!;

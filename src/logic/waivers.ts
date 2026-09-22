@@ -118,33 +118,26 @@ function scale(value1000: number, budget: number): number {
 }
 
 /**
- * Predicted winning bid from historical bids in this league at the player's position.
- * Early weeks (little history): assume ~2x the safe value.
+ * Market-deflation curve for a standard 17-week fantasy season.
+ * Week 1 = 2x, Week 9 (halfway) = 1x, Week 13 (three-quarters) = 0.5x.
+ * Interpolation is exponential: linear movement in log2(multiplier) between anchors.
  */
+export function predictedBidMultiplier(currentWeek: number): number {
+  const seasonProgress = Math.min(1, Math.max(0, (currentWeek - 1) / 16));
+  const exponent = seasonProgress <= 0.5
+    ? 1 - (2 * seasonProgress)
+    : -4 * (seasonProgress - 0.5);
+  return 2 ** exponent;
+}
+
 function predictWinningBid(
-  position: string,
   modeledValue: number,
-  bids: BidInfo[],
-  historicalModeledValues: Map<string, number>,
+  currentWeek: number,
 ): { value: number; confidence: 'low' | 'medium' | 'high' } {
-  const posBids = bids.filter((b) => b.position === position && b.amount > 0);
-  const marketRatios = posBids.flatMap((bid) => {
-    const historicalModeledValue = historicalModeledValues.get(bid.playerId) ?? 0;
-    return historicalModeledValue > 0 ? [bid.amount / historicalModeledValue] : [];
-  });
-
-  if (marketRatios.length < 3) {
-    return { value: Math.round(modeledValue * 2), confidence: 'low' };
-  }
-
-  // Calibrate to this league's upper-quartile spend aggressiveness without assigning
-  // one flat position-wide bid to players of radically different quality. Historical
-  // player quality uses today's ROS model, so bound the multiplier to limit drift.
-  marketRatios.sort((a, b) => a - b);
-  const q3Ratio = marketRatios[Math.floor(marketRatios.length * 0.75)];
-  const marketMultiplier = Math.min(3, Math.max(1, q3Ratio));
-  const confidence = marketRatios.length >= 10 ? 'high' : 'medium';
-  return { value: Math.round(modeledValue * marketMultiplier), confidence };
+  return {
+    value: Math.round(modeledValue * predictedBidMultiplier(currentWeek)),
+    confidence: 'medium',
+  };
 }
 
 /** Remaining FAAB for the selected roster, based on the league budget and Sleeper spend. */
@@ -194,7 +187,7 @@ export function buildWaiverBoard(
   availablePlayerIds: string[],
   projections: Map<string, RosPlayerProjection>,
   ctx: LeagueContext,
-  bids: BidInfo[],
+  _bids: BidInfo[],
   getName: (id: string) => string,
   opts?: { budgetFloor?: number; remaining?: number; maxPerPos?: number },
 ): WaiverPlayerRow[] {
@@ -204,19 +197,6 @@ export function buildWaiverBoard(
 
   // Replacement level per position = projected weekly value of the first player past the last starter.
   const replacementByPos = computeReplacementLevels(projections, ctx);
-
-  // Historical winning bids calibrate a market multiplier against each bid player's
-  // current ROS Weeks-as-Starter value. Missing/unprojected players are ignored.
-  const historicalModeledValues = new Map<string, number>();
-  for (const bid of bids) {
-    const projection = projections.get(bid.playerId);
-    const posRank = leagueWideRanks.get(bid.playerId);
-    if (!projection || posRank == null) continue;
-    historicalModeledValues.set(
-      bid.playerId,
-      weeksStarterStrategy({ position: projection.position, posRank }, ctx),
-    );
-  }
 
   // Group available by position
   const byPos = new Map<string, { playerId: string; rosPoints: number; pointsPerWeek: number }[]>();
@@ -246,7 +226,7 @@ export function buildWaiverBoard(
       const starterWeeks = projectedStarterWeeks(base, ctx);
       const weeks = weeksStarterStrategy(base, ctx);
       const vorp = vorpStrategy(base, replacementByPos, ctx);
-      const pred = predictWinningBid(pos, weeks, bids, historicalModeledValues);
+      const pred = predictWinningBid(weeks, ctx.currentWeek);
 
       const clamp = (v: number) =>
         opts?.budgetFloor != null && opts?.remaining != null

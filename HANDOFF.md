@@ -1,13 +1,18 @@
 # PR #6 Sleeper ROS Waiver Handoff
 
-## Follow-up strategy sorting / predicted-bid corrections (2026-09-22)
+## Follow-up season-deflation prediction model (2026-09-22)
+
+- Replaced the temporary historical-ratio predictor with John's deterministic Weeks-as-Starter season curve.
+- Exact anchors for a 17-week fantasy season: Week 1 = `2.0×`, Week 9 = `1.0×`, Week 13 = `0.5×`, Week 17 = `0.25×`; interpolation is exponential (linear in log2 multiplier).
+- Predicted bid is now simply `Weeks-as-Starter value × current-week multiplier`, preserving player quality and `$0 → $0` behavior.
+- Historical 2025 report supports strong deflation (average winning bid $88 W1 → $12 W9 → $3 W13), but exact bid/WAS ratios cannot be backtested without weekly projection snapshots.
+- Added exact multiplier-anchor unit tests. Verification: targeted 10/10, full 23/23, lint clean, build and diff-check passed.
+
+## Follow-up selected-strategy sorting (2026-09-22)
 
 - Waiver rows now re-sort descending whenever the active strategy changes; Safe, Exponential, Weeks-as-Starter, and VoRP no longer reuse Safe's ordering.
-- Predicted Winning Bid no longer assigns one upper-quartile position bid to every player. It uses each player's Weeks-as-Starter value and applies the league's upper-quartile historical bid-to-modeled-value ratio, bounded to `1×–3×`.
-- Historical bid players are evaluated against current Sleeper ROS projections; missing/zero modeled values are excluded. This is transparent but not a historical projection snapshot.
-- Sparse history still uses `2×` the player's Weeks-as-Starter value at low confidence. A `$0` modeled player therefore predicts `$0`, not a flat position-wide amount.
-- Added regression tests for active-strategy ordering, deep-player prediction `$0`, and player-sensitive predictions.
-- Verification: targeted tests 9/9, full tests 22/22, lint clean, production build passed, `git diff --check` passed.
+- Regression tests cover active-strategy ordering, deep-player prediction `$0`, and player-sensitive predictions.
+- The intermediate historical-ratio prediction experiment from this commit was superseded by the season-deflation model documented above.
 
 ## Follow-up Safe / Weeks-as-Starter corrections (2026-09-22)
 
