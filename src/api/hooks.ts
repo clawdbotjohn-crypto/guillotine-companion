@@ -2,8 +2,19 @@
 
 import { useQuery } from '@tanstack/react-query';
 import * as api from './client';
-import type { League, SleeperUser, Roster, Matchup, Transaction, DraftPick, UserLeague } from './types';
+import type {
+  League,
+  SleeperUser,
+  Roster,
+  Matchup,
+  Transaction,
+  DraftPick,
+  UserLeague,
+  NflState,
+  WeeklyProjectionMap,
+} from './types';
 
+const STALE_30M = 1000 * 60 * 30;
 const STALE_1H = 1000 * 60 * 60;
 const STALE_6H = STALE_1H * 6;
 
@@ -113,5 +124,39 @@ export function useLeagueHistory(leagueId: string | null) {
     queryFn: () => api.getLeagueHistory(leagueId!),
     enabled: !!leagueId,
     staleTime: STALE_6H,
+  });
+}
+
+export function useNflState() {
+  return useQuery<NflState>({
+    queryKey: ['nfl-state'],
+    queryFn: api.getNflState,
+    staleTime: STALE_30M,
+    retry: 1,
+  });
+}
+
+/**
+ * Fetch and cache all remaining weekly projection payloads as one query. The client limits
+ * concurrency to four requests, avoiding both a sequential waterfall and an unbounded fan-out.
+ */
+export function useRestOfSeasonProjectionWeeks(
+  season: string | null,
+  startWeek: number | null,
+  endWeek = 18,
+) {
+  return useQuery<Map<number, WeeklyProjectionMap>>({
+    queryKey: ['sleeper-ros-projections', season, startWeek, endWeek],
+    queryFn: () => {
+      const weeks = Array.from(
+        { length: endWeek - startWeek! + 1 },
+        (_, index) => startWeek! + index,
+      );
+      return api.getProjectionWeeks(season!, weeks, 4);
+    },
+    enabled: !!season && startWeek != null && startWeek >= 1 && startWeek <= endWeek,
+    staleTime: STALE_30M,
+    gcTime: STALE_6H,
+    retry: 1,
   });
 }

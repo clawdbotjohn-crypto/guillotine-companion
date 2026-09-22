@@ -10,6 +10,15 @@ export {
 } from './elimination';
 
 export {
+  getProjectionScoring,
+  getProjectionPoints,
+  getRestOfSeasonStartWeek,
+  sumRestOfSeasonProjections,
+  type ProjectionScoring,
+  type RosPlayerProjection,
+} from './projections';
+
+export {
   buildPlayerSeasons,
   parseLineupSlots,
   projectBestLineup,

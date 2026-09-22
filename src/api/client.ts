@@ -8,6 +8,8 @@ import type {
   Transaction,
   DraftPick,
   UserLeague,
+  NflState,
+  WeeklyProjectionMap,
 } from './types';
 
 const BASE = 'https://api.sleeper.app/v1';
@@ -49,6 +51,37 @@ export const getUserLeagues = (userId: string, season: string) =>
 
 // Players (large payload ~30MB)
 export const getAllPlayers = () => get<Record<string, any>>('/players/nfl');
+
+// NFL state and weekly projections
+export const getNflState = () => get<NflState>('/state/nfl');
+export const getWeeklyProjections = (season: string, week: number) =>
+  get<WeeklyProjectionMap>(`/projections/nfl/regular/${season}/${week}`);
+
+/** Fetch projection weeks with a small concurrency cap so one page load does not fan out 16 requests. */
+export async function getProjectionWeeks(
+  season: string,
+  weeks: number[],
+  concurrency = 4,
+): Promise<Map<number, WeeklyProjectionMap>> {
+  const results = new Map<number, WeeklyProjectionMap>();
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < weeks.length) {
+      const week = weeks[nextIndex++];
+      try {
+        results.set(week, await getWeeklyProjections(season, week));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'unknown error';
+        throw new Error(`Could not load Sleeper projections for week ${week}: ${message}`);
+      }
+    }
+  }
+
+  const workerCount = Math.min(Math.max(1, concurrency), weeks.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return results;
+}
 
 // League history — walk previous_league_id chain
 export async function getLeagueHistory(leagueId: string): Promise<League[]> {

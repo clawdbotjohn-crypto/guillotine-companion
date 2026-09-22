@@ -94,3 +94,24 @@ export interface UserLeague {
   draft_id: string;
   avatar: string | null;
 }
+
+export interface NflState {
+  week: number;
+  display_week: number;
+  season: string;
+  season_type: string;
+  leg: number;
+  league_season: string;
+  season_start_date: string;
+  season_has_scores: boolean;
+}
+
+/** Sleeper's weekly projection object contains many stat fields; waiver math uses these totals. */
+export interface SleeperProjection {
+  pts_ppr?: number;
+  pts_half_ppr?: number;
+  pts_std?: number;
+  [key: string]: unknown;
+}
+
+export type WeeklyProjectionMap = Record<string, SleeperProjection>;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Roster } from '../../api/types';
-import type { PlayerSeason } from '../analytics';
+import type { RosPlayerProjection } from '../projections';
 import { buildWaiverBoard, calculateRemainingFaab, type LeagueContext } from '../waivers';
 
 const context: LeagueContext = {
@@ -11,13 +11,18 @@ const context: LeagueContext = {
   startersPerPos: { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, SUPER_FLEX: 0 },
 };
 
-function season(playerId: string, position: string, avgPoints: number): PlayerSeason {
+function projection(
+  playerId: string,
+  position: string,
+  pointsPerWeek: number,
+  projectedWeeks = 10,
+): RosPlayerProjection {
   return {
     playerId,
     position,
-    totalPoints: avgPoints * 4,
-    games: 4,
-    avgPoints,
+    totalPoints: pointsPerWeek * projectedWeeks,
+    pointsPerWeek,
+    projectedWeeks,
   };
 }
 
@@ -45,17 +50,17 @@ describe('calculateRemainingFaab', () => {
 });
 
 describe('buildWaiverBoard', () => {
-  it('ranks and values an available QB against all 21 higher-scoring QBs', () => {
-    const seasons = new Map<string, PlayerSeason>();
+  it('ranks and values an available QB against all 21 higher Sleeper ROS projections', () => {
+    const projections = new Map<string, RosPlayerProjection>();
     for (let rank = 1; rank <= 21; rank++) {
       const id = `rostered-qb-${String(rank).padStart(2, '0')}`;
-      seasons.set(id, season(id, 'QB', 40 - rank));
+      projections.set(id, projection(id, 'QB', 40 - rank));
     }
-    seasons.set('available-qb', season('available-qb', 'QB', 10));
+    projections.set('available-qb', projection('available-qb', 'QB', 10));
 
     const rows = buildWaiverBoard(
       ['available-qb'],
-      seasons,
+      projections,
       context,
       [],
       (id) => id,
@@ -69,17 +74,31 @@ describe('buildWaiverBoard', () => {
     expect(suggestionValue(rows, 'weeks-starter')).toBe(0);
   });
 
+  it('uses projected ROS values for replacement level and VoRP', () => {
+    const projections = new Map<string, RosPlayerProjection>();
+    for (let rank = 1; rank <= 12; rank++) {
+      const id = `qb-${rank}`;
+      projections.set(id, projection(id, 'QB', 30 - rank));
+    }
+    projections.set('available-qb', projection('available-qb', 'QB', 25));
+
+    const rows = buildWaiverBoard(['available-qb'], projections, context, [], (id) => id);
+
+    // First player after 12 starters is projected at 18/wk; available player is 7/wk above it.
+    expect(suggestionValue(rows, 'vorp')).toBe(210);
+  });
+
   it('applies maxPerPos to displayed players without renumbering their league-wide ranks', () => {
-    const seasons = new Map([
-      ['qb-1', season('qb-1', 'QB', 30)],
-      ['qb-2-available', season('qb-2-available', 'QB', 25)],
-      ['qb-3', season('qb-3', 'QB', 20)],
-      ['qb-4-available', season('qb-4-available', 'QB', 15)],
+    const projections = new Map([
+      ['qb-1', projection('qb-1', 'QB', 30)],
+      ['qb-2-available', projection('qb-2-available', 'QB', 25)],
+      ['qb-3', projection('qb-3', 'QB', 20)],
+      ['qb-4-available', projection('qb-4-available', 'QB', 15)],
     ]);
 
     const rows = buildWaiverBoard(
       ['qb-4-available', 'qb-2-available'],
-      seasons,
+      projections,
       context,
       [],
       (id) => id,
@@ -91,14 +110,26 @@ describe('buildWaiverBoard', () => {
     ]);
   });
 
+  it('does not fall back to historical scoring when a player has no ROS projection', () => {
+    const rows = buildWaiverBoard(
+      ['historical-only-player'],
+      new Map(),
+      context,
+      [],
+      (id) => id,
+    );
+
+    expect(rows).toEqual([]);
+  });
+
   it('does not clamp raw values when remaining FAAB is supplied without a budget floor', () => {
-    const seasons = new Map([
-      ['available-qb', season('available-qb', 'QB', 30)],
+    const projections = new Map([
+      ['available-qb', projection('available-qb', 'QB', 30)],
     ]);
 
     const rows = buildWaiverBoard(
       ['available-qb'],
-      seasons,
+      projections,
       context,
       [],
       (id) => id,

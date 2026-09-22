@@ -2,8 +2,8 @@
 // All values are % of the league's FAAB budget, scaled to the detected budget.
 // Ships 4 core strategies + predicted winning bid + budget floor.
 
-import type { League, Roster, Matchup } from '../api/types';
-import type { PlayerSeason } from './analytics';
+import type { League, Roster } from '../api/types';
+import type { RosPlayerProjection } from './projections';
 import type { BidInfo, EliminationResult } from './elimination';
 
 export type StrategyKey = 'safe' | 'exponential' | 'weeks-starter' | 'vorp';
@@ -20,8 +20,9 @@ export interface WaiverPlayerRow {
   playerId: string;
   name: string;
   position: string;
-  posRank: number; // league-wide rank at that position (by season avg)
-  avgPoints: number;
+  posRank: number; // league-wide rank at that position (by Sleeper ROS projection)
+  rosPoints: number;
+  projectedPointsPerWeek: number;
   suggestions: BidSuggestion[];
   predictedWinningBid: number;
   predictedConfidence: 'low' | 'medium' | 'high';
@@ -80,16 +81,16 @@ function weeksStarterStrategy(row: { posRank: number; position: string }, ctx: L
   return Math.round(safeStrategy(row, ctx) * frac);
 }
 
-/** VoRP: bid = VoRP × multiplier, floored at 0. Uses avg above replacement starter. */
+/** VoRP: bid = projected weekly ROS value above replacement × multiplier, floored at 0. */
 function vorpStrategy(
-  row: { position: string; avgPoints: number },
+  row: { position: string; projectedPointsPerWeek: number },
   replacementByPos: Map<string, number>,
   ctx: LeagueContext,
 ): number {
   const replacement = replacementByPos.get(row.position) ?? 0;
-  const vorp = Math.max(0, row.avgPoints - replacement);
-  // Multiplier chosen so a ~5 pt/wk edge at RB ~= $150 on $1000
-  const mult = scale(30, ctx.budget); // $ per VoRP point
+  const vorp = Math.max(0, row.projectedPointsPerWeek - replacement);
+  // Multiplier chosen so a ~5 projected pt/wk edge at RB ~= $150 on $1000
+  const mult = scale(30, ctx.budget); // $ per weekly VoRP point
   return Math.round(vorp * mult);
 }
 
@@ -143,6 +144,7 @@ export function applyBudgetFloor(value: number, remaining: number, floor: number
 export function buildLeagueContext(
   league: League | undefined,
   elim: EliminationResult,
+  projectionStartWeek?: number,
 ): LeagueContext {
   const budget = league?.settings?.waiver_budget ?? 1000;
   const rp = league?.roster_positions ?? [];
@@ -157,10 +159,12 @@ export function buildLeagueContext(
   };
   const teamsRemaining = elim.weeks[elim.weeks.length - 1]?.teamsRemaining
     ?? league?.total_rosters ?? 12;
-  const currentWeek = elim.currentWeek || 1;
-  // Rough: guillotine ends when 1 team left; weeks remaining ≈ teams to eliminate / rate
+  const currentWeek = projectionStartWeek ?? (elim.currentWeek || 1);
+  // Do not estimate value beyond either the guillotine final or Sleeper's week-18 projections.
   const elimsPerWeek = teamsRemaining > 16 ? 2 : 1;
-  const weeksRemaining = Math.max(1, Math.ceil((teamsRemaining - 1) / elimsPerWeek));
+  const weeksToFinal = Math.max(1, Math.ceil((teamsRemaining - 1) / elimsPerWeek));
+  const nflWeeksRemaining = Math.max(1, 19 - currentWeek);
+  const weeksRemaining = Math.min(weeksToFinal, nflWeeksRemaining);
   return { budget, teamsRemaining, weeksRemaining, currentWeek, startersPerPos };
 }
 
@@ -170,38 +174,42 @@ export function buildLeagueContext(
  */
 export function buildWaiverBoard(
   availablePlayerIds: string[],
-  seasons: Map<string, PlayerSeason>,
+  projections: Map<string, RosPlayerProjection>,
   ctx: LeagueContext,
   bids: BidInfo[],
   getName: (id: string) => string,
   opts?: { budgetFloor?: number; remaining?: number; maxPerPos?: number },
 ): WaiverPlayerRow[] {
-  // Rank against the complete season pool before filtering for availability. Availability
-  // determines which rows are shown, never the rank/value basis used by strategies.
-  const leagueWideRanks = computeLeagueWidePositionRanks(seasons);
+  // Rank against every projected player before filtering for availability. Availability
+  // determines which rows are shown, never the Sleeper ROS rank/value basis.
+  const leagueWideRanks = computeLeagueWidePositionRanks(projections);
 
-  // Replacement level per position = avg of the "first player past the last starter"
-  const replacementByPos = computeReplacementLevels(seasons, ctx);
+  // Replacement level per position = projected weekly value of the first player past the last starter.
+  const replacementByPos = computeReplacementLevels(projections, ctx);
 
   // Group available by position
-  const byPos = new Map<string, { playerId: string; avg: number }[]>();
+  const byPos = new Map<string, { playerId: string; rosPoints: number; pointsPerWeek: number }[]>();
   for (const pid of availablePlayerIds) {
-    const s = seasons.get(pid);
-    if (!s) continue;
-    if (!['QB', 'RB', 'WR', 'TE'].includes(s.position)) continue; // ignore K/DEF per spec
-    const arr = byPos.get(s.position) ?? [];
-    arr.push({ playerId: pid, avg: s.avgPoints });
-    byPos.set(s.position, arr);
+    const projection = projections.get(pid);
+    if (!projection) continue;
+    if (!['QB', 'RB', 'WR', 'TE'].includes(projection.position)) continue; // ignore K/DEF per spec
+    const arr = byPos.get(projection.position) ?? [];
+    arr.push({
+      playerId: pid,
+      rosPoints: projection.totalPoints,
+      pointsPerWeek: projection.pointsPerWeek,
+    });
+    byPos.set(projection.position, arr);
   }
 
   const rows: WaiverPlayerRow[] = [];
   const maxPerPos = opts?.maxPerPos ?? 12;
   for (const [pos, arr] of byPos.entries()) {
-    arr.sort((a, b) => b.avg - a.avg || a.playerId.localeCompare(b.playerId));
+    arr.sort((a, b) => b.pointsPerWeek - a.pointsPerWeek || a.playerId.localeCompare(b.playerId));
     arr.slice(0, maxPerPos).forEach((p) => {
       const posRank = leagueWideRanks.get(p.playerId);
       if (posRank == null) return;
-      const base = { position: pos, posRank, avgPoints: p.avg };
+      const base = { position: pos, posRank, projectedPointsPerWeek: p.pointsPerWeek };
       const safe = safeStrategy(base, ctx);
       const exp = exponentialStrategy(base, ctx);
       const weeks = weeksStarterStrategy(base, ctx);
@@ -225,7 +233,8 @@ export function buildWaiverBoard(
         name: getName(p.playerId),
         position: pos,
         posRank,
-        avgPoints: p.avg,
+        rosPoints: p.rosPoints,
+        projectedPointsPerWeek: p.pointsPerWeek,
         suggestions,
         predictedWinningBid: pred.value,
         predictedConfidence: pred.confidence,
@@ -241,34 +250,39 @@ function mk(strategy: StrategyKey, label: string, value: number, budget: number)
   return { strategy, label, value: Math.max(0, value), pctOfBudget: budget > 0 ? (value / budget) * 100 : 0 };
 }
 
-/** League-wide positional ranks from the complete season scoring-average pool. */
-function computeLeagueWidePositionRanks(seasons: Map<string, PlayerSeason>): Map<string, number> {
-  const byPos = new Map<string, { playerId: string; avg: number }[]>();
-  for (const [playerId, season] of seasons.entries()) {
-    if (!['QB', 'RB', 'WR', 'TE'].includes(season.position)) continue;
-    const players = byPos.get(season.position) ?? [];
-    players.push({ playerId, avg: season.avgPoints });
-    byPos.set(season.position, players);
+/** League-wide positional ranks from every player's Sleeper ROS projection. */
+function computeLeagueWidePositionRanks(
+  projections: Map<string, RosPlayerProjection>,
+): Map<string, number> {
+  const byPos = new Map<string, { playerId: string; pointsPerWeek: number }[]>();
+  for (const [playerId, projection] of projections.entries()) {
+    if (!['QB', 'RB', 'WR', 'TE'].includes(projection.position)) continue;
+    const players = byPos.get(projection.position) ?? [];
+    players.push({ playerId, pointsPerWeek: projection.pointsPerWeek });
+    byPos.set(projection.position, players);
   }
 
   const ranks = new Map<string, number>();
   for (const players of byPos.values()) {
     players
-      .sort((a, b) => b.avg - a.avg || a.playerId.localeCompare(b.playerId))
+      .sort((a, b) => b.pointsPerWeek - a.pointsPerWeek || a.playerId.localeCompare(b.playerId))
       .forEach((player, index) => ranks.set(player.playerId, index + 1));
   }
   return ranks;
 }
 
-/** Replacement level: the season avg of the last "startable" player per position. */
-function computeReplacementLevels(seasons: Map<string, PlayerSeason>, ctx: LeagueContext): Map<string, number> {
+/** Replacement level: projected weekly ROS value of the first player past the startable pool. */
+function computeReplacementLevels(
+  projections: Map<string, RosPlayerProjection>,
+  ctx: LeagueContext,
+): Map<string, number> {
   const out = new Map<string, number>();
   const byPos = new Map<string, number[]>();
-  for (const s of seasons.values()) {
-    if (!['QB', 'RB', 'WR', 'TE'].includes(s.position)) continue;
-    const arr = byPos.get(s.position) ?? [];
-    arr.push(s.avgPoints);
-    byPos.set(s.position, arr);
+  for (const projection of projections.values()) {
+    if (!['QB', 'RB', 'WR', 'TE'].includes(projection.position)) continue;
+    const arr = byPos.get(projection.position) ?? [];
+    arr.push(projection.pointsPerWeek);
+    byPos.set(projection.position, arr);
   }
   for (const [pos, arr] of byPos.entries()) {
     arr.sort((a, b) => b - a);
@@ -286,7 +300,7 @@ function computeReplacementLevels(seasons: Map<string, PlayerSeason>, ctx: Leagu
 /** Determine which players are available (not rostered by any active team). */
 export function computeAvailablePlayers(
   rosters: Roster[],
-  seasons: Map<string, PlayerSeason>,
+  projections: Map<string, RosPlayerProjection>,
   elim: EliminationResult,
 ): string[] {
   const rostered = new Set<string>();
@@ -296,11 +310,8 @@ export function computeAvailablePlayers(
     (r.players ?? []).forEach((p) => rostered.add(p));
   }
   const avail: string[] = [];
-  for (const [pid, s] of seasons.entries()) {
-    if (!rostered.has(pid) && s.avgPoints > 0) avail.push(pid);
+  for (const [pid, projection] of projections.entries()) {
+    if (!rostered.has(pid) && projection.totalPoints > 0) avail.push(pid);
   }
   return avail;
 }
-
-// re-export type used above
-export type { Matchup };
