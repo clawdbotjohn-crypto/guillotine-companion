@@ -1,3 +1,17 @@
+# Final Orchestrator Handoff — Required P0 Set (2026-09-22)
+
+- **Verified session time:** 45 min of 60 target; exited early because all required P0 work was complete rather than inventing unrelated work.
+- **Branch / PR:** `feat/waiver-ranking-sources`, existing PR #7 only. No merge, main/master push, force-push, production deployment, or workflow dispatch.
+- **Required work completed:** Aggressive now equals the established player-sensitive Predicted Winning Bid; dynamic Sleeper ROS championship-calibrated VoRP is implemented; current Teams positional standings exclude eliminated rosters.
+- **Independent preview QA:**
+  - **Aggressive:** On the deployed preview with real 2025 FantasyPros ROS data, the explanation states maximum-bid/spending-ceiling, non-intrinsic-value, and intentional overpay semantics. Cards sorted by the same values previously shown as Predicted Winning Bid (`$19, $19, $15, $15…`), and the redundant Predicted Winning Bid footer was absent only on Aggressive.
+  - **VoRP:** With the historical two-team league, replacement/startable depth correctly used the four-team floor; the external-source message stated independent Sleeper ROS usage; VoRP copy named the optimized four-team pool; unavailable rows rendered `Unavailable / Sleeper ROS required`, never fabricated `$0`.
+  - **Active positional standings:** The preview identified exactly two surviving teams. Expanding active `jma1271` showed all QB/RB/WR/TE/FLEX/K/DEF ranks within `#1–#2`; expanding eliminated `4thandLange` showed `Eliminated — no current positional standing.`
+- **Final full verification at head `c6c957e`:** 10 test files / **51 tests passed**; lint **0 warnings/errors**; production build passed; `git diff --check` passed; working tree clean and tracking only `origin/feat/waiver-ranking-sources`.
+- **Blockers:** None.
+
+---
+
 # Handoff — Active-Team Positional Standings (2026-09-22)
 
 - **Timestamp:** 2026-09-22 16:10:51 PDT
