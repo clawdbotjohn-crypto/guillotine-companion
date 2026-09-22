@@ -1,52 +1,63 @@
-# PR #6 Review Fix Handoff
+# PR #6 Sleeper ROS Waiver Handoff
 
 ## Branch / PR
 
 - Branch: `feat/john-feedback-batch-0922`
 - PR: #6 (`feat/john-feedback-batch-0922` → `main`)
-- Implementation commit: `e7aa3b9` — `fix: rank waiver values league-wide and flag over-budget bids`
-- Push: successful to `origin/feat/john-feedback-batch-0922`
-- No merge, deploy, production workflow, or `main` push was performed.
+- Sleeper ROS implementation commit: `ca512d1` — `feat: use Sleeper ROS projections for waivers`
+- Prior review fixes preserved:
+  - `e7aa3b9` — league-wide rank basis + raw over-remaining-FAAB warning
+  - `5ed7475` — prior review handoff
+- No merge, deploy, workflow dispatch, production action, or `main` push was performed.
 
-## Corrections completed
+## Projection source and exact semantics
 
-### League-wide waiver positional rank
+Waiver rankings and values now use Sleeper **rest-of-season projections**, not matchup scoring history.
 
-- `buildWaiverBoard` now calculates positional ranks from the complete `PlayerSeason` map before applying availability or `maxPerPos` display filtering.
-- The league-wide rank is used for the displayed `posRank` and all rank-dependent strategies (Safe, Exponential Starter, and Weeks-as-Starter). VoRP replacement levels already use the complete season pool, and predicted winning bid receives the league-rank-based Safe value.
-- Regression coverage proves a lone available QB behind 21 higher-scoring players is displayed as QB22 and receives rank-22 values (`$60` Safe, `$150` Exponential, `$0` Weeks-as-Starter in the test context), not available-only QB1 values.
-- A second regression proves `maxPerPos` limits displayed rows without renumbering league-wide ranks.
+1. Fetch `GET /v1/state/nfl`.
+2. Require the selected league season to equal the current Sleeper NFL state season. The page shows an honest unavailable state for a historical season; it never substitutes historical averages.
+3. Choose the first ROS week as `max(state.week, state.display_week + 1, 1)`:
+   - With the verified 2026 state (`week: 3`, `display_week: 2`), week 3 is included.
+   - If Sleeper marks the nominal current week completed (`display_week >= week`), aggregation advances to the next week.
+4. Fetch every weekly endpoint from that week through week 18: `GET /v1/projections/nfl/regular/{leagueSeason}/{week}`.
+   - Requests use a concurrency cap of four, avoiding a sequential waterfall and unbounded fan-out.
+   - TanStack Query caches the aggregate by season/start/end for 30 minutes, retains it for six hours, and retries once.
+   - The full-season endpoint is intentionally not used because its `gp: 18` totals are not exact ROS totals.
+5. Select `pts_ppr`, `pts_half_ppr`, or `pts_std` using the league's `scoring_settings.rec`, matching the Draft Assistant behavior.
+6. Sum the selected field across all requested weeks. Missing player weeks contribute zero (bye/inactive). `pointsPerWeek` is the ROS sum divided by every requested week, so byes remain represented rather than disappearing from the denominator.
+7. A player with no selected Sleeper scoring field is omitted. There is no fallback to matchup scores or another projection field.
 
-### Over-remaining-FAAB warning without raw-value clamp
+A bounded live endpoint verification on 2026-09-22 confirmed weeks 3, 4, and 18 return projection maps containing all three selected totals. Representative counts were 1,057 scored records in week 3, 1,118 in week 4, and 1,144 in week 18. No payload was saved or committed.
 
-- The Waivers page reads `rosterId` from the app store, finds that roster, and calculates actual remaining FAAB as league budget minus `roster.settings.waiver_budget_used` (floored at zero).
-- Page context now shows `Your FAAB remaining $X`.
-- A displayed strategy recommendation above that amount retains its raw value and shows a focusable warning icon. Its accessible/hover text is: “More than your FAAB remaining; this bid is not currently possible.”
-- The default no-floor path remains unclamped, with a regression proving a raw `$188` recommendation remains `$188` when only `$20` remains.
-- The optional budget-floor control remains an explicit pacing clamp, but now uses the selected user's actual remaining FAAB rather than the total league budget.
+## Waiver / FAAB behavior
 
-## Ranking data source (verified)
+- All projected players are ranked at each position before availability and display filtering. The regression still proves the available QB behind 21 stronger projected QBs is QB22.
+- Available-player detection is projection-driven; a historical scorer with no ROS projection does not appear.
+- Board ordering and Safe, Exponential Starter, and Weeks-as-Starter values use projection-driven league-wide position rank.
+- Replacement levels and VoRP use Sleeper ROS projected points per remaining week.
+- The existing predicted-winning-bid display continues to describe historical league bid behavior, while the four recommendation strategies use ROS values.
+- The raw recommendation and over-remaining-FAAB warning behavior from `e7aa3b9` remains unchanged.
+- UI copy explicitly says `Sleeper rest-of-season projections`, shows ROS total and per-week values, and includes honest loading/error/empty-season states with retry where actionable.
+- If projection requests fail or return no usable totals, the page does not render historical waiver values.
+- Teams/Hub analytics remain on their prior data source; this change is scoped to Waivers/FAAB.
 
-Current waiver ranking data comes from `buildPlayerSeasons(matchups)` in `src/logic/analytics.ts`. It aggregates Sleeper weekly matchup `players_points` over the season and calculates each player's season-to-date scoring average (`totalPoints / games`). The Waivers page passes that complete map to `buildWaiverBoard`.
+## Files changed in `ca512d1`
 
-It does **not** currently use Sleeper forward projections, FantasyCalc, or FantasyPros.
-
-## Files changed for these fixes
-
-- `src/logic/waivers.ts`
-- `src/logic/__tests__/waivers.test.ts`
-- `src/pages/WaiversPage.tsx`
-- `src/components/FaabOverBudgetWarning.tsx`
-- `src/components/FaabOverBudgetWarning.test.tsx`
-- `HANDOFF.md`
+- `src/api/types.ts` — typed NFL state and weekly Sleeper projection payloads
+- `src/api/client.ts` — state/weekly projection endpoints and concurrency-limited week fetcher
+- `src/api/hooks.ts` — cached state and aggregate ROS projection hooks
+- `src/logic/projections.ts` — scoring selection, start-week semantics, and weekly ROS summation
+- `src/logic/waivers.ts` — projection-driven ranks, ordering, replacement level, VoRP, and availability
+- `src/pages/WaiversPage.tsx` — ROS wiring, labels, loading/error/retry states, and projection display
+- `src/logic/index.ts` — projection exports
+- `src/logic/__tests__/projections.test.ts` — weekly sum, format selection, no field fallback, and week semantics
+- `src/logic/__tests__/waivers.test.ts` — projection-driven QB22/ranks, VoRP, no historical fallback, and preserved raw-bid behavior
 
 ## Verification
 
-- Targeted waiver/warning tests: **passed** — 2 files, 5 tests
-- Full `npm test`: **passed** — 3 files, 14 tests
+- Targeted projection + waiver tests: **passed** — 2 files, 9 tests
+- Full `npm test`: **passed** — 4 files, 19 tests
 - `npm run lint`: **passed** — 0 warnings, 0 errors
 - `npm run build`: **passed**
 - `git diff --check origin/main...HEAD`: **passed**
-- Reviewed `git diff origin/main...HEAD` name/status and summary. The only new files beyond the existing PR scope are the focused warning component and waiver/warning tests; no unrelated implementation changes were introduced by this correction.
-
-A representative live Sleeper/store state was not reliable for browser verification, so the warning was verified at component/DOM level instead: the test confirms a focusable warning with the exact accessible label/title and tooltip text. Logic tests separately verify selected-roster remaining-FAAB math and that low remaining FAAB does not clamp raw recommendations.
+- Reviewed the complete PR file list and implementation scope; the continuation changes only projection plumbing and Waivers/FAAB calculations/tests, not Teams/Hub analytics.
