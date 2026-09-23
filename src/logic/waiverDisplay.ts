@@ -6,7 +6,7 @@ export const WAIVER_STRATEGIES: { key: StrategyKey; label: string }[] = [
   { key: 'weeks-starter', label: 'Weeks-as-Starter' },
   { key: 'safe', label: 'Safe' },
   { key: 'aggressive', label: 'Aggressive' },
-  { key: 'vorp', label: 'Value over Replacement Player (VoRP)' },
+  { key: 'vorp', label: 'VoRP' },
 ];
 
 export const WAIVER_STRATEGY_EXPLANATIONS: Record<Exclude<StrategyKey, 'vorp'>, string> = {
@@ -22,7 +22,7 @@ export function getWaiverStrategyExplanation(
   unavailableReason?: string,
 ): string {
   if (strategy !== 'vorp') return WAIVER_STRATEGY_EXPLANATIONS[strategy];
-  const explanation = 'Calculates VoRP from the replacement-team count you set, estimates the average VoRP required for a top-four roster, and prices players relative to that benchmark.';
+  const explanation = 'Value over Replacement Player (VoRP) calculates value from the replacement-team count you set, estimates the average VoRP required for a top-four roster, and prices players relative to that benchmark.';
   if (vorpAvailable) return explanation;
   return `${explanation} VoRP is unavailable${unavailableReason ? `: ${unavailableReason}` : ' because a valid Sleeper ROS calibration could not be built'}.`;
 }

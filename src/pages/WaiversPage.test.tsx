@@ -122,13 +122,13 @@ describe('waiver controls', () => {
       'Weeks-as-Starter',
       'Safe',
       'Aggressive',
-      'Value over Replacement Player (VoRP)',
+      'VoRP',
     ]);
-    expect(WAIVER_STRATEGIES.find(({ key }) => key === 'vorp')?.label).toBe('Value over Replacement Player (VoRP)');
+    expect(WAIVER_STRATEGIES.find(({ key }) => key === 'vorp')?.label).toBe('VoRP');
     expect(WAIVER_STRATEGY_EXPLANATIONS['weeks-starter']).toBe('Values players according to how many weeks they project to be starting caliber.');
     expect(WAIVER_STRATEGY_EXPLANATIONS.safe).toBe('Conservative bidding style aimed at preserving budget and avoiding overspending.');
     expect(WAIVER_STRATEGY_EXPLANATIONS.aggressive).toBe('Aggressive spending style aimed at winning players early, at the risk of running out of FAAB.');
-    expect(getWaiverStrategyExplanation('vorp', 16, true)).toBe('Calculates VoRP from the replacement-team count you set, estimates the average VoRP required for a top-four roster, and prices players relative to that benchmark.');
+    expect(getWaiverStrategyExplanation('vorp', 16, true)).toBe('Value over Replacement Player (VoRP) calculates value from the replacement-team count you set, estimates the average VoRP required for a top-four roster, and prices players relative to that benchmark.');
     expect(getWaiverStrategyExplanation('vorp', 16, false, 'Sleeper ROS missing')).toContain('VoRP is unavailable: Sleeper ROS missing');
   });
 

@@ -146,3 +146,9 @@ Real league `SeaMex Guillotine 🪓` / selected `Houston0ilers`:
 
 - No requested Sep 22 final-follow-up item remains unchecked in `PROGRESS.md`.
 - PR #8 remains **OPEN and UNMERGED**. No main/master push, merge, force-push, production deploy, workflow dispatch, manual workflow run, or OpenClaw change was performed.
+
+## Sep 22 22:30 post-QA corrections
+
+John found two regressions on the fresh preview. Removed the remaining local Hub switch-league/logout arrow and empty right-side wrapper from both active and preseason headers; the global header remains the single league-switch control. Restored the strategy selector label to compact `VoRP`; only its first visible explanation expands `Value over Replacement Player (VoRP)`, then uses VoRP normally. Updated the selector/description regression separately.
+
+Validation: focused Hub/Waivers **14/14**, full **111/111**, lint **0 warnings / 0 errors**, production build, `git diff --check`, and comparison diff check all pass.

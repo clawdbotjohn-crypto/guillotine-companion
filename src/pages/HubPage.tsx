@@ -34,7 +34,7 @@ import { HubRosterCard } from '../components/HubRosterCard';
 import { HubByeWarnings } from '../components/HubByeWarnings';
 import { HubPositionRankings } from '../components/HubPositionRankings';
 import { useSwitchSeason } from '../hooks/useSwitchSeason';
-import { LogOut, Calendar } from 'lucide-react';
+import { Calendar } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { formatHistoricalWeekRank } from '../logic/rankFormat';
 
@@ -74,7 +74,7 @@ export function UpcomingProjectionCard({
 
 export function HubPage() {
   const navigate = useNavigate();
-  const { leagueId, leagueName, leagueSeason, rootLeagueId, rosterId, teamName, reset } = useAppStore();
+  const { leagueId, leagueName, leagueSeason, rootLeagueId, rosterId, teamName } = useAppStore();
 
   const { data: league } = useLeague(leagueId);
   const { data: users } = useLeagueUsers(leagueId);
@@ -216,22 +216,11 @@ export function HubPage() {
     return (
       <div className="px-6 py-6 pb-24 max-w-lg mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="font-['Orbitron'] text-lg font-bold uppercase tracking-wider text-[#f0f0ff]">
-              {teamName}
-            </h1>
-            <p className="text-xs text-[#6b6e99] mt-0.5">{leagueName}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => { reset(); navigate('/'); }}
-              className="text-[#4a4d77] hover:text-[#f43f5e] transition-colors p-1"
-              title="Switch league"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
+        <div className="mb-6">
+          <h1 className="font-['Orbitron'] text-lg font-bold uppercase tracking-wider text-[#f0f0ff]">
+            {teamName}
+          </h1>
+          <p className="text-xs text-[#6b6e99] mt-0.5">{leagueName}</p>
         </div>
 
         {/* Season Picker */}
@@ -355,22 +344,11 @@ export function HubPage() {
   return (
     <div className="px-6 py-6 pb-24 max-w-lg mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="font-['Orbitron'] text-lg font-bold uppercase tracking-wider text-[#f0f0ff]">
-            {teamName}
-          </h1>
-          <p className="text-xs text-[#6b6e99] mt-0.5">{leagueName}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => { reset(); navigate('/'); }}
-            className="text-[#4a4d77] hover:text-[#f43f5e] transition-colors p-1"
-            title="Switch league"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
-        </div>
+      <div className="mb-6">
+        <h1 className="font-['Orbitron'] text-lg font-bold uppercase tracking-wider text-[#f0f0ff]">
+          {teamName}
+        </h1>
+        <p className="text-xs text-[#6b6e99] mt-0.5">{leagueName}</p>
       </div>
 
       {/* Season Picker */}
