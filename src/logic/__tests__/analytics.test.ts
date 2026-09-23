@@ -393,7 +393,7 @@ describe('projected lineup group rankings', () => {
       .toMatchObject({ points: 13, rank: 2, outOf: 3 });
   });
 
-  it('omits a configured group rather than ranking a missing projection as zero', () => {
+  it('keeps the configured group and treats an omitted/bye player projection as honest zero', () => {
     const rosters = [roster(1), roster(2), roster(3)];
     rosters[0].players = ['1-QB-a'];
     rosters[1].players = ['2-QB-a'];
@@ -413,8 +413,27 @@ describe('projected lineup group rankings', () => {
     const projections = projectAllTeams(rosters, weekly, qbLeague, elimination);
     const rankings = computeProjectedLineupGroupRanks(projections, weekly, qbLeague);
 
-    expect(rankings.byRosterId.size).toBe(0);
-    expect(rankings.unavailableGroups).toEqual(['QB']);
+    expect(rankings.byRosterId.get(1)?.[0]).toMatchObject({ group: 'QB', points: 20, rank: 1, outOf: 2 });
+    expect(rankings.byRosterId.get(2)?.[0]).toMatchObject({ group: 'QB', points: 0, rank: 2, outOf: 2 });
+    expect(rankings.unavailableGroups).toEqual([]);
+  });
+
+  it('ranks every configured fixed/flex/kicker/defense group for all active teams', () => {
+    const configuredLeague = { ...league, roster_positions: ['QB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'SUPER_FLEX', 'K', 'DEF'] };
+    const starters = (prefix: string, multiplier: number) => [
+      ['QB', 20], ['RB', 15], ['WR', 14], ['WR', 13], ['TE', 10], ['FLEX', 12], ['SFLEX', 11], ['K', 8], ['DEF', 0],
+    ].map(([position, points], index) => ({ playerId: `${prefix}-${position}-${index}`, position: position as string, proj: Number(points) * multiplier }));
+    const projections = [
+      { rosterId: 1, displayName: 'One', projPoints: 103, eliminated: false, projRank: 1, projOutOf: 2, risk: 'safe' as const, starters: starters('a', 1) },
+      { rosterId: 2, displayName: 'Two', projPoints: 51.5, eliminated: false, projRank: 2, projOutOf: 2, risk: 'warning' as const, starters: starters('b', 0.5) },
+      { rosterId: 3, displayName: 'Cut', projPoints: 999, eliminated: true, projRank: 0, projOutOf: 0, risk: 'at-risk' as const, starters: starters('c', 9) },
+    ];
+    const weekly = new Map([['endpoint-available', { playerId: 'endpoint-available', position: 'QB', points: 1 }]]);
+    const rankings = computeProjectedLineupGroupRanks(projections, weekly, configuredLeague);
+    expect(rankings.byRosterId.get(1)?.map((row) => row.group)).toEqual(['QB', 'RB', 'WR', 'TE', 'FLEX', 'SUPER_FLEX', 'K', 'DEF']);
+    expect(rankings.byRosterId.get(1)?.find((row) => row.group === 'WR')).toMatchObject({ slotCount: 2, points: 27, outOf: 2 });
+    expect(rankings.byRosterId.get(2)?.every((row) => row.outOf === 2)).toBe(true);
+    expect(rankings.byRosterId.has(3)).toBe(false);
   });
 });
 

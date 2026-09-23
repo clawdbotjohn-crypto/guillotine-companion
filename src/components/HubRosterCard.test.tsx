@@ -67,7 +67,7 @@ describe('HubRosterCard', () => {
     const starter = within(screen.getByTestId('roster-player-starter'));
     expect(starter.getByText('Starter Player')).toBeTruthy();
     expect(starter.getByText('Starter')).toBeTruthy();
-    expect(starter.getByText('Bye W5')).toBeTruthy();
+    expect(starter.getByText('Bye Wk 5')).toBeTruthy();
     expect(starter.getByText('Questionable')).toBeTruthy();
     expect(starter.getByLabelText('17.3 projected points')).toBeTruthy();
     expect(starter.getByText('$42')).toBeTruthy();

@@ -35,7 +35,6 @@ export interface WaiverPlayerRow {
   possibleStarterWeeks: number;
   suggestions: BidSuggestion[];
   predictedWinningBid: number;
-  predictedConfidence: 'low' | 'medium' | 'high';
 }
 
 export interface StarterPositionCounts {
@@ -296,11 +295,8 @@ export function predictedBidMultiplier(currentWeek: number): number {
   return 2 * (1 - seasonProgress);
 }
 
-function predictWinningBid(modeledValue: number, currentWeek: number): {
-  value: number;
-  confidence: 'low' | 'medium' | 'high';
-} {
-  return { value: Math.round(modeledValue * predictedBidMultiplier(currentWeek)), confidence: 'medium' };
+function predictWinningBid(modeledValue: number, currentWeek: number): number {
+  return Math.round(modeledValue * predictedBidMultiplier(currentWeek));
 }
 
 export function calculateRemainingFaab(budget: number, roster: Roster | undefined): number | null {
@@ -376,7 +372,7 @@ export function buildWaiverBoard(
       const safe = safeStrategy(base, ctx);
       const starterWeeks = projectedStarterWeeks(base, ctx);
       const weeks = weeksStarterStrategy(base, ctx);
-      const pred = predictWinningBid(weeks, ctx.currentWeek);
+      const predictedWinningBid = predictWinningBid(weeks, ctx.currentWeek);
       const playerVorp = calibration
         ? calculatePlayerVorp(sleeperRos?.get(p.playerId), calibration.replacementByPosition)
         : null;
@@ -398,11 +394,10 @@ export function buildWaiverBoard(
         suggestions: [
           mk('weeks-starter', 'Weeks-as-Starter', weeks, ctx.budget),
           mk('safe', 'Safe', safe, ctx.budget),
-          mk('aggressive', 'Aggressive', pred.value, ctx.budget),
+          mk('aggressive', 'Aggressive', predictedWinningBid, ctx.budget),
           mk('vorp', 'VoRP', vorp, ctx.budget),
         ],
-        predictedWinningBid: pred.value,
-        predictedConfidence: pred.confidence,
+        predictedWinningBid,
       });
     });
   }

@@ -3,6 +3,8 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { AlertTriangle, ShoppingCart, Info, RefreshCw } from 'lucide-react';
 import { Button, Card, Skeleton, PositionBadge } from '../components/ui';
 import { FaabOverBudgetWarning } from '../components/FaabOverBudgetWarning';
+import { ContextDisclosure } from '../components/ContextDisclosure';
+import { ByeWeekText } from '../components/ByeWeekText';
 import { useAppStore, usePlayers } from '../store';
 import {
   useLeague,
@@ -67,7 +69,7 @@ export function ReplacementTeamSelector({
         htmlFor="replacement-team-depth"
         className="block text-[10px] uppercase tracking-wider text-[#6b6e99] mb-1.5"
       >
-        Replacement/startable depth teams
+        VoRP team count
       </label>
       <select
         id="replacement-team-depth"
@@ -79,9 +81,11 @@ export function ReplacementTeamSelector({
           <option key={teams} value={teams}>{teams} teams</option>
         ))}
       </select>
-      <p className="mt-1.5 text-[10px] text-[#4a4d77]">
-        Defines the optimized lineup pool used to set replacement level.
-      </p>
+      <div className="mt-1.5">
+        <ContextDisclosure label="About VoRP team count" trigger={<span className="inline-flex items-center gap-1 text-[10px] text-[#6b6e99]"><Info size={12} /> What is this?</span>}>
+          Set the number of teams used for VoRP replacement calculations. In a 1-QB league, choosing 16 makes the 16th-best QB the approximate replacement baseline.
+        </ContextDisclosure>
+      </div>
     </section>
   );
 }
@@ -114,10 +118,13 @@ export function RankingSourceSelector({
           ))}
         </select>
       </div>
-      <p id="player-values-source-help" className="min-w-0 flex-1 text-[10px] leading-4 text-[#6b6e99]">
-        ROS sources: Sleeper projections, Fantasy Pros ECR, or FantasyCalc market values.
-        Next-week context always uses Sleeper.
-      </p>
+      <ContextDisclosure
+        label="About player value sources"
+        className="mb-2"
+        trigger={<Info size={14} className="text-[#6b6e99]" />}
+      >
+        <span id="player-values-source-help">Choose Sleeper projections, Fantasy Pros ECR, or FantasyCalc market values. Next-week context always uses Sleeper.</span>
+      </ContextDisclosure>
     </section>
   );
 }
@@ -179,21 +186,12 @@ export function PredictedWinningBidFooter({
   row,
 }: {
   strategy: StrategyKey;
-  row: Pick<WaiverPlayerRow, 'predictedWinningBid' | 'predictedConfidence'>;
+  row: Pick<WaiverPlayerRow, 'predictedWinningBid'>;
 }) {
   if (strategy === 'aggressive') return null;
   return (
-    <div className="flex items-center gap-1.5 text-[10px] text-[#6b6e99]">
-      <span>Predicted bid</span>
-      <span className="font-['Space_Mono'] text-[#f59e0b] tabular-nums">
-        ${row.predictedWinningBid}
-      </span>
-      <span aria-hidden="true">·</span>
-      <span className={row.predictedConfidence === 'high' ? 'text-[#10b981]'
-        : row.predictedConfidence === 'medium' ? 'text-[#f59e0b]'
-        : 'text-[#64748b]'}>
-        {row.predictedConfidence}
-      </span>
+    <div className="text-[9px] text-[#6b6e99]">
+      Predicted bid <span className="font-['Space_Mono'] text-[#f59e0b] tabular-nums">${row.predictedWinningBid}</span>
     </div>
   );
 }
@@ -205,7 +203,8 @@ export function WaiverPlayerCard({
   source,
   nflTeam,
   weeklyText,
-  byeText,
+  byeWeek,
+  currentWeek,
   injuryStatus,
   owner,
 }: {
@@ -215,69 +214,55 @@ export function WaiverPlayerCard({
   source: (typeof RANKING_SOURCES)[number];
   nflTeam?: string | null;
   weeklyText: string;
-  byeText: string;
+  byeWeek: number | null;
+  currentWeek: number;
   injuryStatus?: string | null;
   owner?: RosteredPlayerOwner;
 }) {
   const suggestion = row.suggestions.find((item) => item.strategy === strategy);
   if (!suggestion) return null;
   const sourceMetric = source.key === 'sleeper'
-    ? `${source.shortLabel} ${row.rosPoints.toFixed(1)} pts · ${row.projectedPointsPerWeek.toFixed(1)}/wk`
+    ? `${source.shortLabel}: ${row.rosPoints.toFixed(1)} rest-of-season points (${row.projectedPointsPerWeek.toFixed(1)} per week)`
     : source.key === 'fantasypros' && row.sourceRank != null
-      ? `${source.shortLabel} #${row.sourceRank}`
-      : `${source.shortLabel} ${row.sourceValue.toFixed(1)}`;
+      ? `${source.shortLabel}: overall rank ${row.sourceRank}`
+      : `${source.shortLabel}: value ${row.sourceValue.toFixed(1)}`;
+  const rankText = `${row.position} #${row.posRank}`;
 
   return (
     <Card hover={false} className={`p-2.5 ${owner ? 'border-[#4a4d77]' : ''}`}>
       <article aria-disabled={owner ? 'true' : undefined} aria-label={`${row.name}, ${owner ? `rostered by ${owner.ownerName}` : 'available'}`}>
         <div className="flex items-start justify-between gap-2">
           <div className="flex min-w-0 items-start gap-2">
-            <PositionBadge position={row.position} />
+            <PositionBadge position={row.position} className="shrink-0 px-2 py-1 text-sm" />
             <div className="min-w-0">
               <div className="flex min-w-0 items-center gap-1.5">
                 <span className="truncate text-sm font-semibold text-[#f0f0ff]">{row.name}</span>
-                {owner ? (
-                  <span className="shrink-0 rounded bg-[rgba(100,116,139,0.18)] px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-[#94a3b8]">
-                    Rostered
-                  </span>
-                ) : null}
+                {injuryStatus ? <span className="shrink-0 rounded bg-[rgba(245,158,11,0.15)] px-1.5 text-[9px] font-semibold uppercase text-[#f59e0b]">{injuryStatus}</span> : null}
+                {owner ? <span className="shrink-0 rounded bg-[rgba(100,116,139,0.18)] px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-[#94a3b8]">Rostered</span> : null}
               </div>
-              <div className="text-[10px] font-['Space_Mono'] text-[#6b6e99]">
-                {row.position}{nflTeam ? ` · ${nflTeam}` : ''}
-                {owner ? ` · Owner: ${owner.ownerName}` : ''}
+              <div className="mt-0.5 flex items-center gap-1 text-[10px] font-['Space_Mono'] text-[#6b6e99]">
+                <ContextDisclosure label={`Show ${rankText} rest-of-season ranking details`} trigger={<span className="underline decoration-dotted underline-offset-2">{rankText}</span>}>
+                  {sourceMetric}. League-wide positional rank {rankText}.
+                </ContextDisclosure>
+                <span aria-hidden="true">•</span><span>{nflTeam ?? 'Team unavailable'}</span>
+                <span aria-hidden="true">•</span><ByeWeekText byeWeek={byeWeek} currentWeek={currentWeek} />
               </div>
+              {owner ? <div className="text-[9px] text-[#6b6e99]">Owner: {owner.ownerName}</div> : null}
             </div>
           </div>
           <div className="shrink-0 text-right">
             <div className="flex items-center justify-end gap-1 font-['Space_Mono'] text-base font-bold tabular-nums text-[#10b981]">
-              {!owner && remainingFaab != null && suggestion.value != null && suggestion.value > remainingFaab
-                ? <FaabOverBudgetWarning />
-                : null}
+              {!owner && remainingFaab != null && suggestion.value != null && suggestion.value > remainingFaab ? <FaabOverBudgetWarning /> : null}
               <span>{suggestion.value == null ? 'Unavailable' : `$${suggestion.value}`}</span>
             </div>
-            <div className="text-[8px] uppercase tracking-wide text-[#6b6e99]">
-              {suggestion.pctOfBudget == null
-                ? 'Sleeper ROS required'
-                : `${suggestion.pctOfBudget.toFixed(0)}% · ${suggestion.label}`}
-            </div>
+            <div className="text-[9px] font-['Space_Mono'] text-[#6b6e99]">{suggestion.pctOfBudget == null ? 'Sleeper ROS required' : `${suggestion.pctOfBudget.toFixed(0)}%`}</div>
+            <PredictedWinningBidFooter strategy={strategy} row={row} />
           </div>
         </div>
-
-        <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] leading-4 text-[#8b8ec7]">
-          <span>{row.position}#{row.posRank} · {sourceMetric}</span>
-          <span>{row.starterWeeks}/{row.possibleStarterWeeks} starter wks</span>
-        </div>
-        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] leading-4 text-[#8b8ec7]">
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[10px] leading-4 text-[#8b8ec7]">
           <span>{weeklyText}</span>
-          <span aria-hidden="true">·</span>
-          <span>{byeText}</span>
-          {injuryStatus ? (
-            <span className="rounded bg-[rgba(245,158,11,0.15)] px-1.5 text-[9px] font-semibold uppercase text-[#f59e0b]">
-              {injuryStatus}
-            </span>
-          ) : null}
+          {strategy === 'weeks-starter' ? <span>{row.starterWeeks}/{row.possibleStarterWeeks} starter wks</span> : null}
         </div>
-        <PredictedWinningBidFooter strategy={strategy} row={row} />
       </article>
     </Card>
   );
@@ -664,11 +649,6 @@ export function WaiversPage() {
           const player = playersQuery.data?.get(row.playerId);
           const weekly = weeklyContext.get(row.playerId);
           const byeWeek = getTeamByeWeek(league!.season, player?.team);
-          const byeText = byeWeek == null
-            ? 'Bye unavailable'
-            : byeWeek < ctx.currentWeek
-              ? `Bye passed (W${byeWeek})`
-              : `Bye W${byeWeek}`;
           const isUpcomingBye = byeWeek != null && projectionStartWeek != null && byeWeek === projectionStartWeek;
           const weeklyText = isUpcomingBye
             ? 'Next week: Bye'
@@ -684,7 +664,8 @@ export function WaiversPage() {
               source={sourceInfo}
               nflTeam={player?.team}
               weeklyText={weeklyText}
-              byeText={byeText}
+              byeWeek={byeWeek}
+              currentWeek={ctx.currentWeek}
               injuryStatus={player?.injury_status}
               owner={ownership.get(row.playerId)}
             />

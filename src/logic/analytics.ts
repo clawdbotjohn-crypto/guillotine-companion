@@ -275,10 +275,9 @@ function starterGroup(position: string): ProjectedLineupGroup | null {
 
 /**
  * Rank actual optimized lineup assignments by configured slot group. Duplicate fixed/flex slots
- * are aggregated into one position-strength row (for example, two assigned RB slots become
- * `RB ×2`). A row is only ranked when every active team has every configured assignment and each
- * assignment has a real entry in the same weekly projection map used by `projectAllTeams`.
- * This keeps the denominator equal to all active teams without treating missing data as zero.
+ * are aggregated into one position-strength row. Once the weekly endpoint is available, every
+ * configured group is ranked across every active team. Players omitted by Sleeper (including bye
+ * weeks) and unfilled assignments honestly contribute zero, matching `projectBestLineup`.
  */
 export function computeProjectedLineupGroupRanks(
   teamProjections: readonly TeamProjection[],
@@ -305,20 +304,14 @@ export function computeProjectedLineupGroupRanks(
     const slotCount = slots[group];
     const candidates = activeTeams.map((team) => {
       const assigned = team.starters.filter((starter) => starterGroup(starter.position) === group);
-      const complete = assigned.length === slotCount
-        && assigned.every((starter) => weeklyProjections.has(starter.playerId)
-          && Number.isFinite(starter.proj));
       return {
         rosterId: team.rosterId,
-        complete,
-        points: assigned.reduce((sum, starter) => sum + starter.proj, 0),
+        points: assigned.reduce(
+          (sum, starter) => sum + (Number.isFinite(starter.proj) ? starter.proj : 0),
+          0,
+        ),
       };
     });
-
-    if (candidates.some((candidate) => !candidate.complete)) {
-      unavailableGroups.push(group);
-      continue;
-    }
 
     candidates
       .sort((a, b) => b.points - a.points || a.rosterId - b.rosterId)

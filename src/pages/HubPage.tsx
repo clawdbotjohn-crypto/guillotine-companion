@@ -35,35 +35,33 @@ import { HubPositionRankings } from '../components/HubPositionRankings';
 import { useSwitchSeason } from '../hooks/useSwitchSeason';
 import { LogOut, Calendar } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { formatHistoricalWeekRank, ordinal } from '../logic/rankFormat';
 
 export function UpcomingProjectionCard({
-  week,
-  projection,
-  isLoading = false,
-  unavailableReason,
+  week, projection, allRosterRank, allRosterCount, isLoading = false, unavailableReason,
 }: {
   week: number | null;
   projection: TeamProjection | undefined;
+  allRosterRank?: number;
+  allRosterCount?: number;
   isLoading?: boolean;
   unavailableReason?: string;
 }) {
   const points = projection?.projPoints;
   const value = isLoading ? 'Loading…' : points == null ? 'Unavailable' : points.toFixed(1);
-
   return (
     <Card hover={false} className="p-4 mb-3">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#6b6e99] mb-1">
-        Projected Team Points
-      </div>
-      <div className="text-2xl font-bold font-['Space_Mono'] tabular-nums text-[#a5b4fc]">
-        {value}
-      </div>
-      <div className="text-xs text-[#4a4d77] mt-1">
-        {week == null ? 'NFL week unavailable' : `NFL Week ${week}`} · Sleeper weekly projections
-      </div>
-      {!isLoading && points == null && unavailableReason && (
-        <p className="text-[10px] text-[#6b6e99] mt-2">{unavailableReason}</p>
-      )}
+      <h2 className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#6b6e99] mb-1">
+        {week == null ? 'Projected points' : `Week ${week} projected points`}
+      </h2>
+      <div className="text-2xl font-bold font-['Space_Mono'] tabular-nums text-[#a5b4fc]">{value}</div>
+      {allRosterRank && allRosterCount ? (
+        <div className="mt-1 text-xs text-[#6b6e99]" aria-label={`Projection rank ${allRosterRank} of ${allRosterCount} original rosters`}>
+          {ordinal(allRosterRank)}/{allRosterCount} among original rosters
+        </div>
+      ) : null}
+      <span className="sr-only">Sleeper weekly projections</span>
+      {!isLoading && points == null && unavailableReason && <p className="text-[10px] text-[#6b6e99] mt-2">{unavailableReason}</p>}
     </Card>
   );
 }
@@ -138,6 +136,10 @@ export function HubPage() {
     : null;
   const projections = projectAllTeams(rosters, weeklyScoredPlayers, league, elimResult);
   const myProjection = projections.find((team) => team.rosterId === rosterId);
+  const allRosterProjectionOrder = projections
+    .filter((team) => team.projPoints != null)
+    .sort((a, b) => (b.projPoints ?? 0) - (a.projPoints ?? 0) || a.rosterId - b.rosterId);
+  const allRosterProjectionRank = allRosterProjectionOrder.findIndex((team) => team.rosterId === rosterId) + 1;
   const projectionLoading = nflStateQuery.isLoading
     || (projectionWeek != null && weeklyProjectionQuery.isLoading);
   const projectionUnavailableReason = projectionLoading
@@ -265,6 +267,8 @@ export function HubPage() {
         <UpcomingProjectionCard
           week={projectionWeek}
           projection={myProjection}
+          allRosterRank={allRosterProjectionRank || undefined}
+          allRosterCount={allRosterProjectionOrder.length || undefined}
           isLoading={projectionLoading}
           unavailableReason={projectionUnavailableReason}
         />
@@ -385,6 +389,8 @@ export function HubPage() {
       <UpcomingProjectionCard
         week={projectionWeek}
         projection={myProjection}
+        allRosterRank={allRosterProjectionRank || undefined}
+        allRosterCount={allRosterProjectionOrder.length || undefined}
         isLoading={projectionLoading}
         unavailableReason={projectionUnavailableReason}
       />
@@ -421,9 +427,9 @@ export function HubPage() {
           subtext={`${elimResult.weeks.length} weeks`}
         />
         <StatCard
-          label="Last Score"
+          label="Last Week Score"
           value={myLastScore?.points.toFixed(1) || '—'}
-          subtext={myLastScore ? `Wk ${lastWeek.week}` : undefined}
+          subtext={myLastScore ? `${formatHistoricalWeekRank(myLastScore.rank, lastWeek.teamsRemaining)} · Wk ${lastWeek.week}` : undefined}
         />
       </div>
 

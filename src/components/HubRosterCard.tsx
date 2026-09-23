@@ -1,4 +1,5 @@
 import { Card, PositionBadge } from './ui';
+import { ByeWeekText } from './ByeWeekText';
 import type { HubRosterRow } from '../logic/hubRoster';
 
 function playerStatusLabels(row: HubRosterRow): string[] {
@@ -26,7 +27,7 @@ function RosterPlayerRow({ row, week }: { row: HubRosterRow; week: number | null
           <span aria-hidden="true">·</span>
           <span>{row.team ?? 'Team unavailable'}</span>
           <span aria-hidden="true">·</span>
-          <span>{row.byeWeek == null ? 'Bye unavailable' : `Bye W${row.byeWeek}`}</span>
+          <ByeWeekText byeWeek={row.byeWeek} currentWeek={week} />
           {statusLabels.map((label) => (
             <span
               key={label}

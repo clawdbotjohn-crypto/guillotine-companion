@@ -1,45 +1,29 @@
 /* @vitest-environment jsdom */
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { HubPositionRankings } from './HubPositionRankings';
 
 describe('HubPositionRankings', () => {
-  it('renders compact, accessible active-team ranks and understandable duplicate labels', () => {
-    render(
-      <HubPositionRankings
-        week={7}
-        rows={[
-          { group: 'RB', slotCount: 2, points: 34, rank: 2, outOf: 3 },
-          { group: 'FLEX', slotCount: 1, points: 14, rank: 1, outOf: 3 },
-          { group: 'SUPER_FLEX', slotCount: 1, points: 13, rank: 3, outOf: 3 },
-        ]}
-        unavailableGroups={['K']}
-      />,
-    );
-
-    expect(screen.getByRole('heading', { name: 'Projected Lineup Strength' })).toBeTruthy();
-    expect(screen.getByText('NFL Week 7 · Sleeper')).toBeTruthy();
-    expect(screen.getByText('RB ×2')).toBeTruthy();
+  it('uses aggregated labels, compact ranks, and accessible point disclosures without duplicate chrome', () => {
+    render(<HubPositionRankings week={7} rows={[
+      { group: 'RB', slotCount: 2, points: 34, rank: 2, outOf: 3 },
+      { group: 'FLEX', slotCount: 1, points: 14, rank: 1, outOf: 3 },
+      { group: 'SUPER_FLEX', slotCount: 1, points: 13, rank: 3, outOf: 3 },
+    ]} />);
+    expect(screen.getByText('RB')).toBeTruthy();
+    expect(screen.queryByText(/RB ×2/)).toBeNull();
     expect(screen.getByText('2/3')).toBeTruthy();
-    expect(screen.queryByText('#2 of 3 active')).toBeNull();
-    expect(screen.getByText('Super Flex')).toBeTruthy();
-    expect(screen.getByLabelText('RB ×2: 34.0 projected points for NFL Week 7, rank 2 of 3 active teams')).toBeTruthy();
-    expect(screen.getByLabelText('Super Flex: 13.0 projected points for NFL Week 7, rank 3 of 3 active teams')).toBeTruthy();
-    expect(screen.getByText('Complete weekly projections unavailable for: K.')).toBeTruthy();
+    expect(screen.queryByText(/Active teams|NFL Week 7 · Sleeper/)).toBeNull();
+    const button = screen.getByRole('button', { name: 'Show RB projected lineup details' });
+    fireEvent.click(button);
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText(/RB \(2 lineup slots\): 34.0 projected points/)).toBeTruthy();
   });
 
   it('shows an honest unavailable state without a fabricated rank', () => {
-    render(
-      <HubPositionRankings
-        week={null}
-        rows={[]}
-        unavailableGroups={['QB']}
-        unavailableReason="Complete weekly projections are not available for every active lineup."
-      />,
-    );
-
+    render(<HubPositionRankings week={null} rows={[]} unavailableGroups={['QB']} unavailableReason="The endpoint is unavailable." />);
     expect(screen.getByText('Projected position rankings unavailable.')).toBeTruthy();
-    expect(screen.getByText('Complete weekly projections are not available for every active lineup.')).toBeTruthy();
-    expect(screen.queryByText(/#\d+ of \d+ active/)).toBeNull();
+    expect(screen.getByText('The endpoint is unavailable.')).toBeTruthy();
+    expect(screen.queryByText(/\d+\/\d+/)).toBeNull();
   });
 });

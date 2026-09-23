@@ -1,21 +1,10 @@
 import type { ProjectedLineupGroup, ProjectedLineupGroupRank } from '../logic';
 import { Card } from './ui';
+import { ContextDisclosure } from './ContextDisclosure';
 
 const GROUP_LABELS: Record<ProjectedLineupGroup, string> = {
-  QB: 'QB',
-  RB: 'RB',
-  WR: 'WR',
-  TE: 'TE',
-  FLEX: 'Flex',
-  SUPER_FLEX: 'Super Flex',
-  K: 'K',
-  DEF: 'DEF',
+  QB: 'QB', RB: 'RB', WR: 'WR', TE: 'TE', FLEX: 'Flex', SUPER_FLEX: 'Super Flex', K: 'K', DEF: 'DEF',
 };
-
-function groupLabel(group: ProjectedLineupGroup, slotCount: number): string {
-  const label = GROUP_LABELS[group];
-  return slotCount > 1 ? `${label} ×${slotCount}` : label;
-}
 
 function rankColor(rank: number, outOf: number): string {
   if (outOf <= 1) return '#a5b4fc';
@@ -26,11 +15,7 @@ function rankColor(rank: number, outOf: number): string {
 }
 
 export function HubPositionRankings({
-  rows,
-  week,
-  isLoading = false,
-  unavailableGroups = [],
-  unavailableReason,
+  rows, week, isLoading = false, unavailableGroups = [], unavailableReason,
 }: {
   rows: ProjectedLineupGroupRank[];
   week: number | null;
@@ -39,73 +24,36 @@ export function HubPositionRankings({
   unavailableReason?: string;
 }) {
   const hasRows = rows.length > 0;
-  const omittedLabels = unavailableGroups.map((group) => GROUP_LABELS[group]).join(', ');
-
   return (
     <Card hover={false} className="p-4 mb-6">
       <section aria-labelledby="projected-position-rankings-heading">
-        <div className="flex items-start justify-between gap-3 mb-3">
-          <div>
-            <h2
-              id="projected-position-rankings-heading"
-              className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#6b6e99]"
-            >
-              Projected Lineup Strength
-            </h2>
-            <p className="text-[10px] text-[#4a4d77] mt-1">
-              {week == null ? 'NFL week unavailable' : `NFL Week ${week}`} · Sleeper
-            </p>
-          </div>
-          {hasRows && (
-            <span className="text-[9px] uppercase tracking-wider text-[#4a4d77] shrink-0">
-              Active teams
-            </span>
-          )}
-        </div>
-
+        <h2 id="projected-position-rankings-heading" className="mb-3 text-[10px] font-semibold uppercase tracking-[0.15em] text-[#6b6e99]">
+          Projected Lineup Strength
+        </h2>
         {isLoading ? (
           <p className="text-xs text-[#6b6e99]" role="status">Loading projected position ranks…</p>
         ) : hasRows ? (
-          <>
-            <div className="grid grid-cols-2 gap-2">
-              {rows.map((row) => {
-                const label = groupLabel(row.group, row.slotCount);
-                return (
-                  <div
-                    key={row.group}
-                    className="min-w-0 rounded-lg border border-[#1a1e3a] bg-[#0a0d1a] px-3 py-2.5"
-                    aria-label={`${label}: ${row.points.toFixed(1)} projected points for ${week == null ? 'the upcoming NFL week' : `NFL Week ${week}`}, rank ${row.rank} of ${row.outOf} active teams`}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {rows.map((row) => {
+              const label = GROUP_LABELS[row.group];
+              const detail = `${label}${row.slotCount > 1 ? ` (${row.slotCount} lineup slots)` : ''}: ${row.points.toFixed(1)} projected points for ${week == null ? 'the upcoming NFL week' : `NFL Week ${week}`}; rank ${row.rank} of ${row.outOf} active teams`;
+              return (
+                <div key={row.group} className="min-w-0 rounded-lg border border-[#1a1e3a] bg-[#0a0d1a] px-3 py-2">
+                  <ContextDisclosure
+                    label={`Show ${label} projected lineup details`}
+                    trigger={<span className="flex items-center gap-2"><span className="text-[10px] font-semibold uppercase tracking-wider text-[#a5b4fc]">{label}</span><span className="font-['Space_Mono'] text-xs font-bold tabular-nums" style={{ color: rankColor(row.rank, row.outOf) }}>{row.rank}/{row.outOf}</span></span>}
                   >
-                    <div className="flex items-baseline justify-between gap-2">
-                      <span className="truncate text-[10px] font-semibold uppercase tracking-wider text-[#a5b4fc]">
-                        {label}
-                      </span>
-                      <span className="font-['Space_Mono'] text-[10px] tabular-nums text-[#6b6e99] shrink-0">
-                        {row.points.toFixed(1)} pts
-                      </span>
-                    </div>
-                    <div
-                      className="mt-1 font-['Space_Mono'] text-xs font-bold tabular-nums"
-                      style={{ color: rankColor(row.rank, row.outOf) }}
-                    >
-                      {row.rank}/{row.outOf}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            {unavailableGroups.length > 0 && (
-              <p className="mt-2 text-[10px] text-[#6b6e99]">
-                Complete weekly projections unavailable for: {omittedLabels}.
-              </p>
-            )}
-          </>
+                    {detail}
+                  </ContextDisclosure>
+                </div>
+              );
+            })}
+          </div>
         ) : (
           <div role="status">
             <p className="text-xs text-[#6b6e99]">Projected position rankings unavailable.</p>
-            {unavailableReason && (
-              <p className="mt-1 text-[10px] text-[#4a4d77]">{unavailableReason}</p>
-            )}
+            {unavailableReason && <p className="mt-1 text-[10px] text-[#4a4d77]">{unavailableReason}</p>}
+            {unavailableGroups.length > 0 && <span className="sr-only">Unavailable groups: {unavailableGroups.map((group) => GROUP_LABELS[group]).join(', ')}</span>}
           </div>
         )}
       </section>
