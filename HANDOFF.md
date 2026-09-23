@@ -1,3 +1,16 @@
+# Follow-up — Active-Only Current Team Rankings (2026-09-22)
+
+- **Timestamp / status:** 2026-09-22 17:01 PDT — COMPLETE on `feat/waiver-ranking-sources` for existing open PR #7.
+- **Exact semantics:** Hub **Current Rank** now comes from the same projected best-lineup model as Teams Projected and renders projected survivor rank / active count. Teams Projected ranks survivors only and derives SAFE/MIDDLE/AT RISK from that projected order. Teams Historical recomputes cumulative points among survivors only and derives the badge/icon from historical order (bottom `elimsPerWeek` AT RISK, next `elimsPerWeek` MIDDLE, rest SAFE). Eliminated teams stay below survivors, render ELIMINATED, receive no projected/historical current standing, and cannot affect either risk pool. Equal metrics use ascending roster ID.
+- **Regression:** realistic 32-original / 28-active fixture recreates a survivor formerly shown `#29/32`; proves projected/historical maximum `#28/28`, mode-specific ordering and status (`SAFE` projected vs `AT RISK` historical), Hub projected rank `1/28`, exact bottom-two/next-two bands, and no eliminated current ranks.
+- **Files changed:** `src/logic/analytics.ts`, `src/logic/index.ts`, `src/logic/__tests__/analytics.test.ts`, `src/pages/HubPage.tsx`, `src/pages/HubPage.test.ts`, `src/pages/TeamsPage.tsx`, `src/pages/TeamsPage.test.tsx`. No Waivers/VoRP files changed; commit `74d2387` behavior and VoRP-only controls are preserved.
+- **Commit / push:** `36ccdb2` (`Fix active-only projected team standings`) pushed only to `origin/feat/waiver-ranking-sources`; local and remote heads match. PR #7 remains OPEN and MERGEABLE against `main`; it was not merged.
+- **Verification:** focused **3 files / 8 tests passed**; full **11 files / 59 tests passed**; lint **0 warnings / 0 errors**; TypeScript + Vite production build passed (2,467 modules); `git diff --check` passed; scope review found only the seven files above.
+- **Preview / checks:** no browser preview was independently exercised in this implementation session. Fresh PR `build` and Azure `Build and Deploy` checks were pending at handoff; no deploy/workflow was manually triggered.
+- **Safety:** no main/master push, merge, force-push, production deploy, `gh workflow run`, `workflow_dispatch`, Discord post, or global `PROGRESS.md` update.
+
+---
+
 # Follow-up — Post-Elimination Active-Team Count (2026-09-22)
 
 - **Status:** COMPLETE on PR #7 branch.
