@@ -77,6 +77,20 @@ describe('Teams current standings', () => {
     expect(screen.queryByText('Safe')).toBeNull();
   });
 
+  it('shows an honest projected-state message when Sleeper weekly data is unavailable', () => {
+    render(
+      <TeamStandingDetails
+        team={{ ...projectedTeam, projPoints: null, projRank: 0, projOutOf: 0 }}
+        historical={historicalStanding}
+        orderBy="projected"
+      />,
+    );
+
+    expect(screen.getByText('Sleeper projection unavailable')).toBeTruthy();
+    expect(screen.queryByText(/150\.0 pts/)).toBeNull();
+    expect(screen.queryByText('Safe')).toBeNull();
+  });
+
   it('keeps eliminated teams last without displaying a stale current rank', () => {
     const eliminated: TeamProjection = {
       ...projectedTeam,

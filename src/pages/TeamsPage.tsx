@@ -7,10 +7,21 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore, usePlayers } from '../store';
-import { useLeague, useLeagueUsers, useRosters, useAllMatchups, useLeagueHistory } from '../api';
+import { getPlayerPosition } from '../store/players';
 import {
+  useLeague,
+  useLeagueUsers,
+  useRosters,
+  useAllMatchups,
+  useLeagueHistory,
+  useNflState,
+  useWeeklyProjections,
+} from '../api';
+import {
+  buildWeeklyScoredPlayers,
   computeEliminations,
-  buildPlayerSeasons,
+  getProjectionScoring,
+  getRestOfSeasonStartWeek,
   projectAllTeams,
   computePositionGroupRanks,
   computeHistoricalRanks,
@@ -47,6 +58,9 @@ export function TeamStandingDetails({
   orderBy: TeamOrder;
 }) {
   if (team.eliminated) return <StatusBadge status="eliminated" />;
+  if (orderBy === 'projected' && team.projPoints == null) {
+    return <span className="text-[10px] text-[#6b6e99]">Sleeper projection unavailable</span>;
+  }
 
   const status = orderBy === 'projected' ? team.risk : historical?.risk ?? 'middle';
   const rank = orderBy === 'projected' ? team.projRank : historical?.rank;
@@ -79,6 +93,15 @@ export function TeamsPage() {
   const { isLoading: playersLoading } = usePlayers();
   const { data: matchups, isLoading: matchupsLoading } = useAllMatchups(leagueId, 18);
   const { data: leagueHistory, isLoading: historyLoading } = useLeagueHistory(rootLeagueId);
+  const nflStateQuery = useNflState();
+  const projectionWeek = league && nflStateQuery.data && league.season === nflStateQuery.data.season
+    ? getRestOfSeasonStartWeek(nflStateQuery.data)
+    : null;
+  const weeklyProjectionQuery = useWeeklyProjections(
+    league?.season ?? null,
+    projectionWeek,
+    projectionWeek != null,
+  );
   const handleSwitchSeason = useSwitchSeason();
 
   const [orderBy, setOrderBy] = useState<TeamOrder>('projected');
@@ -93,8 +116,14 @@ export function TeamsPage() {
   const model = useMemo(() => {
     if (!matchups || !rosters || !users) return null;
     const elim = computeEliminations(matchups, rosters, users);
-    const playerSeasons = buildPlayerSeasons(matchups);
-    const projections = projectAllTeams(rosters, playerSeasons, league, elim);
+    const weeklyScoredPlayers = weeklyProjectionQuery.data
+      ? buildWeeklyScoredPlayers(
+          weeklyProjectionQuery.data,
+          getProjectionScoring(league?.scoring_settings?.rec),
+          getPlayerPosition,
+        )
+      : null;
+    const projections = projectAllTeams(rosters, weeklyScoredPlayers, league, elim);
     const activeRosterIds = new Set(
       [...elim.teams.values()]
         .filter((team) => team.eliminatedWeek == null)
@@ -103,7 +132,7 @@ export function TeamsPage() {
     const posRanks = computePositionGroupRanks(matchups, league, activeRosterIds);
     const histRanks = computeHistoricalRanks(elim);
     return { elim, projections, posRanks, histRanks };
-  }, [matchups, rosters, users, league]);
+  }, [matchups, rosters, users, league, weeklyProjectionQuery.data]);
 
   if (!leagueId) {
     return (
@@ -146,7 +175,7 @@ export function TeamsPage() {
 
       {/* Order toggle */}
       {hasScores && (
-        <div className="flex gap-1 bg-[#0a0d1a] rounded-lg p-1 mb-4 w-fit">
+        <div className="flex gap-1 bg-[#0a0d1a] rounded-lg p-1 mb-2 w-fit">
           {(['projected', 'historical'] as const).map((o) => (
             <button
               key={o}
@@ -161,6 +190,16 @@ export function TeamsPage() {
             </button>
           ))}
         </div>
+      )}
+
+      {hasScores && orderBy === 'projected' && (
+        <p className="text-[10px] text-[#4a4d77] mb-4">
+          {weeklyProjectionQuery.isLoading || nflStateQuery.isLoading
+            ? 'Loading Sleeper weekly projections…'
+            : projectionWeek != null && projections.some((team) => team.projPoints != null)
+              ? `NFL Week ${projectionWeek} · Sleeper weekly projections`
+              : 'Sleeper weekly projections unavailable for this scoring week.'}
+        </p>
       )}
 
       {!hasScores && (

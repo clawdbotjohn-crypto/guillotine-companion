@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { League, Matchup, Roster, SleeperUser } from '../../api/types';
 import {
-  buildPlayerSeasons,
   computeHistoricalRanks,
   computePositionGroupRanks,
   formatProjectedCurrentRank,
@@ -115,6 +114,59 @@ describe('computePositionGroupRanks', () => {
   });
 });
 
+describe('Sleeper weekly best-lineup projections', () => {
+  it('optimizes fixed and flex slots once for both team score and projected rank', () => {
+    const rosters = [roster(1), roster(2), roster(3)];
+    rosters[0].players = ['1-RB-a', '1-RB-b', '1-WR-a'];
+    rosters[1].players = ['2-RB-a', '2-WR-a'];
+    rosters[2].players = ['3-RB-a', '3-WR-a'];
+    const users = [user(1), user(2), user(3)];
+    const matchups = new Map<number, Matchup[]>([[1, [
+      matchup(1, 100, [1, 1, 1, 1, 1, 1, 1]),
+      matchup(2, 90, [99, 99, 99, 99, 99, 99, 99]),
+      matchup(3, 1, [500, 500, 500, 500, 500, 500, 500]),
+    ]]]);
+    const elimination = computeEliminations(matchups, rosters, users);
+    const weekly = new Map([
+      ['1-RB-a', { playerId: '1-RB-a', position: 'RB', points: 20 }],
+      ['1-RB-b', { playerId: '1-RB-b', position: 'RB', points: 15 }],
+      ['1-WR-a', { playerId: '1-WR-a', position: 'WR', points: 19 }],
+      ['2-RB-a', { playerId: '2-RB-a', position: 'RB', points: 17 }],
+      ['2-WR-a', { playerId: '2-WR-a', position: 'WR', points: 16 }],
+      ['3-RB-a', { playerId: '3-RB-a', position: 'RB', points: 100 }],
+    ]);
+    const projections = projectAllTeams(
+      rosters,
+      weekly,
+      { ...league, roster_positions: ['RB', 'FLEX'] },
+      elimination,
+    );
+    const team1 = projections.find((team) => team.rosterId === 1)!;
+
+    expect(team1.projPoints).toBe(39);
+    expect(team1.starters).toEqual([
+      { playerId: '1-RB-a', position: 'RB', proj: 20 },
+      { playerId: '1-WR-a', position: 'FLEX', proj: 19 },
+    ]);
+    expect(team1).toMatchObject({ projRank: 1, projOutOf: 2, risk: 'middle' });
+  });
+
+  it('keeps score and rank unavailable without a usable weekly payload', () => {
+    const rosters = [roster(1), roster(2)];
+    const users = [user(1), user(2)];
+    const matchups = new Map<number, Matchup[]>([[1, [
+      matchup(1, 100, [50, 50, 50, 50, 50, 50, 50]),
+      matchup(2, 90, [40, 40, 40, 40, 40, 40, 40]),
+    ]]]);
+    const elimination = computeEliminations(matchups, rosters, users);
+
+    const projections = projectAllTeams(rosters, null, league, elimination);
+
+    expect(projections.every((team) => team.projPoints == null)).toBe(true);
+    expect(projections.every((team) => team.projRank === 0 && team.projOutOf === 0)).toBe(true);
+  });
+});
+
 describe('current team ranking semantics', () => {
   it('keeps projected and historical standings active-only and mode-specific in a 32-to-28 league', () => {
     const rosters: Roster[] = Array.from({ length: 32 }, (_, index) => {
@@ -173,9 +225,19 @@ describe('current team ranking semantics', () => {
     };
 
     const elimination = computeEliminations(matchups, rosters, users);
+    const weeklyProjections = new Map(
+      rosters.map((entry) => {
+        const playerId = `${entry.roster_id}-QB`;
+        return [playerId, {
+          playerId,
+          position: 'QB',
+          points: projectedPoints(entry.roster_id),
+        }];
+      }),
+    );
     const projections = projectAllTeams(
       rosters,
-      buildPlayerSeasons(matchups),
+      weeklyProjections,
       rankingLeague,
       elimination,
     );

@@ -16,10 +16,13 @@ export interface RosPlayerProjection {
   sourceRank?: number;
 }
 
-export interface WeeklyPlayerProjection {
+export interface WeeklyScoredPlayer {
   playerId: string;
   position: string;
   points: number;
+}
+
+export interface WeeklyPlayerProjection extends WeeklyScoredPlayer {
   positionRank: number;
 }
 
@@ -90,6 +93,22 @@ export function sumRestOfSeasonProjections(
   return result;
 }
 
+/** Select the league-scoring projection for every usable player in one Sleeper week. */
+export function buildWeeklyScoredPlayers(
+  projections: WeeklyProjectionMap,
+  scoring: ProjectionScoring,
+  getPosition: (playerId: string) => string | undefined,
+): Map<string, WeeklyScoredPlayer> {
+  const scored = new Map<string, WeeklyScoredPlayer>();
+  for (const [playerId, projection] of Object.entries(projections)) {
+    const position = getPosition(playerId);
+    const points = getProjectionPoints(projection, scoring);
+    if (!position || points == null) continue;
+    scored.set(playerId, { playerId, position, points });
+  }
+  return scored;
+}
+
 /**
  * Build next-week context from every scored player in Sleeper's payload before any roster or
  * availability filtering. Ties are deterministic by player ID.
@@ -99,14 +118,12 @@ export function buildWeeklyProjectionContext(
   scoring: ProjectionScoring,
   getPosition: (playerId: string) => string | undefined,
 ): Map<string, WeeklyPlayerProjection> {
-  const byPosition = new Map<string, Array<{ playerId: string; points: number }>>();
-  for (const [playerId, projection] of Object.entries(projections)) {
-    const position = getPosition(playerId);
-    const points = getProjectionPoints(projection, scoring);
-    if (!position || points == null || !['QB', 'RB', 'WR', 'TE'].includes(position)) continue;
-    const players = byPosition.get(position) ?? [];
-    players.push({ playerId, points });
-    byPosition.set(position, players);
+  const byPosition = new Map<string, WeeklyScoredPlayer[]>();
+  for (const player of buildWeeklyScoredPlayers(projections, scoring, getPosition).values()) {
+    if (!['QB', 'RB', 'WR', 'TE'].includes(player.position)) continue;
+    const players = byPosition.get(player.position) ?? [];
+    players.push(player);
+    byPosition.set(player.position, players);
   }
 
   const context = new Map<string, WeeklyPlayerProjection>();
