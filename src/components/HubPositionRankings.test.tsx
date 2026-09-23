@@ -15,8 +15,17 @@ describe('HubPositionRankings', () => {
     expect(screen.getByText('2/3')).toBeTruthy();
     expect(screen.queryByText(/Active teams|NFL Week 7 · Sleeper/)).toBeNull();
     const button = screen.getByRole('button', { name: 'Show RB projected lineup details' });
+    const tooltip = document.getElementById(button.getAttribute('aria-controls')!)!;
+    expect(tooltip.className).toContain('hidden');
+    fireEvent.mouseEnter(button.parentElement!);
+    expect(tooltip.className).toContain('flex');
+    fireEvent.mouseLeave(button.parentElement!);
+    fireEvent.focus(button);
+    expect(tooltip.className).toContain('flex');
+    fireEvent.blur(button);
     fireEvent.click(button);
     expect(button.getAttribute('aria-expanded')).toBe('true');
+    expect(tooltip.className).toContain('flex');
     expect(screen.getByText(/RB \(2 lineup slots\): 34.0 projected points/)).toBeTruthy();
   });
 
