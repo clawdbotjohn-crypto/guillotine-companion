@@ -17,6 +17,7 @@ import {
 import {
   buildWeeklyScoredPlayers,
   buildHubRosterRows,
+  buildUpcomingByeWarnings,
   computeEliminations,
   extractBids,
   formatProjectedCurrentRank,
@@ -28,6 +29,7 @@ import {
 import { Card, StatCard, StatusBadge, Skeleton, PositionBadge } from '../components/ui';
 import { SeasonPicker } from '../components/SeasonPicker';
 import { HubRosterCard } from '../components/HubRosterCard';
+import { HubByeWarnings } from '../components/HubByeWarnings';
 import { useSwitchSeason } from '../hooks/useSwitchSeason';
 import { LogOut, Calendar } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -164,6 +166,7 @@ export function HubPage() {
       })
     : [];
   const rosterIsOptimized = (myProjection?.starters.length ?? 0) > 0;
+  const byeWarnings = buildUpcomingByeWarnings(rosterRows, projectionWeek);
   const totalBudget = league?.settings?.waiver_budget ?? 1000;
   const budgetUsed = myRoster?.settings?.waiver_budget_used ?? 0;
   const budgetRemaining = totalBudget - budgetUsed;
@@ -259,6 +262,8 @@ export function HubPage() {
             accentColor="#f59e0b"
           />
         </div>
+
+        <HubByeWarnings warnings={byeWarnings} />
 
         <HubRosterCard
           rows={rosterRows}
@@ -389,6 +394,8 @@ export function HubPage() {
           subtext={myLastScore ? `Wk ${lastWeek.week}` : undefined}
         />
       </div>
+
+      <HubByeWarnings warnings={byeWarnings} />
 
       <HubRosterCard
         rows={rosterRows}

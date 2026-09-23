@@ -26,6 +26,74 @@ export interface HubRosterRow {
   acquisition: PlayerAcquisition;
 }
 
+export interface HubByeWarning {
+  playerId: string;
+  name: string;
+  position: string;
+  team: string | null;
+  isStarter: boolean;
+  byeWeek: number;
+}
+
+const NFL_REGULAR_SEASON_LAST_WEEK = 18;
+
+function compareIdentity(
+  a: Pick<HubByeWarning, 'name' | 'playerId'>,
+  b: Pick<HubByeWarning, 'name' | 'playerId'>,
+): number {
+  if (a.name !== b.name) return a.name < b.name ? -1 : 1;
+  if (a.playerId === b.playerId) return 0;
+  return a.playerId < b.playerId ? -1 : 1;
+}
+
+/**
+ * Select exact supported byes from the projection week's three-scoring-week window. Optimized
+ * starters are intentionally grouped ahead of every bench warning, then warnings are ordered by
+ * bye week and stable player identity. Missing weeks/byes stay silent rather than being inferred.
+ */
+export function buildUpcomingByeWarnings(
+  rows: readonly HubRosterRow[],
+  projectionWeek: number | null,
+): HubByeWarning[] {
+  if (
+    projectionWeek == null
+    || !Number.isInteger(projectionWeek)
+    || projectionWeek < 1
+    || projectionWeek > NFL_REGULAR_SEASON_LAST_WEEK
+  ) {
+    return [];
+  }
+
+  const lastWindowWeek = Math.min(
+    projectionWeek + 2,
+    NFL_REGULAR_SEASON_LAST_WEEK,
+  );
+  const seenPlayerIds = new Set<string>();
+
+  return rows
+    .filter((row) => {
+      const isSupportedWindowBye = row.byeWeek != null
+        && Number.isInteger(row.byeWeek)
+        && row.byeWeek >= projectionWeek
+        && row.byeWeek <= lastWindowWeek;
+      if (!isSupportedWindowBye || seenPlayerIds.has(row.playerId)) return false;
+      seenPlayerIds.add(row.playerId);
+      return true;
+    })
+    .map(({ playerId, name, position, team, isStarter, byeWeek }) => ({
+      playerId,
+      name,
+      position,
+      team,
+      isStarter,
+      byeWeek: byeWeek as number,
+    }))
+    .sort((a, b) => {
+      if (a.isStarter !== b.isStarter) return a.isStarter ? -1 : 1;
+      return a.byeWeek - b.byeWeek || compareIdentity(a, b);
+    });
+}
+
 function completedPlayerTransactions(
   playerId: string,
   transactions: ReadonlyMap<number, readonly Transaction[]> | undefined,

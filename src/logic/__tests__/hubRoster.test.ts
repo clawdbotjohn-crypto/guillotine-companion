@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import type { DraftPick, Roster, Transaction } from '../../api/types';
 import type { TeamProjection } from '../analytics';
 import type { PlayerRecord } from '../../store/players';
-import { buildHubRosterRows, resolvePlayerAcquisition } from '../hubRoster';
+import {
+  buildHubRosterRows,
+  buildUpcomingByeWarnings,
+  resolvePlayerAcquisition,
+  type HubRosterRow,
+} from '../hubRoster';
 
 function transaction(overrides: Partial<Transaction> = {}): Transaction {
   return {
@@ -41,6 +46,23 @@ function player(playerId: string, name: string, position: string, team: string):
     age: 25,
     injury_status: null,
     status: 'Active',
+  };
+}
+
+function rosterRow(overrides: Partial<HubRosterRow>): HubRosterRow {
+  return {
+    playerId: 'default',
+    name: 'Default Player',
+    position: 'RB',
+    team: 'KC',
+    isStarter: false,
+    starterSlot: null,
+    projection: null,
+    byeWeek: null,
+    injuryStatus: null,
+    status: 'Active',
+    acquisition: { kind: 'unknown', faab: null },
+    ...overrides,
   };
 }
 
@@ -188,5 +210,47 @@ describe('Hub roster ordering and weekly context', () => {
 
     expect(rows[0]).toMatchObject({ playerId: 'starter', isStarter: true, projection: null, byeWeek: null });
     expect(rows[1]).toMatchObject({ playerId: 'bench', isStarter: false, projection: null, byeWeek: null });
+    expect(buildUpcomingByeWarnings(rows, 5)).toEqual([]);
+  });
+});
+
+describe('Hub upcoming bye warnings', () => {
+  it('uses exactly the projection week plus two and puts every starter before every bench player', () => {
+    const warnings = buildUpcomingByeWarnings([
+      rosterRow({ playerId: 'past', name: 'Past Bye', byeWeek: 4, isStarter: true }),
+      rosterRow({ playerId: 'bench-now', name: 'Bench Now', byeWeek: 5 }),
+      rosterRow({ playerId: 'starter-later', name: 'Later Starter', byeWeek: 7, isStarter: true }),
+      rosterRow({ playerId: 'starter-z', name: 'Zed Starter', byeWeek: 5, isStarter: true }),
+      rosterRow({ playerId: 'starter-a', name: 'Alpha Starter', byeWeek: 5, isStarter: true }),
+      rosterRow({ playerId: 'starter-a', name: 'Duplicate Starter', byeWeek: 6, isStarter: true }),
+      rosterRow({ playerId: 'after', name: 'After Window', byeWeek: 8, isStarter: true }),
+    ], 5);
+
+    expect(warnings.map((warning) => warning.playerId)).toEqual([
+      'starter-a',
+      'starter-z',
+      'starter-later',
+      'bench-now',
+    ]);
+    expect(warnings.map((warning) => warning.byeWeek)).toEqual([5, 5, 7, 5]);
+  });
+
+  it('stays within season bounds and silently skips unsupported weeks and bye data', () => {
+    const rows = [
+      rosterRow({ playerId: 'week-17', byeWeek: 17 }),
+      rosterRow({ playerId: 'week-18', byeWeek: 18 }),
+      rosterRow({ playerId: 'week-19', byeWeek: 19 }),
+      rosterRow({ playerId: 'unsupported', team: 'UNKNOWN', byeWeek: null }),
+    ];
+
+    expect(buildUpcomingByeWarnings(rows, 17).map((warning) => warning.playerId)).toEqual([
+      'week-17',
+      'week-18',
+    ]);
+    expect(buildUpcomingByeWarnings(rows, 18).map((warning) => warning.playerId)).toEqual([
+      'week-18',
+    ]);
+    expect(buildUpcomingByeWarnings(rows, null)).toEqual([]);
+    expect(buildUpcomingByeWarnings(rows, 19)).toEqual([]);
   });
 });

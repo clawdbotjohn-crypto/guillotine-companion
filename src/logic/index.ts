@@ -51,8 +51,10 @@ export {
 export {
   resolvePlayerAcquisition,
   buildHubRosterRows,
+  buildUpcomingByeWarnings,
   type AcquisitionKind,
   type PlayerAcquisition,
   type HubRosterRow,
+  type HubByeWarning,
   type BuildHubRosterRowsOptions,
 } from './hubRoster';
