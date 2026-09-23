@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { League, Matchup, Roster, SleeperUser } from '../../api/types';
-import { computePositionGroupRanks } from '../analytics';
+import {
+  buildPlayerSeasons,
+  computeHistoricalRanks,
+  computePositionGroupRanks,
+  formatProjectedCurrentRank,
+  projectAllTeams,
+} from '../analytics';
 import { computeEliminations } from '../elimination';
 
 vi.mock('../../store/players', () => ({
@@ -106,5 +112,119 @@ describe('computePositionGroupRanks', () => {
     expect(team3.TE).toMatchObject({ points: 12, rank: 1 });
     expect(team1.K).toMatchObject({ points: 9, rank: 1 });
     expect(team1.DEF).toMatchObject({ points: 12, rank: 1 });
+  });
+});
+
+describe('current team ranking semantics', () => {
+  it('keeps projected and historical standings active-only and mode-specific in a 32-to-28 league', () => {
+    const rosters: Roster[] = Array.from({ length: 32 }, (_, index) => {
+      const id = index + 1;
+      return {
+        ...roster(id),
+        players: [`${id}-QB`],
+        starters: [`${id}-QB`],
+      };
+    });
+    const users = Array.from({ length: 32 }, (_, index) => user(index + 1));
+
+    const weekOneScore = (id: number) => {
+      if (id === 1) return 1;
+      if (id === 2) return 2;
+      if (id === 3) return 200;
+      if (id === 4) return 3;
+      if (id === 29) return 10;
+      if (id >= 30) return 50 + id;
+      return 100 + id;
+    };
+    const weekTwoScore = (id: number) => {
+      if (id === 3) return 1;
+      if (id === 4) return 2;
+      if (id === 29) return 10;
+      return 100;
+    };
+    const projectedPoints = (id: number) => {
+      if (id === 29) return 300;
+      if (id === 30) return 1;
+      if (id === 31) return 2;
+      if (id === 32) return 3;
+      if (id === 28) return 4;
+      return 100 - id;
+    };
+    const rankingMatchup = (id: number, points: number): Matchup => ({
+      roster_id: id,
+      matchup_id: id,
+      points,
+      starters: [`${id}-QB`],
+      starters_points: [projectedPoints(id)],
+      players: [`${id}-QB`],
+      players_points: { [`${id}-QB`]: projectedPoints(id) },
+    });
+    const matchups = new Map<number, Matchup[]>([
+      [1, rosters.map((entry) => rankingMatchup(entry.roster_id, weekOneScore(entry.roster_id)))],
+      [2, rosters
+        .filter((entry) => entry.roster_id > 2)
+        .map((entry) => rankingMatchup(entry.roster_id, weekTwoScore(entry.roster_id)))],
+    ]);
+    const rankingLeague: League = {
+      ...league,
+      name: '32-team Guillotine',
+      total_rosters: 32,
+      roster_positions: ['QB'],
+    };
+
+    const elimination = computeEliminations(matchups, rosters, users);
+    const projections = projectAllTeams(
+      rosters,
+      buildPlayerSeasons(matchups),
+      rankingLeague,
+      elimination,
+    );
+    const historical = computeHistoricalRanks(elimination);
+    const activeProjections = projections.filter((team) => !team.eliminated);
+    const team29Projection = projections.find((team) => team.rosterId === 29)!;
+    const team29Historical = historical.get(29)!;
+
+    expect(elimination.activeTeamCount).toBe(28);
+    expect(activeProjections).toHaveLength(28);
+    expect(Math.max(...activeProjections.map((team) => team.projRank))).toBe(28);
+    expect(activeProjections.every((team) => team.projOutOf === 28)).toBe(true);
+    expect([...historical.values()]).toHaveLength(28);
+    expect(Math.max(...[...historical.values()].map((standing) => standing.rank))).toBe(28);
+    expect([...historical.values()].every((standing) => standing.outOf === 28)).toBe(true);
+
+    // This survivor was #29/32 under the old all-team cumulative ranking:
+    // 27 survivors plus eliminated roster 3 had more historical points.
+    const allTeamTotals = new Map<number, number>();
+    for (const week of matchups.values()) {
+      for (const entry of week) {
+        allTeamTotals.set(entry.roster_id, (allTeamTotals.get(entry.roster_id) ?? 0) + entry.points);
+      }
+    }
+    const oldAllTeamOrder = [...allTeamTotals.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0] - b[0]);
+    expect(oldAllTeamOrder.findIndex(([rosterId]) => rosterId === 29) + 1).toBe(29);
+
+    // The same team is strongest by best-lineup projection but weakest by
+    // cumulative survivor points, so each tab must own its order and badge.
+    expect(team29Projection).toMatchObject({ projRank: 1, projOutOf: 28, risk: 'safe' });
+    expect(team29Historical).toMatchObject({ rank: 28, outOf: 28, risk: 'at-risk' });
+    expect(formatProjectedCurrentRank(team29Projection)).toBe('1/28');
+
+    expect(activeProjections.slice(-4).map((standing) => standing.risk)).toEqual([
+      'middle',
+      'middle',
+      'at-risk',
+      'at-risk',
+    ]);
+    const historicalByRank = [...historical.values()].sort((a, b) => a.rank - b.rank);
+    expect(historicalByRank.slice(-4).map((standing) => standing.risk)).toEqual([
+      'middle',
+      'middle',
+      'at-risk',
+      'at-risk',
+    ]);
+    expect(projections.filter((team) => team.eliminated).every((team) =>
+      team.projRank === 0 && team.projOutOf === 0 && !historical.has(team.rosterId)
+    )).toBe(true);
   });
 });

@@ -14,7 +14,10 @@ import {
   projectAllTeams,
   computePositionGroupRanks,
   computeHistoricalRanks,
+  orderTeamProjections,
+  type HistoricalRank,
   type PosGroupRank,
+  type TeamProjection,
 } from '../logic';
 import { Card, Skeleton, StatusBadge } from '../components/ui';
 import { SeasonPicker } from '../components/SeasonPicker';
@@ -32,6 +35,41 @@ function rankColor(rank: number, outOf: number): string {
   return '#f43f5e';
 }
 
+type TeamOrder = 'projected' | 'historical';
+
+export function TeamStandingDetails({
+  team,
+  historical,
+  orderBy,
+}: {
+  team: TeamProjection;
+  historical: HistoricalRank | undefined;
+  orderBy: TeamOrder;
+}) {
+  if (team.eliminated) return <StatusBadge status="eliminated" />;
+
+  const status = orderBy === 'projected' ? team.risk : historical?.risk ?? 'middle';
+  const rank = orderBy === 'projected' ? team.projRank : historical?.rank;
+  const outOf = orderBy === 'projected' ? team.projOutOf : historical?.outOf;
+  const points = orderBy === 'projected' ? team.projPoints : historical?.totalPoints;
+  const label = orderBy === 'projected' ? 'proj' : 'hist';
+
+  return (
+    <>
+      {rank != null && outOf != null && (
+        <span
+          className="font-['Space_Mono'] text-[10px] text-[#a5b4fc] tabular-nums"
+          data-testid="current-team-standing"
+        >
+          {label} #{rank}/{outOf}
+          {points != null && ` · ${points.toFixed(1)} pts`}
+        </span>
+      )}
+      <StatusBadge status={status} />
+    </>
+  );
+}
+
 export function TeamsPage() {
   const navigate = useNavigate();
   const { leagueId, leagueName, leagueSeason, rootLeagueId, rosterId: myRosterId } = useAppStore();
@@ -43,7 +81,7 @@ export function TeamsPage() {
   const { data: leagueHistory, isLoading: historyLoading } = useLeagueHistory(rootLeagueId);
   const handleSwitchSeason = useSwitchSeason();
 
-  const [orderBy, setOrderBy] = useState<'projected' | 'historical'>('projected');
+  const [orderBy, setOrderBy] = useState<TeamOrder>('projected');
   const [expanded, setExpanded] = useState<number | null>(null);
 
   const seasons = (leagueHistory || [])
@@ -88,22 +126,16 @@ export function TeamsPage() {
   const { elim, projections, posRanks, histRanks } = model;
   const hasScores = elim.weeks.length > 0;
 
-  // Order rows
-  const rows = [...projections].sort((a, b) => {
-    // eliminated always last
-    if (a.eliminated !== b.eliminated) return a.eliminated ? 1 : -1;
-    if (orderBy === 'projected') return b.projPoints - a.projPoints;
-    const ah = histRanks.get(a.rosterId)?.rank ?? 999;
-    const bh = histRanks.get(b.rosterId)?.rank ?? 999;
-    return ah - bh;
-  });
+  const rows = orderTeamProjections(projections, histRanks, orderBy);
 
   return (
     <div className="px-6 py-6 pb-24 max-w-lg mx-auto">
       <h1 className="font-['Orbitron'] text-lg font-bold uppercase tracking-wider text-[#f0f0ff] mb-1">
         Teams
       </h1>
-      <p className="text-xs text-[#6b6e99] mb-4">{leagueName} · {rows.length} teams</p>
+      <p className="text-xs text-[#6b6e99] mb-4">
+        {leagueName} · {elim.activeTeamCount} active · {rows.length} total
+      </p>
 
       <SeasonPicker
         seasons={seasons}
@@ -144,7 +176,7 @@ export function TeamsPage() {
             .filter((g) => g.outOf > 0)
             .sort((a, b) => POS_ORDER.indexOf(a.position) - POS_ORDER.indexOf(b.position));
           const isMine = t.rosterId === myRosterId;
-          const status = t.eliminated ? 'eliminated' : t.risk;
+          const modeRisk = orderBy === 'projected' ? t.risk : hist?.risk ?? 'middle';
           const isOpen = expanded === t.rosterId;
 
           return (
@@ -152,24 +184,15 @@ export function TeamsPage() {
               <div className="flex items-center justify-between cursor-pointer"
                 onClick={() => setExpanded(isOpen ? null : t.rosterId)}>
                 <div className="flex items-center gap-3 min-w-0">
-                  <RiskIcon risk={t.eliminated ? 'eliminated' : t.risk} />
+                  <RiskIcon risk={t.eliminated ? 'eliminated' : modeRisk} />
                   <div className="min-w-0">
                     <div className={`text-sm font-medium truncate ${t.eliminated ? 'text-[#4a4d77]' : 'text-[#f0f0ff]'}`}>
                       {t.displayName}{isMine && <span className="text-[#6366f1] text-[10px] ml-1">YOU</span>}
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">
-                      {hasScores && !t.eliminated && (
-                        <span className="font-['Space_Mono'] text-[10px] text-[#a5b4fc] tabular-nums">
-                          proj {t.projPoints.toFixed(1)}
-                        </span>
+                      {hasScores && (
+                        <TeamStandingDetails team={t} historical={hist} orderBy={orderBy} />
                       )}
-                      {hist && (
-                        <span className="font-['Space_Mono'] text-[10px] tabular-nums"
-                          style={{ color: rankColor(hist.rank, hist.outOf) }}>
-                          hist #{hist.rank}/{hist.outOf}
-                        </span>
-                      )}
-                      <StatusBadge status={status as never} />
                     </div>
                   </div>
                 </div>

@@ -34,11 +34,13 @@ export {
 export {
   buildPlayerSeasons,
   formatCurrentRank,
+  formatProjectedCurrentRank,
   parseLineupSlots,
   projectBestLineup,
   projectAllTeams,
   computePositionGroupRanks,
   computeHistoricalRanks,
+  orderTeamProjections,
   type PlayerSeason,
   type LineupSlots,
   type TeamProjection,
