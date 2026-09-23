@@ -3,6 +3,7 @@ import type { League, Matchup, Roster, SleeperUser } from '../../api/types';
 import {
   computeHistoricalRanks,
   computePositionGroupRanks,
+  computeProjectedLineupGroupRanks,
   formatProjectedCurrentRank,
   projectAllTeams,
   rankActiveTeams,
@@ -208,6 +209,121 @@ describe('Sleeper weekly best-lineup projections', () => {
 
     expect(projections.every((team) => team.projPoints == null)).toBe(true);
     expect(projections.every((team) => team.projRank === 0 && team.projOutOf === 0)).toBe(true);
+  });
+});
+
+describe('projected lineup group rankings', () => {
+  it('uses optimized duplicate, FLEX, and SUPER_FLEX assignments and excludes eliminated teams', () => {
+    const rosters = [roster(1), roster(2), roster(3), roster(4)];
+    const playerPoints: Record<number, Array<[string, number]>> = {
+      1: [
+        ['1-QB-a', 20], ['1-QB-b', 12],
+        ['1-RB-a', 18], ['1-RB-b', 16], ['1-RB-c', 14],
+        ['1-WR-a', 15], ['1-WR-b', 13],
+      ],
+      2: [
+        ['2-QB-a', 19], ['2-QB-b', 18],
+        ['2-RB-a', 20], ['2-RB-b', 17], ['2-RB-c', 12],
+        ['2-WR-a', 16], ['2-WR-b', 15],
+      ],
+      3: [
+        ['3-QB-a', 10], ['3-QB-b', 9],
+        ['3-RB-a', 13], ['3-RB-b', 11], ['3-RB-c', 8],
+        ['3-WR-a', 12], ['3-WR-b', 7],
+      ],
+      // This eliminated roster would rank first in every group if it leaked
+      // into either the comparison pool or denominator.
+      4: [
+        ['4-QB-a', 100], ['4-QB-b', 99],
+        ['4-RB-a', 100], ['4-RB-b', 99], ['4-RB-c', 98],
+        ['4-WR-a', 100], ['4-WR-b', 99],
+      ],
+    };
+    for (const team of rosters) {
+      team.players = playerPoints[team.roster_id].map(([playerId]) => playerId);
+    }
+    const users = [1, 2, 3, 4].map(user);
+    const matchups = new Map<number, Matchup[]>([[1, [
+      matchup(1, 120, [1, 1, 1, 1, 1, 1, 1]),
+      matchup(2, 110, [1, 1, 1, 1, 1, 1, 1]),
+      matchup(3, 100, [1, 1, 1, 1, 1, 1, 1]),
+      matchup(4, 1, [1, 1, 1, 1, 1, 1, 1]),
+    ]]]);
+    const elimination = computeEliminations(matchups, rosters, users);
+    const weekly = new Map(
+      Object.values(playerPoints).flat().map(([playerId, points]) => [playerId, {
+        playerId,
+        position: playerId.split('-')[1],
+        points,
+      }]),
+    );
+    const nonstandardLeague: League = {
+      ...league,
+      roster_positions: ['QB', 'RB', 'RB', 'WR', 'FLEX', 'SUPER_FLEX', 'BN'],
+    };
+
+    const projections = projectAllTeams(rosters, weekly, nonstandardLeague, elimination);
+    const rankings = computeProjectedLineupGroupRanks(projections, weekly, nonstandardLeague);
+    const team1Projection = projections.find((team) => team.rosterId === 1)!;
+    const team1 = Object.fromEntries(
+      rankings.byRosterId.get(1)!.map((row) => [row.group, row]),
+    );
+
+    // These are the actual assignments made by projectAllTeams. In particular,
+    // FLEX receives the best remaining FLEX player and SF receives the next
+    // remaining QB/RB/WR/TE; no hard-coded position subtotal is reconstructed.
+    expect(team1Projection.starters).toEqual([
+      { playerId: '1-QB-a', position: 'QB', proj: 20 },
+      { playerId: '1-RB-a', position: 'RB', proj: 18 },
+      { playerId: '1-RB-b', position: 'RB', proj: 16 },
+      { playerId: '1-WR-a', position: 'WR', proj: 15 },
+      { playerId: '1-RB-c', position: 'FLEX', proj: 14 },
+      { playerId: '1-WR-b', position: 'SFLEX', proj: 13 },
+    ]);
+    expect(team1.RB).toMatchObject({ slotCount: 2, points: 34, rank: 2, outOf: 3 });
+    expect(team1.FLEX).toMatchObject({ slotCount: 1, points: 14, rank: 2, outOf: 3 });
+    expect(team1.SUPER_FLEX).toMatchObject({ slotCount: 1, points: 13, rank: 2, outOf: 3 });
+    expect(rankings.byRosterId.has(4)).toBe(false);
+    expect([...rankings.byRosterId.keys()].sort()).toEqual([1, 2, 3]);
+    expect(rankings.unavailableGroups).toEqual([]);
+
+    const qbFlexLeague = {
+      ...nonstandardLeague,
+      roster_positions: nonstandardLeague.roster_positions.map((slot) =>
+        slot === 'SUPER_FLEX' ? 'QB_FLEX' : slot),
+    };
+    const qbFlexProjections = projectAllTeams(rosters, weekly, qbFlexLeague, elimination);
+    const qbFlexRankings = computeProjectedLineupGroupRanks(
+      qbFlexProjections,
+      weekly,
+      qbFlexLeague,
+    );
+    expect(qbFlexRankings.byRosterId.get(1)?.find((row) => row.group === 'SUPER_FLEX'))
+      .toMatchObject({ points: 13, rank: 2, outOf: 3 });
+  });
+
+  it('omits a configured group rather than ranking a missing projection as zero', () => {
+    const rosters = [roster(1), roster(2), roster(3)];
+    rosters[0].players = ['1-QB-a'];
+    rosters[1].players = ['2-QB-a'];
+    rosters[2].players = ['3-QB-a'];
+    const users = [user(1), user(2), user(3)];
+    const matchups = new Map<number, Matchup[]>([[1, [
+      matchup(1, 100, [1, 1, 1, 1, 1, 1, 1]),
+      matchup(2, 90, [1, 1, 1, 1, 1, 1, 1]),
+      matchup(3, 1, [1, 1, 1, 1, 1, 1, 1]),
+    ]]]);
+    const elimination = computeEliminations(matchups, rosters, users);
+    const weekly = new Map([
+      ['1-QB-a', { playerId: '1-QB-a', position: 'QB', points: 20 }],
+    ]);
+    const qbLeague = { ...league, roster_positions: ['QB'] };
+
+    const projections = projectAllTeams(rosters, weekly, qbLeague, elimination);
+    const rankings = computeProjectedLineupGroupRanks(projections, weekly, qbLeague);
+
+    expect(rankings.byRosterId.size).toBe(0);
+    expect(rankings.unavailableGroups).toEqual(['QB']);
   });
 });
 

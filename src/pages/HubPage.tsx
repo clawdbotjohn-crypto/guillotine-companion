@@ -19,6 +19,7 @@ import {
   buildHubRosterRows,
   buildUpcomingByeWarnings,
   computeEliminations,
+  computeProjectedLineupGroupRanks,
   extractBids,
   formatProjectedCurrentRank,
   getProjectionScoring,
@@ -30,6 +31,7 @@ import { Card, StatCard, StatusBadge, Skeleton, PositionBadge } from '../compone
 import { SeasonPicker } from '../components/SeasonPicker';
 import { HubRosterCard } from '../components/HubRosterCard';
 import { HubByeWarnings } from '../components/HubByeWarnings';
+import { HubPositionRankings } from '../components/HubPositionRankings';
 import { useSwitchSeason } from '../hooks/useSwitchSeason';
 import { LogOut, Calendar } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -149,6 +151,20 @@ export function HubPage() {
           : !weeklyScoredPlayers?.size
             ? 'Sleeper has no usable projections for this scoring week.'
             : undefined;
+  const projectedGroupRankings = computeProjectedLineupGroupRanks(
+    projections,
+    weeklyScoredPlayers,
+    league,
+  );
+  const myProjectedGroupRanks = projectedGroupRankings.byRosterId.get(rosterId) ?? [];
+  const positionRankingUnavailableReason = myProjection?.eliminated
+    ? 'Current rankings compare active teams only.'
+    : projectionUnavailableReason
+      ?? (!league?.roster_positions?.length
+        ? 'The league lineup configuration is unavailable.'
+        : projectedGroupRankings.unavailableGroups.length > 0
+          ? 'Complete weekly projections are not available for every active lineup.'
+          : 'No supported projected lineup groups are configured.');
   const bids = transactions ? extractBids(transactions) : [];
   const myBids = bids.filter((b) => b.rosterId === rosterId);
 
@@ -251,6 +267,14 @@ export function HubPage() {
           projection={myProjection}
           isLoading={projectionLoading}
           unavailableReason={projectionUnavailableReason}
+        />
+
+        <HubPositionRankings
+          rows={myProjectedGroupRanks}
+          week={projectionWeek}
+          isLoading={projectionLoading}
+          unavailableGroups={projectedGroupRankings.unavailableGroups}
+          unavailableReason={positionRankingUnavailableReason}
         />
 
         {/* FAAB remaining — always available */}
@@ -363,6 +387,14 @@ export function HubPage() {
         projection={myProjection}
         isLoading={projectionLoading}
         unavailableReason={projectionUnavailableReason}
+      />
+
+      <HubPositionRankings
+        rows={myProjectedGroupRanks}
+        week={projectionWeek}
+        isLoading={projectionLoading}
+        unavailableGroups={projectedGroupRankings.unavailableGroups}
+        unavailableReason={positionRankingUnavailableReason}
       />
 
       {/* Stats Grid */}

@@ -243,6 +243,105 @@ export function projectAllTeams(
   });
 }
 
+export type ProjectedLineupGroup = keyof LineupSlots;
+
+export interface ProjectedLineupGroupRank {
+  group: ProjectedLineupGroup;
+  slotCount: number;
+  points: number;
+  rank: number;
+  outOf: number;
+}
+
+export interface ProjectedLineupGroupRankings {
+  byRosterId: Map<number, ProjectedLineupGroupRank[]>;
+  unavailableGroups: ProjectedLineupGroup[];
+}
+
+const PROJECTED_GROUP_ORDER: ProjectedLineupGroup[] = [
+  'QB', 'RB', 'WR', 'TE', 'FLEX', 'SUPER_FLEX', 'K', 'DEF',
+];
+const SUPPORTED_LINEUP_POSITIONS = new Set([
+  'QB', 'RB', 'WR', 'TE', 'FLEX', 'WRRB_FLEX', 'REC_FLEX',
+  'SUPER_FLEX', 'QB_FLEX', 'K', 'DEF',
+]);
+
+function starterGroup(position: string): ProjectedLineupGroup | null {
+  if (position === 'SFLEX' || position === 'SUPER_FLEX') return 'SUPER_FLEX';
+  return PROJECTED_GROUP_ORDER.includes(position as ProjectedLineupGroup)
+    ? position as ProjectedLineupGroup
+    : null;
+}
+
+/**
+ * Rank actual optimized lineup assignments by configured slot group. Duplicate fixed/flex slots
+ * are aggregated into one position-strength row (for example, two assigned RB slots become
+ * `RB ×2`). A row is only ranked when every active team has every configured assignment and each
+ * assignment has a real entry in the same weekly projection map used by `projectAllTeams`.
+ * This keeps the denominator equal to all active teams without treating missing data as zero.
+ */
+export function computeProjectedLineupGroupRanks(
+  teamProjections: readonly TeamProjection[],
+  weeklyProjections: ReadonlyMap<string, WeeklyScoredPlayer> | null,
+  league: League | undefined,
+): ProjectedLineupGroupRankings {
+  const byRosterId = new Map<number, ProjectedLineupGroupRank[]>();
+  const rosterPositions = league?.roster_positions;
+  const hasActualConfiguration = rosterPositions?.some((position) =>
+    SUPPORTED_LINEUP_POSITIONS.has(position)) ?? false;
+  if (!hasActualConfiguration) return { byRosterId, unavailableGroups: [] };
+
+  const slots = parseLineupSlots(rosterPositions);
+  const configuredGroups = PROJECTED_GROUP_ORDER.filter((group) => slots[group] > 0);
+  const activeTeams = teamProjections
+    .filter((team) => !team.eliminated)
+    .sort((a, b) => a.rosterId - b.rosterId);
+  if (!weeklyProjections?.size || activeTeams.length === 0) {
+    return { byRosterId, unavailableGroups: configuredGroups };
+  }
+
+  const unavailableGroups: ProjectedLineupGroup[] = [];
+  for (const group of configuredGroups) {
+    const slotCount = slots[group];
+    const candidates = activeTeams.map((team) => {
+      const assigned = team.starters.filter((starter) => starterGroup(starter.position) === group);
+      const complete = assigned.length === slotCount
+        && assigned.every((starter) => weeklyProjections.has(starter.playerId)
+          && Number.isFinite(starter.proj));
+      return {
+        rosterId: team.rosterId,
+        complete,
+        points: assigned.reduce((sum, starter) => sum + starter.proj, 0),
+      };
+    });
+
+    if (candidates.some((candidate) => !candidate.complete)) {
+      unavailableGroups.push(group);
+      continue;
+    }
+
+    candidates
+      .sort((a, b) => b.points - a.points || a.rosterId - b.rosterId)
+      .forEach((candidate, index) => {
+        const rows = byRosterId.get(candidate.rosterId) ?? [];
+        rows.push({
+          group,
+          slotCount,
+          points: candidate.points,
+          rank: index + 1,
+          outOf: activeTeams.length,
+        });
+        byRosterId.set(candidate.rosterId, rows);
+      });
+  }
+
+  for (const rows of byRosterId.values()) {
+    rows.sort((a, b) => PROJECTED_GROUP_ORDER.indexOf(a.group)
+      - PROJECTED_GROUP_ORDER.indexOf(b.group));
+  }
+  return { byRosterId, unavailableGroups };
+}
+
 // ---- Position-group scoring ranks (Teams section) ----
 
 export interface PosGroupRank {
