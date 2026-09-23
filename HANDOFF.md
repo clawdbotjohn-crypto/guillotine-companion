@@ -6,7 +6,7 @@
 - **Head commits:** `8b41a87`, `4304e9e`, `779cc0c`, `366f0c3`, `72dabf1`, `dc4f15e` (current head).
 - **Final local QA at `dc4f15e`:** full **15 files / 88 tests passed**; focused Teams toggle **11/11**; lint **0 warnings / 0 errors**; TypeScript + Vite production build passed; `git diff --check origin/main...HEAD` passed; clean working tree after push.
 - **Preview:** PR #8 Azure environment is Ready at <https://nice-moss-07ec56310-8.centralus.7.azurestaticapps.net>. Automated GitHub/Azure checks were allowed to run; no manual workflow or production deploy was triggered.
-- **Browser QA status:** Final fresh-head mobile/desktop browser verification and Waiver before/after density comparison are still pending. Items 7–8 are not implemented, so their toggle/density checks cannot be claimed.
+- **Browser QA:** Fresh PR #8 preview was verified on real `SeaMex Guillotine 2026` data at 375px and 1440px. Hub showed Houston0ilers' 91.2-point Week 3 projection, `13/28` rank, shared lineup-group ranks, full 13-player starter/bench roster, exact bye/status context, and only the supported Drew Lock `$1` acquisition. Teams defaulted to 28 active cards with `Show eliminated teams (4)` unchecked; exact ranks #19–26 were WARNING and #27–28 AT RISK. Enabling the checkbox appended four ELIMINATED cards without changing survivor ranks and remained checked after Hub→Teams navigation. Waiver rostered-toggle and before/after density proof remain pending because items 7–8 are not implemented.
 - **Safety:** No main/master push, merge/self-merge, force-push, production deploy, or workflow dispatch.
 
 ---
