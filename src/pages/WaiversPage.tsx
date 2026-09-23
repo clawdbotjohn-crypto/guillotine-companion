@@ -34,9 +34,11 @@ import {
   buildWaiverBoard,
   calculateRemainingFaab,
   computeAvailablePlayers,
+  computeRosteredPlayerOwners,
   getReplacementTeamBounds,
   normalizeReplacementTeamTarget,
   sortWaiverRowsByStrategy,
+  type RosteredPlayerOwner,
   type StrategyKey,
   type WaiverPlayerRow,
 } from '../logic/waivers';
@@ -102,13 +104,18 @@ export function RankingSourceSelector({
       <select
         id="player-values-source"
         value={value}
+        aria-describedby="player-values-source-help"
         onChange={(event) => onChange(event.target.value as WaiverRankingSource)}
-        className="w-full rounded-lg border border-[#2a2e55] bg-[#0e1025] px-3 py-2.5 text-xs text-[#f0f0ff] outline-none focus:border-[#6366f1] focus:ring-1 focus:ring-[#6366f1]"
+        className="min-h-11 w-fit max-w-full rounded-lg border border-[#2a2e55] bg-[#0e1025] px-3 py-2.5 text-xs text-[#f0f0ff] outline-none focus:border-[#6366f1] focus:ring-1 focus:ring-[#6366f1]"
       >
         {RANKING_SOURCES.map((source) => (
           <option key={source.key} value={source.key}>{source.label}</option>
         ))}
       </select>
+      <p id="player-values-source-help" className="mt-1.5 max-w-xl text-[10px] leading-4 text-[#6b6e99]">
+        Rest-of-season value source: Sleeper uses projected fantasy points, Fantasy Pros uses ROS ECR,
+        and FantasyCalc uses redraft market values. Next-week context below always comes from Sleeper.
+      </p>
     </section>
   );
 }
@@ -174,22 +181,125 @@ export function PredictedWinningBidFooter({
 }) {
   if (strategy === 'aggressive') return null;
   return (
-    <div className="flex items-center justify-between mt-2 pt-2 border-t border-[#1a1e3a]">
-      <span className="text-[10px] text-[#6b6e99] uppercase tracking-wider">Predicted winning bid</span>
-      <div className="flex items-center gap-1.5">
-        <span className="font-['Space_Mono'] text-xs text-[#f59e0b] tabular-nums">
-          ${row.predictedWinningBid}
-        </span>
-        <span
-          className={`text-[9px] uppercase px-1.5 py-0.5 rounded-full
-            ${row.predictedConfidence === 'high' ? 'bg-[rgba(16,185,129,0.15)] text-[#10b981]'
-              : row.predictedConfidence === 'medium' ? 'bg-[rgba(245,158,11,0.15)] text-[#f59e0b]'
-              : 'bg-[rgba(100,116,139,0.15)] text-[#64748b]'}`}
-        >
-          {row.predictedConfidence}
-        </span>
-      </div>
+    <div className="flex items-center gap-1.5 text-[10px] text-[#6b6e99]">
+      <span>Predicted bid</span>
+      <span className="font-['Space_Mono'] text-[#f59e0b] tabular-nums">
+        ${row.predictedWinningBid}
+      </span>
+      <span aria-hidden="true">·</span>
+      <span className={row.predictedConfidence === 'high' ? 'text-[#10b981]'
+        : row.predictedConfidence === 'medium' ? 'text-[#f59e0b]'
+        : 'text-[#64748b]'}>
+        {row.predictedConfidence}
+      </span>
     </div>
+  );
+}
+
+export function WaiverPlayerCard({
+  row,
+  strategy,
+  remainingFaab,
+  source,
+  nflTeam,
+  weeklyText,
+  byeText,
+  injuryStatus,
+  owner,
+}: {
+  row: WaiverPlayerRow;
+  strategy: StrategyKey;
+  remainingFaab: number | null;
+  source: (typeof RANKING_SOURCES)[number];
+  nflTeam?: string | null;
+  weeklyText: string;
+  byeText: string;
+  injuryStatus?: string | null;
+  owner?: RosteredPlayerOwner;
+}) {
+  const suggestion = row.suggestions.find((item) => item.strategy === strategy);
+  if (!suggestion) return null;
+  const sourceMetric = source.key === 'sleeper'
+    ? `${source.shortLabel} ${row.rosPoints.toFixed(1)} pts · ${row.projectedPointsPerWeek.toFixed(1)}/wk`
+    : source.key === 'fantasypros' && row.sourceRank != null
+      ? `${source.shortLabel} #${row.sourceRank}`
+      : `${source.shortLabel} ${row.sourceValue.toFixed(1)}`;
+
+  return (
+    <Card hover={false} className={`p-2.5 ${owner ? 'border-[#4a4d77]' : ''}`}>
+      <article aria-disabled={owner ? 'true' : undefined} aria-label={`${row.name}, ${owner ? `rostered by ${owner.ownerName}` : 'available'}`}>
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex min-w-0 items-start gap-2">
+            <PositionBadge position={row.position} />
+            <div className="min-w-0">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <span className="truncate text-sm font-semibold text-[#f0f0ff]">{row.name}</span>
+                {owner ? (
+                  <span className="shrink-0 rounded bg-[rgba(100,116,139,0.18)] px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-[#94a3b8]">
+                    Rostered
+                  </span>
+                ) : null}
+              </div>
+              <div className="text-[10px] font-['Space_Mono'] text-[#6b6e99]">
+                {row.position}{nflTeam ? ` · ${nflTeam}` : ''}
+                {owner ? ` · Owner: ${owner.ownerName}` : ''}
+              </div>
+            </div>
+          </div>
+          <div className="shrink-0 text-right">
+            <div className="flex items-center justify-end gap-1 font-['Space_Mono'] text-base font-bold tabular-nums text-[#10b981]">
+              {!owner && remainingFaab != null && suggestion.value != null && suggestion.value > remainingFaab
+                ? <FaabOverBudgetWarning />
+                : null}
+              <span>{suggestion.value == null ? 'Unavailable' : `$${suggestion.value}`}</span>
+            </div>
+            <div className="text-[8px] uppercase tracking-wide text-[#6b6e99]">
+              {suggestion.pctOfBudget == null
+                ? 'Sleeper ROS required'
+                : `${suggestion.pctOfBudget.toFixed(0)}% · ${suggestion.label}`}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] leading-4 text-[#8b8ec7]">
+          <span>{row.position}#{row.posRank} · {sourceMetric}</span>
+          <span>{row.starterWeeks}/{row.possibleStarterWeeks} starter wks</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] leading-4 text-[#8b8ec7]">
+          <span>{weeklyText}</span>
+          <span aria-hidden="true">·</span>
+          <span>{byeText}</span>
+          {injuryStatus ? (
+            <span className="rounded bg-[rgba(245,158,11,0.15)] px-1.5 text-[9px] font-semibold uppercase text-[#f59e0b]">
+              {injuryStatus}
+            </span>
+          ) : null}
+        </div>
+        <PredictedWinningBidFooter strategy={strategy} row={row} />
+      </article>
+    </Card>
+  );
+}
+
+export const DEFAULT_SHOW_ROSTERED_PLAYERS = false;
+
+export function RosteredPlayersToggle({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="mb-3 flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-[#1a1e3a] px-3 text-xs text-[#8b8ec7]">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="h-4 w-4 accent-[#6366f1]"
+      />
+      Show rostered players
+    </label>
   );
 }
 
@@ -241,6 +351,7 @@ export function WaiversPage() {
 
   const [strategy, setStrategy] = useState<StrategyKey>(DEFAULT_WAIVER_STRATEGY);
   const [posFilter, setPosFilter] = useState('ALL');
+  const [showRosteredPlayers, setShowRosteredPlayers] = useState(DEFAULT_SHOW_ROSTERED_PLAYERS);
   const [replacementTeamSelection, setReplacementTeamSelection] = useState<{
     leagueId: string;
     value: number;
@@ -315,19 +426,41 @@ export function WaiversPage() {
         ctx.budget,
       )
       : null;
+    const boardOptions = {
+      sleeperRosProjections: sleeperRosValues ?? undefined,
+      replacementTeamCount: normalizedReplacementTarget,
+      vorpCalibration,
+    };
+    const ownership = computeRosteredPlayerOwners(rosters, users!, elim);
+    const allPositivePlayers = [...seasonValues.entries()]
+      .filter(([, projection]) => projection.totalPoints > 0)
+      .map(([playerId]) => playerId);
     return {
       ctx,
       remainingFaab,
       vorpCalibration,
-      rows: buildWaiverBoard(available, seasonValues, ctx, bids, getPlayerName, {
-        sleeperRosProjections: sleeperRosValues ?? undefined,
-        replacementTeamCount: normalizedReplacementTarget,
-        vorpCalibration,
-      }),
+      ownership,
+      availableRows: buildWaiverBoard(
+        available,
+        seasonValues,
+        ctx,
+        bids,
+        getPlayerName,
+        boardOptions,
+      ),
+      allRows: buildWaiverBoard(
+        allPositivePlayers,
+        seasonValues,
+        ctx,
+        bids,
+        getPlayerName,
+        { ...boardOptions, maxPerPos: Number.POSITIVE_INFINITY },
+      ),
     };
   }, [
     waiverContext,
     rosters,
+    users,
     seasonValues,
     transactions,
     rosterId,
@@ -410,13 +543,13 @@ export function WaiversPage() {
   if (isLoading || !board) {
     return sourceShell(
       <>
-        <p className="text-xs text-[#6b6e99] mb-4">Loading {sourceInfo.label}…</p>
+        <p className="text-xs text-[#6b6e99] mb-4">Loading {sourceInfo.description}…</p>
         <Skeleton lines={4} />
       </>,
     );
   }
 
-  const { ctx, remainingFaab, rows, vorpCalibration } = board;
+  const { ctx, remainingFaab, ownership, availableRows, allRows, vorpCalibration } = board;
   const sleeperUnavailableReason = vorpCalibration
     ? undefined
     : projectionWeeksQuery.isLoading || nflStateQuery.isLoading
@@ -430,7 +563,10 @@ export function WaiversPage() {
             : !sleeperRosValues || sleeperRosValues.size === 0
               ? 'Sleeper returned no usable remaining-season point projections'
               : 'Sleeper ROS projections could not fill every required lineup slot or produce a valid championship calibration';
-  const positionRows = posFilter === 'ALL' ? rows : rows.filter((r) => r.position === posFilter);
+  const displayRows = showRosteredPlayers ? allRows : availableRows;
+  const positionRows = posFilter === 'ALL'
+    ? displayRows
+    : displayRows.filter((row) => row.position === posFilter);
   const filtered = sortWaiverRowsByStrategy(positionRows, strategy);
   const weeklyContext = weeklyProjectionQuery.data && playersQuery.data && league
     ? buildWeeklyProjectionContext(
@@ -466,7 +602,7 @@ export function WaiversPage() {
           <button
             key={s.key}
             onClick={() => setStrategy(s.key)}
-            className={`flex-1 whitespace-nowrap py-2 px-2 text-[10px] font-semibold uppercase tracking-wider rounded-md transition-all
+            className={`min-h-11 flex-1 whitespace-nowrap py-2 px-2 text-[10px] font-semibold uppercase tracking-wider rounded-md transition-all
               ${strategy === s.key
                 ? 'bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] text-white'
                 : 'text-[#4a4d77] hover:text-[#6b6e99]'
@@ -478,18 +614,25 @@ export function WaiversPage() {
       </div>
 
       {/* Position filter */}
-      <div className="flex gap-1 mb-4">
-        {POS_FILTERS.map((p) => (
-          <button
-            key={p}
-            onClick={() => setPosFilter(p)}
-            className={`px-2.5 py-1 rounded-md text-[10px] font-bold font-['Space_Mono'] transition-all
-              ${posFilter === p ? 'bg-[#6366f1] text-white' : 'bg-[#161a3a] text-[#6b6e99]'}`}
-          >
-            {p}
-          </button>
-        ))}
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div className="flex gap-1">
+          {POS_FILTERS.map((p) => (
+            <button
+              key={p}
+              onClick={() => setPosFilter(p)}
+              className={`min-h-11 px-2.5 py-1 rounded-md text-[10px] font-bold font-['Space_Mono'] transition-all
+                ${posFilter === p ? 'bg-[#6366f1] text-white' : 'bg-[#161a3a] text-[#6b6e99]'}`}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
       </div>
+
+      <RosteredPlayersToggle
+        checked={showRosteredPlayers}
+        onChange={setShowRosteredPlayers}
+      />
 
       <div className="flex items-start gap-1.5 mb-4 text-[10px] text-[#6b6e99]">
         <Info size={12} className="mt-0.5 shrink-0" />
@@ -508,7 +651,9 @@ export function WaiversPage() {
         {filtered.length === 0 && (
           <Card hover={false} className="p-6 text-center">
             <ShoppingCart className="w-8 h-8 text-[#2a2e55] mx-auto mb-3" />
-            <p className="text-[#6b6e99] text-sm">No available free agents matched to {sourceInfo.shortLabel} values.</p>
+            <p className="text-[#6b6e99] text-sm">
+              No {showRosteredPlayers ? 'players' : 'available free agents'} matched to {sourceInfo.shortLabel} values.
+            </p>
           </Card>
         )}
         {filtered.map((row) => {
@@ -529,48 +674,18 @@ export function WaiversPage() {
               ? `Next week: ${weekly.points.toFixed(1)} pts · ${row.position}${weekly.positionRank}`
               : 'Next week: No projection';
           return (
-            <Card key={row.playerId} hover={false} className="p-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 min-w-0">
-                  <PositionBadge position={row.position} />
-                  <div className="min-w-0">
-                    <div className="text-sm text-[#f0f0ff] truncate">{row.name}</div>
-                    <div className="text-[10px] text-[#4a4d77] font-['Space_Mono']">
-                      {row.position}#{row.posRank} · {rankingSource === 'sleeper' ? (
-                        <>{row.rosPoints.toFixed(1)} ROS pts · {row.projectedPointsPerWeek.toFixed(1)}/wk</>
-                      ) : (
-                        <>{rankingSource === 'fantasypros' && row.sourceRank != null
-                          ? `ECR #${row.sourceRank}`
-                          : `${sourceInfo.metricLabel} ${row.sourceValue.toFixed(1)}`}</>
-                      )}
-                    </div>
-                    {strategy === 'weeks-starter' ? (
-                      <div className="text-[10px] text-[#8b8ec7] font-['Space_Mono']">
-                        {row.starterWeeks}/{row.possibleStarterWeeks} weeks as starter
-                      </div>
-                    ) : null}
-                    <div className="text-[10px] text-[#8b8ec7] font-['Space_Mono']">
-                      {weeklyText} · {byeText}
-                    </div>
-                    {player?.injury_status ? (
-                      <span className="inline-block mt-1 rounded bg-[rgba(245,158,11,0.15)] px-1.5 py-0.5 text-[9px] font-semibold uppercase text-[#f59e0b]">
-                        {player.injury_status}
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="text-right shrink-0 ml-2">
-                  <div className="flex items-center justify-end gap-1.5 font-['Space_Mono'] text-base text-[#10b981] font-bold tabular-nums">
-                    {remainingFaab != null && sug.value != null && sug.value > remainingFaab && <FaabOverBudgetWarning />}
-                    <span>{sug.value == null ? 'Unavailable' : `$${sug.value}`}</span>
-                  </div>
-                  <div className="text-[9px] text-[#4a4d77] uppercase tracking-wide">
-                    {sug.pctOfBudget == null ? 'Sleeper ROS required' : `${sug.pctOfBudget.toFixed(0)}% · ${sug.label}`}
-                  </div>
-                </div>
-              </div>
-              <PredictedWinningBidFooter strategy={strategy} row={row} />
-            </Card>
+            <WaiverPlayerCard
+              key={row.playerId}
+              row={row}
+              strategy={strategy}
+              remainingFaab={remainingFaab}
+              source={sourceInfo}
+              nflTeam={player?.team}
+              weeklyText={weeklyText}
+              byeText={byeText}
+              injuryStatus={player?.injury_status}
+              owner={ownership.get(row.playerId)}
+            />
           );
         })}
       </div>

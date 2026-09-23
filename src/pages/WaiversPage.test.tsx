@@ -1,10 +1,13 @@
 /* @vitest-environment jsdom */
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  DEFAULT_SHOW_ROSTERED_PLAYERS,
   PredictedWinningBidFooter,
   RankingSourceSelector,
   ReplacementTeamSelector,
+  RosteredPlayersToggle,
+  WaiverPlayerCard,
   VorpControls,
   VorpSourceNotice,
 } from './WaiversPage';
@@ -14,6 +17,29 @@ import {
   WAIVER_STRATEGIES,
   WAIVER_STRATEGY_EXPLANATIONS,
 } from '../logic/waiverDisplay';
+import { RANKING_SOURCES } from '../logic/rankingSources';
+import type { WaiverPlayerRow } from '../logic/waivers';
+
+const waiverRow: WaiverPlayerRow = {
+  playerId: 'player-1',
+  name: 'Test Runner',
+  position: 'RB',
+  rosPoints: 180,
+  projectedPointsPerWeek: 12,
+  posRank: 17,
+  starterWeeks: 8,
+  possibleStarterWeeks: 14,
+  sourceValue: 180,
+  sourceRank: undefined,
+  suggestions: [
+    { strategy: 'weeks-starter', label: 'Weeks-as-Starter', value: 42, pctOfBudget: 8.4 },
+    { strategy: 'safe', label: 'Safe', value: 50, pctOfBudget: 10 },
+    { strategy: 'aggressive', label: 'Aggressive', value: 75, pctOfBudget: 15 },
+    { strategy: 'vorp', label: 'VoRP', value: 25, pctOfBudget: 5 },
+  ],
+  predictedWinningBid: 61,
+  predictedConfidence: 'medium',
+};
 
 describe('waiver controls', () => {
   it('uses an accessible, scalable Player Values select and changes sources', () => {
@@ -23,15 +49,93 @@ describe('waiver controls', () => {
     const select = screen.getByLabelText('Player Values');
     expect(select.tagName).toBe('SELECT');
     expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual([
-      'Sleeper rest-of-season projections',
-      'FantasyCalc redraft market values',
-      'FantasyPros rest-of-season expert consensus rankings',
+      'Sleeper',
+      'Fantasy Pros',
+      'FantasyCalc',
     ]);
+    expect(select.className).toContain('w-fit');
+    expect(select.className).toContain('max-w-full');
+    expect(select.className.split(/\s+/)).not.toContain('w-full');
+    expect(screen.getByText(/Rest-of-season value source: Sleeper uses projected fantasy points/i)).toBeTruthy();
+    expect(screen.getByText(/Fantasy Pros uses ROS ECR/i)).toBeTruthy();
+    expect(screen.getByText(/Next-week context below always comes from Sleeper/i)).toBeTruthy();
     expect(screen.queryByText(/Football Absurdity/i)).toBeNull();
     expect(screen.queryByText(/Active:/i)).toBeNull();
 
     fireEvent.change(select, { target: { value: 'fantasypros' } });
     expect(onChange).toHaveBeenCalledWith('fantasypros');
+  });
+
+  it('keeps Show rostered players off by default and reports checkbox changes accessibly', () => {
+    const onChange = vi.fn();
+    expect(DEFAULT_SHOW_ROSTERED_PLAYERS).toBe(false);
+    render(<RosteredPlayersToggle checked={DEFAULT_SHOW_ROSTERED_PLAYERS} onChange={onChange} />);
+
+    const checkbox = screen.getByRole('checkbox', { name: 'Show rostered players' });
+    expect((checkbox as HTMLInputElement).checked).toBe(false);
+    expect(checkbox.closest('label')?.className).toContain('min-h-11');
+    fireEvent.click(checkbox);
+    expect(onChange).toHaveBeenCalledWith(true);
+  });
+
+  it('shows roster and owner identity while keeping a rostered card non-actionable', () => {
+    render(
+      <WaiverPlayerCard
+        row={waiverRow}
+        strategy="weeks-starter"
+        remainingFaab={100}
+        source={RANKING_SOURCES[0]}
+        nflTeam="SEA"
+        weeklyText="Next week: 13.4 pts · RB16"
+        byeText="Bye W8"
+        injuryStatus="Questionable"
+        owner={{ rosterId: 9, ownerName: 'Rain City Axes' }}
+      />,
+    );
+
+    const card = screen.getByRole('article', { name: /Test Runner, rostered by Rain City Axes/i });
+    expect(card.getAttribute('aria-disabled')).toBe('true');
+    expect(within(card).getByText('Rostered')).toBeTruthy();
+    expect(within(card).getByText(/Owner: Rain City Axes/)).toBeTruthy();
+    expect(within(card).getByText(/RB · SEA/)).toBeTruthy();
+    expect(within(card).queryByRole('button')).toBeNull();
+    expect(within(card).getByText(/8\/14 starter wks/)).toBeTruthy();
+    expect(within(card).getByText(/Next week: 13.4 pts/)).toBeTruthy();
+    expect(within(card).getByText('Bye W8')).toBeTruthy();
+    expect(within(card).getByText('Questionable')).toBeTruthy();
+    expect(within(card).getByText(/Sleeper ROS 180.0 pts/)).toBeTruthy();
+    expect(within(card).getByText(/Predicted bid/)).toBeTruthy();
+  });
+
+  it('retains compact warning/context copy and suppresses only the intentional Aggressive duplicate', () => {
+    const { rerender } = render(
+      <WaiverPlayerCard
+        row={waiverRow}
+        strategy="safe"
+        remainingFaab={40}
+        source={RANKING_SOURCES[0]}
+        nflTeam="SEA"
+        weeklyText="Next week: Bye"
+        byeText="Bye W8"
+      />,
+    );
+
+    expect(screen.getByLabelText(/More than your FAAB remaining/i)).toBeTruthy();
+    expect(screen.getByText(/Predicted bid/)).toBeTruthy();
+    rerender(
+      <WaiverPlayerCard
+        row={waiverRow}
+        strategy="aggressive"
+        remainingFaab={40}
+        source={RANKING_SOURCES[0]}
+        nflTeam="SEA"
+        weeklyText="Next week: Bye"
+        byeText="Bye W8"
+      />,
+    );
+    expect(screen.queryByText(/Predicted bid/)).toBeNull();
+    expect(screen.getByText(/8\/14 starter wks/)).toBeTruthy();
+    expect(screen.getByText(/Next week: Bye/)).toBeTruthy();
   });
 
   it('changes the accessible replacement/startable-depth target across every integer down to four', () => {
@@ -105,11 +209,11 @@ describe('waiver controls', () => {
     const row = { predictedWinningBid: 275, predictedConfidence: 'medium' as const };
     const { rerender } = render(<PredictedWinningBidFooter strategy="aggressive" row={row} />);
 
-    expect(screen.queryByText(/Predicted winning bid/i)).toBeNull();
+    expect(screen.queryByText(/Predicted bid/i)).toBeNull();
     expect(screen.queryByText('$275')).toBeNull();
 
     rerender(<PredictedWinningBidFooter strategy="safe" row={row} />);
-    expect(screen.getByText(/Predicted winning bid/i)).toBeTruthy();
+    expect(screen.getByText(/Predicted bid/i)).toBeTruthy();
     expect(screen.getByText('$275')).toBeTruthy();
     expect(screen.getByText('medium')).toBeTruthy();
   });
