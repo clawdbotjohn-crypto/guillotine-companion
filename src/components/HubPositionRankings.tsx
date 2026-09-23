@@ -74,7 +74,7 @@ export function HubPositionRankings({
                   <div
                     key={row.group}
                     className="min-w-0 rounded-lg border border-[#1a1e3a] bg-[#0a0d1a] px-3 py-2.5"
-                    aria-label={`${label}: ${row.points.toFixed(1)} projected points, rank ${row.rank} of ${row.outOf} active teams`}
+                    aria-label={`${label}: ${row.points.toFixed(1)} projected points for ${week == null ? 'the upcoming NFL week' : `NFL Week ${week}`}, rank ${row.rank} of ${row.outOf} active teams`}
                   >
                     <div className="flex items-baseline justify-between gap-2">
                       <span className="truncate text-[10px] font-semibold uppercase tracking-wider text-[#a5b4fc]">
@@ -88,7 +88,7 @@ export function HubPositionRankings({
                       className="mt-1 font-['Space_Mono'] text-xs font-bold tabular-nums"
                       style={{ color: rankColor(row.rank, row.outOf) }}
                     >
-                      #{row.rank} of {row.outOf} active
+                      {row.rank}/{row.outOf}
                     </div>
                   </div>
                 );

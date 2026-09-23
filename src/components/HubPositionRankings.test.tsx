@@ -20,9 +20,11 @@ describe('HubPositionRankings', () => {
     expect(screen.getByRole('heading', { name: 'Projected Lineup Strength' })).toBeTruthy();
     expect(screen.getByText('NFL Week 7 · Sleeper')).toBeTruthy();
     expect(screen.getByText('RB ×2')).toBeTruthy();
-    expect(screen.getByText('#2 of 3 active')).toBeTruthy();
+    expect(screen.getByText('2/3')).toBeTruthy();
+    expect(screen.queryByText('#2 of 3 active')).toBeNull();
     expect(screen.getByText('Super Flex')).toBeTruthy();
-    expect(screen.getByLabelText('RB ×2: 34.0 projected points, rank 2 of 3 active teams')).toBeTruthy();
+    expect(screen.getByLabelText('RB ×2: 34.0 projected points for NFL Week 7, rank 2 of 3 active teams')).toBeTruthy();
+    expect(screen.getByLabelText('Super Flex: 13.0 projected points for NFL Week 7, rank 3 of 3 active teams')).toBeTruthy();
     expect(screen.getByText('Complete weekly projections unavailable for: K.')).toBeTruthy();
   });
 

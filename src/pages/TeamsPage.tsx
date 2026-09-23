@@ -24,6 +24,7 @@ import {
   getRestOfSeasonStartWeek,
   projectAllTeams,
   computePositionGroupRanks,
+  computeProjectedLineupGroupRanks,
   computeHistoricalRanks,
   orderTeamProjections,
   type HistoricalRank,
@@ -35,8 +36,9 @@ import { SeasonPicker } from '../components/SeasonPicker';
 import { useSwitchSeason } from '../hooks/useSwitchSeason';
 import { ChevronRight, ShieldCheck, ShieldAlert, Shield, TriangleAlert } from 'lucide-react';
 import { filterTeamsByEliminatedVisibility } from '../logic/teamVisibility';
+import { getTeamPositionGroups, type TeamOrder } from '../logic/teamPositionGroups';
 
-const POS_ORDER = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'K', 'DEF'];
+const POS_ORDER = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'SUPER_FLEX', 'K', 'DEF'];
 
 function rankColor(rank: number, outOf: number): string {
   if (outOf <= 1) return '#a5b4fc';
@@ -46,8 +48,6 @@ function rankColor(rank: number, outOf: number): string {
   if (pct <= 0.75) return '#f59e0b';
   return '#f43f5e';
 }
-
-type TeamOrder = 'projected' | 'historical';
 
 export function EliminatedTeamsVisibilityToggle({
   eliminatedCount,
@@ -162,9 +162,14 @@ export function TeamsPage() {
         .filter((team) => team.eliminatedWeek == null)
         .map((team) => team.rosterId),
     );
-    const posRanks = computePositionGroupRanks(matchups, league, activeRosterIds);
+    const historicalPosRanks = computePositionGroupRanks(matchups, league, activeRosterIds);
+    const projectedPosRanks = computeProjectedLineupGroupRanks(
+      projections,
+      weeklyScoredPlayers,
+      league,
+    );
     const histRanks = computeHistoricalRanks(elim);
-    return { elim, projections, posRanks, histRanks };
+    return { elim, projections, historicalPosRanks, projectedPosRanks, histRanks };
   }, [matchups, rosters, users, league, weeklyProjectionQuery.data]);
 
   if (!leagueId) {
@@ -185,7 +190,7 @@ export function TeamsPage() {
     );
   }
 
-  const { elim, projections, posRanks, histRanks } = model;
+  const { elim, projections, historicalPosRanks, projectedPosRanks, histRanks } = model;
   const hasScores = elim.weeks.length > 0;
 
   const rows = orderTeamProjections(projections, histRanks, orderBy);
@@ -248,7 +253,12 @@ export function TeamsPage() {
       <div className="space-y-2">
         {visibleRows.map((t) => {
           const hist = histRanks.get(t.rosterId);
-          const groups = (posRanks.get(t.rosterId) ?? [])
+          const groups = getTeamPositionGroups(
+            t.rosterId,
+            orderBy,
+            projectedPosRanks.byRosterId,
+            historicalPosRanks,
+          )
             .filter((g) => g.outOf > 0)
             .sort((a, b) => POS_ORDER.indexOf(a.position) - POS_ORDER.indexOf(b.position));
           const isMine = t.rosterId === myRosterId;
@@ -278,7 +288,13 @@ export function TeamsPage() {
               {/* Position-group breakdown */}
               {isOpen && (
                 <div className="mt-3 pt-3 border-t border-[#1a1e3a]">
-                  <PositionGroupBreakdown groups={groups} eliminated={t.eliminated} />
+                  <PositionGroupBreakdown
+                    groups={groups}
+                    eliminated={t.eliminated}
+                    unavailableMessage={orderBy === 'projected'
+                      ? 'Projected lineup-group rankings unavailable.'
+                      : 'No starter scoring data yet.'}
+                  />
                   <button
                     onClick={() => navigate(`/teams/${t.rosterId}`)}
                     className="mt-3 text-[11px] text-[#6366f1] underline underline-offset-4 hover:text-[#8b5cf6]"
@@ -298,9 +314,11 @@ export function TeamsPage() {
 export function PositionGroupBreakdown({
   groups,
   eliminated,
+  unavailableMessage = 'No starter scoring data yet.',
 }: {
   groups: PosGroupRank[];
   eliminated: boolean;
+  unavailableMessage?: string;
 }) {
   if (eliminated) {
     return (
@@ -310,7 +328,7 @@ export function PositionGroupBreakdown({
     );
   }
   if (groups.length === 0) {
-    return <p className="text-[10px] text-[#4a4d77]">No starter scoring data yet.</p>;
+    return <p className="text-[10px] text-[#4a4d77]">{unavailableMessage}</p>;
   }
   return (
     <div className="grid grid-cols-4 gap-2">

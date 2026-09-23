@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { orderTeamProjections, type HistoricalRank, type TeamProjection } from '../logic';
 import { filterTeamsByEliminatedVisibility } from '../logic/teamVisibility';
+import { getTeamPositionGroups } from '../logic/teamPositionGroups';
 import { useAppStore } from '../store';
 import {
   EliminatedTeamsVisibilityToggle,
@@ -35,6 +36,37 @@ describe('PositionGroupBreakdown', () => {
     expect(screen.getByText('FLEX')).toBeTruthy();
     expect(screen.getByText('#2')).toBeTruthy();
     expect(screen.getByText('42p')).toBeTruthy();
+  });
+
+  it('switches expanded details between optimized projections and historical scoring', () => {
+    const projected = new Map([[7, [
+      { group: 'RB' as const, slotCount: 2, points: 31, rank: 1, outOf: 4 },
+      { group: 'FLEX' as const, slotCount: 1, points: 18, rank: 2, outOf: 4 },
+    ]]]);
+    const historical = new Map([[7, [
+      { position: 'RB', points: 240, rank: 4, outOf: 4 },
+    ]]]);
+
+    expect(getTeamPositionGroups(7, 'projected', projected, historical)).toEqual([
+      { position: 'RB', points: 31, rank: 1, outOf: 4 },
+      { position: 'FLEX', points: 18, rank: 2, outOf: 4 },
+    ]);
+    expect(getTeamPositionGroups(7, 'historical', projected, historical)).toEqual([
+      { position: 'RB', points: 240, rank: 4, outOf: 4 },
+    ]);
+  });
+
+  it('uses an honest unavailable message for projected expanded details', () => {
+    render(
+      <PositionGroupBreakdown
+        eliminated={false}
+        groups={[]}
+        unavailableMessage="Projected lineup-group rankings unavailable."
+      />,
+    );
+
+    expect(screen.getByText('Projected lineup-group rankings unavailable.')).toBeTruthy();
+    expect(screen.queryByText('#1')).toBeNull();
   });
 });
 
