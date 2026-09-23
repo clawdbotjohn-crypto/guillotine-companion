@@ -6,20 +6,20 @@ import { formatCurrentRank, formatProjectedCurrentRank } from '../logic/analytic
 import { UpcomingProjectionCard } from './HubPage';
 import { formatHistoricalWeekRank } from '../logic/rankFormat';
 
-describe('Hub current rank', () => {
+describe('Hub rank contexts', () => {
   it('uses the projected survivor standing and post-elimination count', () => {
     const projection: TeamProjection = {
       rosterId: 12,
       displayName: 'Projected team',
       projPoints: 123.4,
       eliminated: false,
-      projRank: 12,
+      projRank: 13,
       projOutOf: 28,
-      risk: 'safe',
+      risk: 'warning',
       starters: [],
     };
 
-    expect(formatProjectedCurrentRank(projection)).toBe('12/28');
+    expect(formatProjectedCurrentRank(projection)).toBe('13/28');
   });
 
   it('shows an unavailable rank honestly', () => {
@@ -37,33 +37,31 @@ describe('Hub current rank', () => {
       starters: [],
     })).toBe('—');
   });
-});
 
-describe('Hub weekly summary ranks', () => {
-  it('uses pre-elimination entrants for the historical weekly denominator', () => {
-    expect(formatHistoricalWeekRank(26, 30)).toBe('26th/30');
+  it('formats last-week rank against that historical week entrants without an ordinal', () => {
+    expect(formatHistoricalWeekRank(26, 30)).toBe('26/30');
   });
-});
 
-describe('Hub upcoming team projection', () => {
-  it('labels the optimized score with NFL week and Sleeper source', () => {
+  it('shows active-only projection rank and the shared risk badge, never original-roster copy', () => {
     const projection: TeamProjection = {
       rosterId: 12,
       displayName: 'Projected team',
       projPoints: 123.45,
       eliminated: false,
-      projRank: 2,
+      projRank: 13,
       projOutOf: 28,
-      risk: 'safe',
+      risk: 'at-risk',
       starters: [],
     };
 
-    render(<UpcomingProjectionCard week={4} projection={projection} allRosterRank={20} allRosterCount={32} />);
+    render(<UpcomingProjectionCard week={4} projection={projection} />);
 
     expect(screen.getByRole('heading', { name: 'Week 4 projected points' })).toBeTruthy();
     expect(screen.getByText('123.5')).toBeTruthy();
-    expect(screen.getByText(/20th\/32 among original rosters/)).toBeTruthy();
-    expect(screen.getByLabelText('Projection rank 20 of 32 original rosters')).toBeTruthy();
+    expect(screen.getByText('13/28')).toBeTruthy();
+    expect(screen.getByLabelText('Active survivor projection rank 13 of 28')).toBeTruthy();
+    expect(screen.getByText('At Risk')).toBeTruthy();
+    expect(screen.queryByText(/original rosters/i)).toBeNull();
     expect(screen.getByText('Sleeper weekly projections')).toBeTruthy();
   });
 

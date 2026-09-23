@@ -6,7 +6,7 @@ export const WAIVER_STRATEGIES: { key: StrategyKey; label: string }[] = [
   { key: 'weeks-starter', label: 'Weeks-as-Starter' },
   { key: 'safe', label: 'Safe' },
   { key: 'aggressive', label: 'Aggressive' },
-  { key: 'vorp', label: 'VoRP' },
+  { key: 'vorp', label: 'Value over Replacement Player (VoRP)' },
 ];
 
 export const WAIVER_STRATEGY_EXPLANATIONS: Record<Exclude<StrategyKey, 'vorp'>, string> = {

@@ -29,7 +29,12 @@ describe('waiver controls', () => {
     expect(screen.getByRole('button', { name: 'About player value sources' })).toBeTruthy();
     expect(screen.queryByText(/^ROS sources:/i)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'About player value sources' }));
-    expect(screen.getByText(/Choose Sleeper projections/)).toBeTruthy();
+    expect(screen.getByText('Choose your player rankings source.')).toBeTruthy();
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual([
+      'Sleeper',
+      'Fantasy Pros',
+      'FantasyCalc',
+    ]);
     fireEvent.change(select, { target: { value: 'fantasypros' } });
     expect(onChange).toHaveBeenCalledWith('fantasypros');
   });
@@ -58,6 +63,25 @@ describe('waiver controls', () => {
     expect(within(card).getByText(/Predicted bid/)).toBeTruthy();
     fireEvent.click(rank);
     expect(within(card).getByText(/180.0 rest-of-season points/)).toBeTruthy();
+  });
+
+  it('highlights only players owned by the selected team while all rostered rows remain disabled', () => {
+    const owner = { rosterId: 9, ownerName: 'Rain City Axes' };
+    const { rerender } = render(
+      <WaiverPlayerCard {...cardProps} strategy="safe" owner={owner} selectedRosterId={9} />,
+    );
+    const selectedCard = screen.getByRole('article', { name: /owned by your selected team/i });
+    expect(selectedCard.getAttribute('aria-disabled')).toBe('true');
+    expect(selectedCard.getAttribute('data-owner-highlight')).toBe('selected-team');
+    expect(screen.getByText('Owned by your selected team.')).toBeTruthy();
+    expect(selectedCard.parentElement?.className).toContain('border-[#10b981]');
+
+    rerender(<WaiverPlayerCard {...cardProps} strategy="safe" owner={owner} selectedRosterId={8} />);
+    const otherTeamCard = screen.getByRole('article', { name: /rostered by Rain City Axes/i });
+    expect(otherTeamCard.getAttribute('aria-disabled')).toBe('true');
+    expect(otherTeamCard.getAttribute('data-owner-highlight')).toBe('neutral');
+    expect(screen.queryByText('Owned by your selected team.')).toBeNull();
+    expect(otherTeamCard.parentElement?.className).not.toContain('border-[#10b981]');
   });
 
   it('preserves warnings and hides duplicate predicted/starter-week data outside their strategies', () => {
@@ -94,7 +118,13 @@ describe('waiver controls', () => {
 
   it('uses the requested exact strategy copy', () => {
     expect(DEFAULT_WAIVER_STRATEGY).toBe('weeks-starter');
-    expect(WAIVER_STRATEGIES.map(({ label }) => label)).toEqual(['Weeks-as-Starter', 'Safe', 'Aggressive', 'VoRP']);
+    expect(WAIVER_STRATEGIES.map(({ label }) => label)).toEqual([
+      'Weeks-as-Starter',
+      'Safe',
+      'Aggressive',
+      'Value over Replacement Player (VoRP)',
+    ]);
+    expect(WAIVER_STRATEGIES.find(({ key }) => key === 'vorp')?.label).toBe('Value over Replacement Player (VoRP)');
     expect(WAIVER_STRATEGY_EXPLANATIONS['weeks-starter']).toBe('Values players according to how many weeks they project to be starting caliber.');
     expect(WAIVER_STRATEGY_EXPLANATIONS.safe).toBe('Conservative bidding style aimed at preserving budget and avoiding overspending.');
     expect(WAIVER_STRATEGY_EXPLANATIONS.aggressive).toBe('Aggressive spending style aimed at winning players early, at the risk of running out of FAAB.');

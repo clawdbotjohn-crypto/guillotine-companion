@@ -98,33 +98,27 @@ export function RankingSourceSelector({
   onChange: (source: WaiverRankingSource) => void;
 }) {
   return (
-    <section className="mb-3 flex items-end gap-3">
-      <div className="shrink-0">
-        <label
-          htmlFor="player-values-source"
-          className="mb-1.5 block text-[10px] uppercase tracking-wider text-[#6b6e99]"
+    <section className="mb-3 w-fit">
+      <div className="mb-1.5 flex items-center gap-1 text-[10px] uppercase tracking-wider text-[#6b6e99]">
+        <label htmlFor="player-values-source">Player Values</label>
+        <ContextDisclosure
+          label="About player value sources"
+          trigger={<Info size={14} className="text-[#6b6e99]" />}
         >
-          Player Values
-        </label>
-        <select
-          id="player-values-source"
-          value={value}
-          aria-describedby="player-values-source-help"
-          onChange={(event) => onChange(event.target.value as WaiverRankingSource)}
-          className="min-h-11 w-fit max-w-full rounded-lg border border-[#2a2e55] bg-[#0e1025] px-3 py-2.5 text-xs text-[#f0f0ff] outline-none focus:border-[#6366f1] focus:ring-1 focus:ring-[#6366f1]"
-        >
-          {RANKING_SOURCES.map((source) => (
-            <option key={source.key} value={source.key}>{source.label}</option>
-          ))}
-        </select>
+          <span id="player-values-source-help">Choose your player rankings source.</span>
+        </ContextDisclosure>
       </div>
-      <ContextDisclosure
-        label="About player value sources"
-        className="mb-2"
-        trigger={<Info size={14} className="text-[#6b6e99]" />}
+      <select
+        id="player-values-source"
+        value={value}
+        aria-describedby="player-values-source-help"
+        onChange={(event) => onChange(event.target.value as WaiverRankingSource)}
+        className="min-h-11 w-fit max-w-full rounded-lg border border-[#2a2e55] bg-[#0e1025] px-3 py-2.5 text-xs text-[#f0f0ff] outline-none focus:border-[#6366f1] focus:ring-1 focus:ring-[#6366f1]"
       >
-        <span id="player-values-source-help">Choose Sleeper projections, Fantasy Pros ECR, or FantasyCalc market values. Next-week context always uses Sleeper.</span>
-      </ContextDisclosure>
+        {RANKING_SOURCES.map((source) => (
+          <option key={source.key} value={source.key}>{source.label}</option>
+        ))}
+      </select>
     </section>
   );
 }
@@ -207,6 +201,7 @@ export function WaiverPlayerCard({
   currentWeek,
   injuryStatus,
   owner,
+  selectedRosterId,
 }: {
   row: WaiverPlayerRow;
   strategy: StrategyKey;
@@ -218,6 +213,7 @@ export function WaiverPlayerCard({
   currentWeek: number;
   injuryStatus?: string | null;
   owner?: RosteredPlayerOwner;
+  selectedRosterId?: number | null;
 }) {
   const suggestion = row.suggestions.find((item) => item.strategy === strategy);
   if (!suggestion) return null;
@@ -227,10 +223,19 @@ export function WaiverPlayerCard({
       ? `${source.shortLabel}: overall rank ${row.sourceRank}`
       : `${source.shortLabel}: value ${row.sourceValue.toFixed(1)}`;
   const rankText = `${row.position} #${row.posRank}`;
+  const isOwnedBySelectedTeam = owner != null && owner.rosterId === selectedRosterId;
 
   return (
-    <Card hover={false} className={`p-2.5 ${owner ? 'border-[#4a4d77]' : ''}`}>
-      <article aria-disabled={owner ? 'true' : undefined} aria-label={`${row.name}, ${owner ? `rostered by ${owner.ownerName}` : 'available'}`}>
+    <Card
+      hover={false}
+      className={`p-2.5 ${isOwnedBySelectedTeam ? 'border-[#10b981] border-l-4 border-l-[#10b981]' : ''}`}
+    >
+      <article
+        aria-disabled={owner ? 'true' : undefined}
+        aria-label={`${row.name}, ${owner ? `rostered by ${owner.ownerName}` : 'available'}${isOwnedBySelectedTeam ? ', owned by your selected team' : ''}`}
+        data-owner-highlight={isOwnedBySelectedTeam ? 'selected-team' : 'neutral'}
+      >
+        {isOwnedBySelectedTeam && <span className="sr-only">Owned by your selected team.</span>}
         <div className="flex items-start justify-between gap-2">
           <div className="flex min-w-0 items-start gap-2">
             <PositionBadge position={row.position} className="shrink-0 px-2 py-1 text-sm" />
@@ -668,6 +673,7 @@ export function WaiversPage() {
               currentWeek={ctx.currentWeek}
               injuryStatus={player?.injury_status}
               owner={ownership.get(row.playerId)}
+              selectedRosterId={rosterId}
             />
           );
         })}

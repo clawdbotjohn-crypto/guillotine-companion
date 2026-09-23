@@ -407,6 +407,41 @@ export interface HistoricalRank extends ActiveStanding {
   totalPoints: number;
 }
 
+export interface AllRosterHistoricalRank {
+  rosterId: number;
+  rank: number;
+  outOf: number;
+  totalPoints: number;
+}
+
+/**
+ * Cumulative season-to-date scoring rank across every original roster. Eliminated
+ * teams remain in this historical comparison pool and missing weekly scores count
+ * as zero. Ties use roster ID so the result is stable across API ordering.
+ */
+export function computeAllRosterHistoricalRanks(
+  elim: EliminationResult,
+): Map<number, AllRosterHistoricalRank> {
+  const totals = new Map<number, number>(
+    [...elim.teams.keys()].map((rosterId) => [rosterId, 0]),
+  );
+  for (const week of elim.weeks) {
+    for (const score of week.scores) {
+      if (!totals.has(score.rosterId)) continue;
+      totals.set(score.rosterId, (totals.get(score.rosterId) ?? 0) + score.points);
+    }
+  }
+
+  const ordered = [...totals.entries()]
+    .map(([rosterId, totalPoints]) => ({ rosterId, totalPoints }))
+    .sort((a, b) => b.totalPoints - a.totalPoints || a.rosterId - b.rosterId);
+  const outOf = ordered.length;
+  return new Map(ordered.map((entry, index) => [
+    entry.rosterId,
+    { ...entry, rank: index + 1, outOf },
+  ]));
+}
+
 /** Cumulative points standings for current survivors only. */
 export function computeHistoricalRanks(elim: EliminationResult): Map<number, HistoricalRank> {
   const activeRosterIds = new Set(

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { League, Matchup, Roster, SleeperUser } from '../../api/types';
 import {
+  computeAllRosterHistoricalRanks,
   computeHistoricalRanks,
   computePositionGroupRanks,
   computeProjectedLineupGroupRanks,
@@ -558,5 +559,33 @@ describe('current team ranking semantics', () => {
     expect(projections.filter((team) => team.eliminated).every((team) =>
       team.projRank === 0 && team.projOutOf === 0 && !historical.has(team.rosterId)
     )).toBe(true);
+  });
+});
+
+describe('all-roster historical total rank', () => {
+  it('ranks season-to-date totals across every original roster, including eliminated teams', () => {
+    const rosters = [roster(1), roster(2), roster(3), roster(4)];
+    const users = [user(1), user(2), user(3), user(4)];
+    const matchups = new Map<number, Matchup[]>([
+      [1, [
+        matchup(1, 100, [1, 1, 1, 1, 1, 1, 1]),
+        matchup(2, 90, [1, 1, 1, 1, 1, 1, 1]),
+        matchup(3, 80, [1, 1, 1, 1, 1, 1, 1]),
+        matchup(4, 70, [1, 1, 1, 1, 1, 1, 1]),
+      ]],
+      [2, [
+        matchup(1, 20, [1, 1, 1, 1, 1, 1, 1]),
+        matchup(2, 25, [1, 1, 1, 1, 1, 1, 1]),
+        matchup(3, 30, [1, 1, 1, 1, 1, 1, 1]),
+      ]],
+    ]);
+    const elimination = computeEliminations(matchups, rosters, users);
+
+    const ranks = computeAllRosterHistoricalRanks(elimination);
+
+    expect(ranks.size).toBe(4);
+    expect(ranks.get(3)).toMatchObject({ rank: 3, outOf: 4, totalPoints: 110 });
+    expect(ranks.get(4)).toMatchObject({ rank: 4, outOf: 4, totalPoints: 70 });
+    expect(elimination.teams.get(4)?.eliminatedWeek).toBe(1);
   });
 });

@@ -8,5 +8,5 @@ export function ordinal(value: number): string {
 }
 
 export function formatHistoricalWeekRank(rank: number, entrants: number): string {
-  return `${ordinal(rank)}/${entrants}`;
+  return `${rank}/${entrants}`;
 }

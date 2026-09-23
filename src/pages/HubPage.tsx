@@ -20,6 +20,7 @@ import {
   buildUpcomingByeWarnings,
   computeEliminations,
   computeProjectedLineupGroupRanks,
+  computeAllRosterHistoricalRanks,
   extractBids,
   formatProjectedCurrentRank,
   getProjectionScoring,
@@ -35,19 +36,18 @@ import { HubPositionRankings } from '../components/HubPositionRankings';
 import { useSwitchSeason } from '../hooks/useSwitchSeason';
 import { LogOut, Calendar } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { formatHistoricalWeekRank, ordinal } from '../logic/rankFormat';
+import { formatHistoricalWeekRank } from '../logic/rankFormat';
 
 export function UpcomingProjectionCard({
-  week, projection, allRosterRank, allRosterCount, isLoading = false, unavailableReason,
+  week, projection, isLoading = false, unavailableReason,
 }: {
   week: number | null;
   projection: TeamProjection | undefined;
-  allRosterRank?: number;
-  allRosterCount?: number;
   isLoading?: boolean;
   unavailableReason?: string;
 }) {
   const points = projection?.projPoints;
+  const hasActiveStanding = points != null && projection != null && !projection.eliminated;
   const value = isLoading ? 'Loading…' : points == null ? 'Unavailable' : points.toFixed(1);
   return (
     <Card hover={false} className="p-4 mb-3">
@@ -55,11 +55,17 @@ export function UpcomingProjectionCard({
         {week == null ? 'Projected points' : `Week ${week} projected points`}
       </h2>
       <div className="text-2xl font-bold font-['Space_Mono'] tabular-nums text-[#a5b4fc]">{value}</div>
-      {allRosterRank && allRosterCount ? (
-        <div className="mt-1 text-xs text-[#6b6e99]" aria-label={`Projection rank ${allRosterRank} of ${allRosterCount} original rosters`}>
-          {ordinal(allRosterRank)}/{allRosterCount} among original rosters
+      {hasActiveStanding && (
+        <div className="mt-1 flex items-center gap-2">
+          <span
+            className="font-['Space_Mono'] text-xs text-[#6b6e99] tabular-nums"
+            aria-label={`Active survivor projection rank ${projection.projRank} of ${projection.projOutOf}`}
+          >
+            {formatProjectedCurrentRank(projection)}
+          </span>
+          <StatusBadge status={projection.risk} />
         </div>
-      ) : null}
+      )}
       <span className="sr-only">Sleeper weekly projections</span>
       {!isLoading && points == null && unavailableReason && <p className="text-[10px] text-[#6b6e99] mt-2">{unavailableReason}</p>}
     </Card>
@@ -136,10 +142,8 @@ export function HubPage() {
     : null;
   const projections = projectAllTeams(rosters, weeklyScoredPlayers, league, elimResult);
   const myProjection = projections.find((team) => team.rosterId === rosterId);
-  const allRosterProjectionOrder = projections
-    .filter((team) => team.projPoints != null)
-    .sort((a, b) => (b.projPoints ?? 0) - (a.projPoints ?? 0) || a.rosterId - b.rosterId);
-  const allRosterProjectionRank = allRosterProjectionOrder.findIndex((team) => team.rosterId === rosterId) + 1;
+  const allRosterHistoricalRanks = computeAllRosterHistoricalRanks(elimResult);
+  const myHistoricalTotalRank = allRosterHistoricalRanks.get(rosterId);
   const projectionLoading = nflStateQuery.isLoading
     || (projectionWeek != null && weeklyProjectionQuery.isLoading);
   const projectionUnavailableReason = projectionLoading
@@ -267,8 +271,6 @@ export function HubPage() {
         <UpcomingProjectionCard
           week={projectionWeek}
           projection={myProjection}
-          allRosterRank={allRosterProjectionRank || undefined}
-          allRosterCount={allRosterProjectionOrder.length || undefined}
           isLoading={projectionLoading}
           unavailableReason={projectionUnavailableReason}
         />
@@ -341,10 +343,6 @@ export function HubPage() {
   else if (myTeam?.isRunnerUp) status = 'runner-up';
   else if (myTeam?.eliminatedWeek) status = 'eliminated';
   else if (myProjection?.projPoints != null) status = myProjection.risk;
-  const statusAvailable = myTeam?.isChampion
-    || myTeam?.isRunnerUp
-    || myTeam?.eliminatedWeek != null
-    || myProjection?.projPoints != null;
 
   // Week-by-week scores for sparkline
   const weekScores = elimResult.weeks
@@ -365,9 +363,6 @@ export function HubPage() {
           <p className="text-xs text-[#6b6e99] mt-0.5">{leagueName}</p>
         </div>
         <div className="flex items-center gap-2">
-          {statusAvailable
-            ? <StatusBadge status={status} />
-            : <span className="text-[10px] text-[#6b6e99]">Projection unavailable</span>}
           <button
             onClick={() => { reset(); navigate('/'); }}
             className="text-[#4a4d77] hover:text-[#f43f5e] transition-colors p-1"
@@ -389,8 +384,6 @@ export function HubPage() {
       <UpcomingProjectionCard
         week={projectionWeek}
         projection={myProjection}
-        allRosterRank={allRosterProjectionRank || undefined}
-        allRosterCount={allRosterProjectionOrder.length || undefined}
         isLoading={projectionLoading}
         unavailableReason={projectionUnavailableReason}
       />
@@ -424,7 +417,9 @@ export function HubPage() {
         <StatCard
           label="Total Points"
           value={totalPoints.toFixed(1)}
-          subtext={`${elimResult.weeks.length} weeks`}
+          subtext={myHistoricalTotalRank
+            ? `${myHistoricalTotalRank.rank}/${myHistoricalTotalRank.outOf} · ${elimResult.weeks.length} weeks`
+            : `${elimResult.weeks.length} weeks`}
         />
         <StatCard
           label="Last Week Score"

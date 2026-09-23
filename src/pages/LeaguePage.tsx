@@ -3,8 +3,16 @@
 
 import { useState } from 'react';
 import { useAppStore, usePlayers } from '../store';
-import { useLeague, useLeagueUsers, useRosters, useAllMatchups, useAllTransactions, useLeagueHistory } from '../api';
-import { computeEliminations, extractBids } from '../logic';
+import { getPlayerPosition } from '../store/players';
+import { useLeague, useLeagueUsers, useRosters, useAllMatchups, useAllTransactions, useLeagueHistory, useNflState, useWeeklyProjections } from '../api';
+import {
+  buildWeeklyScoredPlayers,
+  computeEliminations,
+  extractBids,
+  getProjectionScoring,
+  getRestOfSeasonStartWeek,
+  projectAllTeams,
+} from '../logic';
 import { Card, Skeleton, StatusBadge, PositionBadge } from '../components/ui';
 import { Trophy, Medal, Calendar } from 'lucide-react';
 import { BidGrid } from '../components/BidGrid';
@@ -22,6 +30,15 @@ export function LeaguePage() {
   const { data: matchups, isLoading: matchupsLoading } = useAllMatchups(leagueId, 18);
   const { data: transactions } = useAllTransactions(leagueId, 18);
   const { data: leagueHistory, isLoading: historyLoading } = useLeagueHistory(rootLeagueId);
+  const nflStateQuery = useNflState();
+  const projectionWeek = league && nflStateQuery.data && league.season === nflStateQuery.data.season
+    ? getRestOfSeasonStartWeek(nflStateQuery.data)
+    : null;
+  const weeklyProjectionQuery = useWeeklyProjections(
+    league?.season ?? null,
+    projectionWeek,
+    projectionWeek != null,
+  );
   const handleSwitchSeason = useSwitchSeason();
 
   const seasons = (leagueHistory || [])
@@ -53,6 +70,14 @@ export function LeaguePage() {
   }
 
   const elimResult = computeEliminations(matchups, rosters, users);
+  const weeklyScoredPlayers = weeklyProjectionQuery.data
+    ? buildWeeklyScoredPlayers(
+        weeklyProjectionQuery.data,
+        getProjectionScoring(league?.scoring_settings?.rec),
+        getPlayerPosition,
+      )
+    : null;
+  const projections = projectAllTeams(rosters, weeklyScoredPlayers, league, elimResult);
   const bids = transactions ? extractBids(transactions) : [];
   const positionMatches = (position: string) => bidPosition === 'ALL'
     || position === bidPosition
@@ -369,6 +394,7 @@ export function LeaguePage() {
           rosters={rosters}
           users={users}
           teams={elimResult.teams}
+          projections={projections}
           totalBudget={league?.settings?.waiver_budget ?? 1000}
           bids={bids}
         />

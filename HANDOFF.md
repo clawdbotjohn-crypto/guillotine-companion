@@ -97,3 +97,10 @@ Fresh normal Azure PR preview for code head `bff6e1134f83bfced796fb96fd42ffa795b
 
 - Do not merge, deploy production, force-push, run `workflow_dispatch`, or run `gh workflow run`.
 - `PROGRESS.md` PR #8 review items were checked with concise evidence after all implementation/tests passed.
+
+## Sep 22 21:49 final follow-up — investigation before patching
+
+- **Hub rank contexts:** `HubPage` built a second projection order from every roster and rendered it with `ordinal()` plus “among original rosters,” even though `projectAllTeams` had already computed the required active-only rank/risk together. The historical Total Points card independently summed only the selected roster and had no all-original-roster ranking helper. `formatHistoricalWeekRank` itself injected ordinal suffixes. The header also rendered the same projected status later represented by the summary.
+- **Waiver ownership/help/copy:** ownership was passed only as a truthy rostered marker, so `WaiverPlayerCard` could not compare the owner roster ID with the selected roster. The source disclosure was a sibling of the entire label/select block, visually placing it away from the heading; its content repeated source details. The first rendered strategy occurrence was the abbreviated `VoRP` toggle label.
+- **Bid grid mobile behavior:** the horizontal scroller had no ref/effect tied to week/position filtering, preserving stale `scrollLeft` after the columns changed. The sticky header/body cells specified only `minWidth` (body did not even specify that), reused `z-10`, and had no fixed/max width or separating border, permitting the sticky layer and underlying content to overlap at mobile scroll offsets.
+- **FAAB consistency/summary:** `FaabTracker` owned a local `getTeamStatus` that returned `safe` for every active team and never received shared weekly projections. Its summary was computed over all rosters before the visibility filter and mixed league total/average/median, so the figures did not describe the displayed pool.

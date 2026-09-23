@@ -42,6 +42,7 @@ export {
   computeProjectedLineupGroupRanks,
   computePositionGroupRanks,
   computeHistoricalRanks,
+  computeAllRosterHistoricalRanks,
   orderTeamProjections,
   type LineupSlots,
   type TeamProjection,
@@ -50,6 +51,7 @@ export {
   type ProjectedLineupGroupRankings,
   type PosGroupRank,
   type HistoricalRank,
+  type AllRosterHistoricalRank,
 } from './analytics';
 
 export {
