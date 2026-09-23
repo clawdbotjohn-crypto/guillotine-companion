@@ -24,7 +24,7 @@ interface TeamFaab {
   team: TeamInfo | undefined;
 }
 
-function getTeamStatus(team: TeamInfo | undefined): 'champion' | 'runner-up' | 'eliminated' | 'safe' | 'middle' | 'at-risk' {
+function getTeamStatus(team: TeamInfo | undefined): 'champion' | 'runner-up' | 'eliminated' | 'safe' | 'warning' | 'at-risk' {
   if (!team) return 'safe';
   if (team.isChampion) return 'champion';
   if (team.isRunnerUp) return 'runner-up';

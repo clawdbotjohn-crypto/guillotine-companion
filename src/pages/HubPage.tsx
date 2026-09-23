@@ -281,7 +281,7 @@ export function HubPage() {
   }, 0);
 
   // Determine status
-  let status: 'champion' | 'runner-up' | 'eliminated' | 'safe' | 'at-risk' | 'middle' = 'middle';
+  let status: 'champion' | 'runner-up' | 'eliminated' | 'safe' | 'at-risk' | 'warning' = 'warning';
   if (myTeam?.isChampion) status = 'champion';
   else if (myTeam?.isRunnerUp) status = 'runner-up';
   else if (myTeam?.eliminatedWeek) status = 'eliminated';
@@ -344,7 +344,11 @@ export function HubPage() {
           label="Current Rank"
           value={formatProjectedCurrentRank(myProjection)}
           subtext={projectionWeek == null ? 'Sleeper projection unavailable' : `NFL Wk ${projectionWeek} · Sleeper`}
-          accentColor={status === 'safe' ? '#10b981' : status === 'at-risk' ? '#f43f5e' : '#6366f1'}
+          accentColor={status === 'safe'
+            ? '#10b981'
+            : status === 'at-risk'
+              ? '#f43f5e'
+              : status === 'warning' ? '#f59e0b' : '#6366f1'}
         />
         <StatCard
           label="FAAB Remaining"

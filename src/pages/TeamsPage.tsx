@@ -1,6 +1,6 @@
 // Teams page — rethought per John feedback (2026-09-22).
 // - Rank teams by PROJECTED best-lineup points for the coming week
-// - Show risk (safe / middle / at-risk) from projection
+// - Show risk (safe / warning / at-risk) from projection
 // - Per team: historical points rank + position-group scoring breakdown (FLEX its own category)
 // Toggle between Projected and Historical ordering.
 
@@ -33,7 +33,7 @@ import {
 import { Card, Skeleton, StatusBadge } from '../components/ui';
 import { SeasonPicker } from '../components/SeasonPicker';
 import { useSwitchSeason } from '../hooks/useSwitchSeason';
-import { ChevronRight, ShieldCheck, ShieldAlert, Shield } from 'lucide-react';
+import { ChevronRight, ShieldCheck, ShieldAlert, Shield, TriangleAlert } from 'lucide-react';
 
 const POS_ORDER = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'K', 'DEF'];
 
@@ -62,7 +62,7 @@ export function TeamStandingDetails({
     return <span className="text-[10px] text-[#6b6e99]">Sleeper projection unavailable</span>;
   }
 
-  const status = orderBy === 'projected' ? team.risk : historical?.risk ?? 'middle';
+  const status = orderBy === 'projected' ? team.risk : historical?.risk ?? 'warning';
   const rank = orderBy === 'projected' ? team.projRank : historical?.rank;
   const outOf = orderBy === 'projected' ? team.projOutOf : historical?.outOf;
   const points = orderBy === 'projected' ? team.projPoints : historical?.totalPoints;
@@ -215,7 +215,7 @@ export function TeamsPage() {
             .filter((g) => g.outOf > 0)
             .sort((a, b) => POS_ORDER.indexOf(a.position) - POS_ORDER.indexOf(b.position));
           const isMine = t.rosterId === myRosterId;
-          const modeRisk = orderBy === 'projected' ? t.risk : hist?.risk ?? 'middle';
+          const modeRisk = orderBy === 'projected' ? t.risk : hist?.risk ?? 'warning';
           const isOpen = expanded === t.rosterId;
 
           return (
@@ -284,11 +284,11 @@ export function PositionGroupBreakdown({
   );
 }
 
-function RiskIcon({ risk }: { risk: 'safe' | 'middle' | 'at-risk' | 'eliminated' }) {
+function RiskIcon({ risk }: { risk: 'safe' | 'warning' | 'at-risk' | 'eliminated' }) {
   if (risk === 'safe') return <ShieldCheck size={18} className="text-[#10b981] shrink-0" />;
   if (risk === 'at-risk') return <ShieldAlert size={18} className="text-[#f43f5e] shrink-0" />;
-  if (risk === 'eliminated') return <Shield size={18} className="text-[#4a4d77] shrink-0" />;
-  return <Shield size={18} className="text-[#a5b4fc] shrink-0" />;
+  if (risk === 'warning') return <TriangleAlert size={18} className="text-[#f59e0b] shrink-0" />;
+  return <Shield size={18} className="text-[#4a4d77] shrink-0" />;
 }
 
 function PosCell({ g }: { g: PosGroupRank }) {

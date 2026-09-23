@@ -32,7 +32,7 @@ describe('Hub current rank', () => {
       eliminated: true,
       projRank: 0,
       projOutOf: 0,
-      risk: 'middle',
+      risk: 'warning',
       starters: [],
     })).toBe('—');
   });

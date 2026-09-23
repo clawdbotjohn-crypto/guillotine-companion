@@ -148,13 +148,13 @@ export function DataTable({ children, className = '' }: TableProps) {
 
 // Status badge
 interface StatusBadgeProps {
-  status: 'safe' | 'middle' | 'at-risk' | 'eliminated' | 'champion' | 'runner-up';
+  status: 'safe' | 'warning' | 'at-risk' | 'eliminated' | 'champion' | 'runner-up';
   className?: string;
 }
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
   safe: { bg: 'rgba(16,185,129,0.15)', text: '#10b981', label: 'Safe' },
-  middle: { bg: 'rgba(245,158,11,0.15)', text: '#f59e0b', label: 'Middle' },
+  warning: { bg: 'rgba(245,158,11,0.15)', text: '#f59e0b', label: 'Warning' },
   'at-risk': { bg: 'rgba(244,63,94,0.15)', text: '#f43f5e', label: 'At Risk' },
   eliminated: { bg: 'rgba(244,63,94,0.2)', text: '#f43f5e', label: 'Eliminated' },
   champion: { bg: 'rgba(245,158,11,0.2)', text: '#f59e0b', label: 'Champion' },
@@ -162,7 +162,7 @@ const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }>
 };
 
 export function StatusBadge({ status, className = '' }: StatusBadgeProps) {
-  const s = STATUS_STYLES[status] || STATUS_STYLES.middle;
+  const s = STATUS_STYLES[status] || STATUS_STYLES.warning;
   return (
     <span
       className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${className}`}

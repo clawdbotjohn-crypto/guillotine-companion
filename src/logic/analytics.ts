@@ -9,7 +9,7 @@ export function formatCurrentRank(rank: number | undefined, activeTeamCount: num
   return rank == null || activeTeamCount <= 0 ? '—' : `${rank}/${activeTeamCount}`;
 }
 
-export type TeamRisk = 'safe' | 'middle' | 'at-risk';
+export type TeamRisk = 'safe' | 'warning' | 'at-risk';
 
 export interface ActiveStanding {
   rosterId: number;
@@ -26,8 +26,10 @@ interface StandingCandidate {
 
 /**
  * Rank one current-team metric among survivors and derive guillotine risk from
- * that same order. Eliminated teams never receive a current standing. Equal
- * values use roster ID so API/input ordering cannot change the result.
+ * that same order. The bottom max(4, ceil(active / 3)) teams are flagged, capped
+ * to the active field: the bottom elimination count is at risk and the rest are
+ * warnings. Eliminated teams never receive a current standing. Equal values use
+ * roster ID so API/input ordering cannot change the result.
  */
 export function rankActiveTeams(
   candidates: readonly StandingCandidate[],
@@ -37,16 +39,17 @@ export function rankActiveTeams(
     .filter((candidate) => !candidate.eliminated)
     .sort((a, b) => b.value - a.value || a.rosterId - b.rosterId);
   const outOf = active.length;
-  const riskWidth = Math.max(1, elimsPerWeek);
+  const flaggedWidth = Math.min(outOf, Math.max(4, Math.ceil(outOf / 3)));
+  const atRiskWidth = Math.min(flaggedWidth, Math.max(0, elimsPerWeek));
   const standings = new Map<number, ActiveStanding>();
 
   active.forEach((candidate, index) => {
     const rank = index + 1;
     const fromBottom = outOf - rank;
-    const risk: TeamRisk = fromBottom < riskWidth
+    const risk: TeamRisk = fromBottom < atRiskWidth
       ? 'at-risk'
-      : fromBottom < riskWidth * 2
-        ? 'middle'
+      : fromBottom < flaggedWidth
+        ? 'warning'
         : 'safe';
     standings.set(candidate.rosterId, { rosterId: candidate.rosterId, rank, outOf, risk });
   });
@@ -210,7 +213,7 @@ export function projectAllTeams(
       eliminated,
       projRank: 0,
       projOutOf: 0,
-      risk: 'middle',
+      risk: 'warning',
       starters: lineup.starters,
     };
   });

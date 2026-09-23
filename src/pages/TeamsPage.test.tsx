@@ -77,6 +77,19 @@ describe('Teams current standings', () => {
     expect(screen.queryByText('Safe')).toBeNull();
   });
 
+  it('renders the renamed warning status', () => {
+    render(
+      <TeamStandingDetails
+        team={{ ...projectedTeam, risk: 'warning' }}
+        historical={historicalStanding}
+        orderBy="projected"
+      />,
+    );
+
+    expect(screen.getByText('Warning')).toBeTruthy();
+    expect(screen.queryByText('Middle')).toBeNull();
+  });
+
   it('shows an honest projected-state message when Sleeper weekly data is unavailable', () => {
     render(
       <TeamStandingDetails

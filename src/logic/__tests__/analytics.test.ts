@@ -5,6 +5,7 @@ import {
   computePositionGroupRanks,
   formatProjectedCurrentRank,
   projectAllTeams,
+  rankActiveTeams,
 } from '../analytics';
 import { computeEliminations } from '../elimination';
 
@@ -59,6 +60,49 @@ function matchup(rosterId: number, points: number, starterPoints: number[]): Mat
     players_points: Object.fromEntries(starters.map((playerId, index) => [playerId, starterPoints[index]])),
   };
 }
+
+describe('active-team risk thresholds', () => {
+  const standingsByRank = (activeTeams: number, elimsPerWeek: number) => {
+    const standings = rankActiveTeams(
+      Array.from({ length: activeTeams }, (_, index) => ({
+        rosterId: index + 1,
+        value: activeTeams - index,
+        eliminated: false,
+      })),
+      elimsPerWeek,
+    );
+    return [...standings.values()].sort((a, b) => a.rank - b.rank);
+  };
+
+  it('flags exactly ranks 19-28 in a 28-team, two-cut league', () => {
+    const standings = standingsByRank(28, 2);
+
+    expect(standings.slice(0, 18).every((standing) => standing.risk === 'safe')).toBe(true);
+    expect(standings.slice(18, 26).every((standing) => standing.risk === 'warning')).toBe(true);
+    expect(standings.slice(26).every((standing) => standing.risk === 'at-risk')).toBe(true);
+    expect(standings[17]).toMatchObject({ rank: 18, risk: 'safe' });
+    expect(standings[18]).toMatchObject({ rank: 19, risk: 'warning' });
+    expect(standings[25]).toMatchObject({ rank: 26, risk: 'warning' });
+    expect(standings[26]).toMatchObject({ rank: 27, risk: 'at-risk' });
+    expect(standings[27]).toMatchObject({ rank: 28, risk: 'at-risk' });
+  });
+
+  it('uses the four-team minimum and caps it to leagues smaller than four', () => {
+    expect(standingsByRank(6, 1).map((standing) => standing.risk)).toEqual([
+      'safe',
+      'safe',
+      'warning',
+      'warning',
+      'warning',
+      'at-risk',
+    ]);
+    expect(standingsByRank(3, 1).map((standing) => standing.risk)).toEqual([
+      'warning',
+      'warning',
+      'at-risk',
+    ]);
+  });
+});
 
 describe('computePositionGroupRanks', () => {
   it('ranks every supported position only among surviving teams with stable roster-ID ties', () => {
@@ -148,7 +192,7 @@ describe('Sleeper weekly best-lineup projections', () => {
       { playerId: '1-RB-a', position: 'RB', proj: 20 },
       { playerId: '1-WR-a', position: 'FLEX', proj: 19 },
     ]);
-    expect(team1).toMatchObject({ projRank: 1, projOutOf: 2, risk: 'middle' });
+    expect(team1).toMatchObject({ projRank: 1, projOutOf: 2, risk: 'warning' });
   });
 
   it('keeps score and rank unavailable without a usable weekly payload', () => {
@@ -272,16 +316,16 @@ describe('current team ranking semantics', () => {
     expect(team29Historical).toMatchObject({ rank: 28, outOf: 28, risk: 'at-risk' });
     expect(formatProjectedCurrentRank(team29Projection)).toBe('1/28');
 
-    expect(activeProjections.slice(-4).map((standing) => standing.risk)).toEqual([
-      'middle',
-      'middle',
+    expect(activeProjections.map((standing) => standing.risk)).toEqual([
+      ...Array(18).fill('safe'),
+      ...Array(8).fill('warning'),
       'at-risk',
       'at-risk',
     ]);
     const historicalByRank = [...historical.values()].sort((a, b) => a.rank - b.rank);
-    expect(historicalByRank.slice(-4).map((standing) => standing.risk)).toEqual([
-      'middle',
-      'middle',
+    expect(historicalByRank.map((standing) => standing.risk)).toEqual([
+      ...Array(18).fill('safe'),
+      ...Array(8).fill('warning'),
       'at-risk',
       'at-risk',
     ]);
