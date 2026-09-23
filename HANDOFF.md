@@ -1,10 +1,10 @@
 # Guillotine Companion PR #8 Handoff
 
-**Updated:** 2026-09-22 19:42 PDT  
-**Status:** COMPLETE  
-**Branch:** `feat/hub-roster-visibility`  
-**Implementation head:** `e188a39bbd49bc20ffe654ef300d175d8914227f` (a subsequent HANDOFF-only commit contains this report)  
-**PR:** OPEN / CLEAN / MERGEABLE / **UNMERGED** — https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/8  
+**Updated:** 2026-09-22 19:42 PDT
+**Status:** COMPLETE
+**Branch:** `feat/hub-roster-visibility`
+**Implementation head:** `e188a39bbd49bc20ffe654ef300d175d8914227f` (a subsequent HANDOFF-only commit contains this report)
+**PR:** OPEN / CLEAN / MERGEABLE / **UNMERGED** — https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/8
 **Exact preview:** https://nice-moss-07ec56310-8.centralus.7.azurestaticapps.net
 
 ## Commits in this follow-up
