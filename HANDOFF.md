@@ -104,3 +104,45 @@ Fresh normal Azure PR preview for code head `bff6e1134f83bfced796fb96fd42ffa795b
 - **Waiver ownership/help/copy:** ownership was passed only as a truthy rostered marker, so `WaiverPlayerCard` could not compare the owner roster ID with the selected roster. The source disclosure was a sibling of the entire label/select block, visually placing it away from the heading; its content repeated source details. The first rendered strategy occurrence was the abbreviated `VoRP` toggle label.
 - **Bid grid mobile behavior:** the horizontal scroller had no ref/effect tied to week/position filtering, preserving stale `scrollLeft` after the columns changed. The sticky header/body cells specified only `minWidth` (body did not even specify that), reused `z-10`, and had no fixed/max width or separating border, permitting the sticky layer and underlying content to overlap at mobile scroll offsets.
 - **FAAB consistency/summary:** `FaabTracker` owned a local `getTeamStatus` that returned `safe` for every active team and never received shared weekly projections. Its summary was computed over all rosters before the visibility filter and mixed league total/average/median, so the figures did not describe the displayed pool.
+
+## Sep 22 final follow-up — implementation and validation
+
+### Delivered
+
+- **Hub rank contexts:** `formatHistoricalWeekRank` now emits compact `rank/entrants`; `computeAllRosterHistoricalRanks` provides season-to-date rank across all original rosters (including eliminated); the projected card consumes `projectAllTeams`' active-only `projRank/projOutOf/risk` and the shared `StatusBadge`. Removed the duplicate header badge and all “among original rosters” projection copy.
+- **Waivers:** cards compare ownership against the selected roster and only selected-team-owned rows receive the green 4px border plus explicit screen-reader copy. Every rostered article remains `aria-disabled`. Player Values uses compact `Sleeper` / `Fantasy Pros` / `FantasyCalc` options, an adjacent disclosure with exact copy `Choose your player rankings source.`, and the first visible VoRP term is `Value over Replacement Player (VoRP)`.
+- **League Bids:** `BidGrid` resets its own scroller in a layout effect whenever week/position columns change. A one-position grid uses a compact 260px minimum, keeping player and bid amount in the viewport. WK cells use opaque backgrounds, inline/class `left: 0`, fixed/min/max 52px width, distinct z-indexes, and a right border.
+- **League FAAB:** `LeaguePage` feeds the same `projectAllTeams` result used by Hub/Teams into `FaabTracker`. Active rows render that projection's shared risk and active-only projected rank; eliminated rows remain eliminated with no active rank. Summary is displayed-pool Remaining FAAB Min / Avg / Max via `logic/faabDisplay.ts`, with one currency formatter.
+
+### Files
+
+- Runtime: `src/pages/HubPage.tsx`, `src/pages/WaiversPage.tsx`, `src/pages/LeaguePage.tsx`, `src/components/BidGrid.tsx`, `src/components/FaabTracker.tsx`, `src/logic/analytics.ts`, `src/logic/faabDisplay.ts`, `src/logic/rankFormat.ts`, `src/logic/waiverDisplay.ts`, `src/logic/index.ts`.
+- Focused regressions: `src/pages/HubPage.test.tsx`, `src/pages/WaiversPage.test.tsx`, `src/components/BidGrid.test.tsx`, `src/components/FaabTracker.test.tsx`, `src/logic/__tests__/analytics.test.ts`.
+- Implementation commit: `12433cccbec28d89c4b4ed9ca89007a41335c8f7` (`fix final hub waiver bids and FAAB review`).
+
+### Exact automated validation
+
+- Focused: `npm test -- --run src/pages/WaiversPage.test.tsx src/components/FaabTracker.test.tsx src/components/BidGrid.test.tsx src/pages/HubPage.test.tsx src/logic/__tests__/analytics.test.ts` → **5 files, 30 tests passed**.
+- Full: `npm test -- --run` → **19 files, 111 tests passed**.
+- `npm run lint` → **0 warnings, 0 errors**.
+- `npm run build` → production TypeScript/Vite build passed (existing Vite >500 kB advisory only; not a lint warning/error).
+- `git diff --check` → passed.
+- `git diff --check origin/main...HEAD` → passed.
+
+### Fresh real-preview browser evidence
+
+Implementation-head Azure run `35821608642` succeeded with `headSha=12433cccbec28d89c4b4ed9ca89007a41335c8f7`; preview: <https://nice-moss-07ec56310-8.centralus.7.azurestaticapps.net>.
+
+Real league `SeaMex Guillotine 🪓` / selected `Houston0ilers`:
+
+- **375px Hub:** projected `91.3`, active `13/28`, `Safe`; Total Points `136.5`, all-original `25/32`; Last Week `68.4`, historical-week `26/30`; no “among original rosters.”
+- **375px Waivers:** compact options and expanded first VoRP term rendered; disclosure was 4px beside heading on the same row and showed exact copy. With rostered enabled: 10 selected-team rows had 4px green `rgb(16,185,129)` border and screen-reader ownership text, 260 other rostered rows were neutral, and all 270 were `aria-disabled=true`.
+- **375px Bids:** All/Grid verified at `scrollLeft=0`, `200`, and max `457`; WK header/body remained at x=16 (the scroller's exact left), 52px wide, opaque, bordered, and above underlying cells with no screenshot bleed/seam. From max scroll, selecting WR immediately reset to `scrollLeft=0`; `Jordan Addison` and `$50` were both fully in bounds, and filtered table had no horizontal overflow. List retained WR filtering and real bid rows.
+- **375px FAAB:** active pool explicitly said `28 displayed`, Min `$215`, Avg `$468`, Max `$500`; `Houston0ilers` showed `Safe · Proj 13/28`, exactly matching Hub/Teams. Showing eliminated changed the label to `All teams · 32 displayed`, rendered four Eliminated badges, and retained exactly 28 active projected ranks.
+- **1280px desktop:** Hub, Waivers, Bids All/Grid, WR/Grid, WR/List, and FAAB were rechecked with real data; no page-level horizontal overflow. Hub retained all three contexts, Waivers retained compact source/VoRP/alignment, WR grid retained `$50` at scroll zero, list retained the filter, and FAAB retained displayed-pool labels/statuses.
+- Browser tab was closed; no local dev server was started.
+
+### Remaining / safety state
+
+- No requested Sep 22 final-follow-up item remains unchecked in `PROGRESS.md`.
+- PR #8 remains **OPEN and UNMERGED**. No main/master push, merge, force-push, production deploy, workflow dispatch, manual workflow run, or OpenClaw change was performed.
