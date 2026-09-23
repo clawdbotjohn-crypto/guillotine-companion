@@ -34,6 +34,7 @@ import { Card, Skeleton, StatusBadge } from '../components/ui';
 import { SeasonPicker } from '../components/SeasonPicker';
 import { useSwitchSeason } from '../hooks/useSwitchSeason';
 import { ChevronRight, ShieldCheck, ShieldAlert, Shield, TriangleAlert } from 'lucide-react';
+import { filterTeamsByEliminatedVisibility } from '../logic/teamVisibility';
 
 const POS_ORDER = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'K', 'DEF'];
 
@@ -47,6 +48,31 @@ function rankColor(rank: number, outOf: number): string {
 }
 
 type TeamOrder = 'projected' | 'historical';
+
+export function EliminatedTeamsVisibilityToggle({
+  eliminatedCount,
+}: {
+  eliminatedCount: number;
+}) {
+  const showEliminatedTeams = useAppStore((state) => state.showEliminatedTeams);
+  const setShowEliminatedTeams = useAppStore((state) => state.setShowEliminatedTeams);
+
+  return (
+    <label
+      className={`mb-3 flex w-fit items-center gap-2 text-[11px] text-[#a5b4fc]
+        ${eliminatedCount === 0 ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+    >
+      <input
+        type="checkbox"
+        checked={showEliminatedTeams}
+        disabled={eliminatedCount === 0}
+        onChange={(event) => setShowEliminatedTeams(event.target.checked)}
+        className="h-4 w-4 rounded border-[#4a4d77] bg-[#0a0d1a] accent-[#6366f1]"
+      />
+      <span>Show eliminated teams ({eliminatedCount})</span>
+    </label>
+  );
+}
 
 export function TeamStandingDetails({
   team,
@@ -86,7 +112,14 @@ export function TeamStandingDetails({
 
 export function TeamsPage() {
   const navigate = useNavigate();
-  const { leagueId, leagueName, leagueSeason, rootLeagueId, rosterId: myRosterId } = useAppStore();
+  const {
+    leagueId,
+    leagueName,
+    leagueSeason,
+    rootLeagueId,
+    rosterId: myRosterId,
+    showEliminatedTeams,
+  } = useAppStore();
   const { data: league } = useLeague(leagueId);
   const { data: users } = useLeagueUsers(leagueId);
   const { data: rosters } = useRosters(leagueId);
@@ -156,6 +189,8 @@ export function TeamsPage() {
   const hasScores = elim.weeks.length > 0;
 
   const rows = orderTeamProjections(projections, histRanks, orderBy);
+  const eliminatedCount = projections.filter((team) => team.eliminated).length;
+  const visibleRows = filterTeamsByEliminatedVisibility(rows, showEliminatedTeams);
 
   return (
     <div className="px-6 py-6 pb-24 max-w-lg mx-auto">
@@ -172,6 +207,8 @@ export function TeamsPage() {
         onSelect={handleSwitchSeason}
         isLoading={historyLoading}
       />
+
+      <EliminatedTeamsVisibilityToggle eliminatedCount={eliminatedCount} />
 
       {/* Order toggle */}
       {hasScores && (
@@ -209,7 +246,7 @@ export function TeamsPage() {
       )}
 
       <div className="space-y-2">
-        {rows.map((t) => {
+        {visibleRows.map((t) => {
           const hist = histRanks.get(t.rosterId);
           const groups = (posRanks.get(t.rosterId) ?? [])
             .filter((g) => g.outOf > 0)
