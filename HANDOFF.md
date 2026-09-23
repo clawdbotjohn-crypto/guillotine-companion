@@ -1,3 +1,15 @@
+# Final Verification — Active-Only Current Team Rankings (2026-09-22)
+
+- **Status / scope:** Independently verified complete on `feat/waiver-ranking-sources` for existing PR #7. Implementation commit `36ccdb2`; prior handoff commit `2c6c9be`. No blocker.
+- **Local verification:** focused **3 files / 8 tests passed**; full **11 files / 59 tests passed**; lint **0 warnings / 0 errors**; production build passed with **2,467 modules transformed**; `git diff --check` passed. The working tree was clean before this documentation update.
+- **CI / preview:** GitHub CI `build` and Azure SWA `Build and Deploy` both reported **SUCCESS** for head `2c6c9be`. The fresh preview at <https://nice-moss-07ec56310-7.centralus.7.azurestaticapps.net> was browser-tested with `Houston0ilers` in `SeaMex Guillotine 2026` (32 original teams, 28 active).
+- **Browser evidence:** Hub Current Rank showed **`21/28`** with **“projected best lineup”**, matching Houston0ilers' Teams Projected rank and **SAFE** status. Teams showed **`28 active · 32 total`**. Projected survivors ranked `#1/28` through `#28/28`; `#25–#26` were MIDDLE and `#27–#28` AT RISK, with Houston0ilers `#21/28` SAFE. Historical survivors independently reordered and ranked `#1/28` through `#28/28`; Houston0ilers became `#25/28` MIDDLE, while chiefsyear became `#28/28` AT RISK despite being projected `#23/28` SAFE, proving the Historical tab does not retain Projected status. All four eliminated teams appeared below survivors as ELIMINATED with no stale rank.
+- **Regression evidence:** The realistic fixture additionally proves the formerly `#29/32 SAFE` survivor is capped at `#28/28`, each tab uses its own order/status, and Hub uses projected rank.
+- **PR / safety:** PR #7 remains **OPEN** and **CLEAN/MERGEABLE** and must remain unmerged. No production deployment or manual workflow was performed.
+- **Supersession note:** This final verification supersedes the earlier implementation-handoff statement below that browser QA had not been performed and checks were pending. Those statements accurately described only the earlier handoff state, before independent CI and preview verification completed.
+
+---
+
 # Follow-up — Active-Only Current Team Rankings (2026-09-22)
 
 - **Timestamp / status:** 2026-09-22 17:01 PDT — COMPLETE on `feat/waiver-ranking-sources` for existing open PR #7.
