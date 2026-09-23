@@ -1,3 +1,16 @@
+# Partial Follow-up PR — Hub Roster, Warnings, and Visibility (2026-09-22)
+
+- **Branch / PR:** `feat/hub-roster-visibility`, PR #8: <https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/8>. Based fresh on merged PR #7 commit `c4b1afc6`; old PR #7 branch was not reused. PR #8 is intentionally **OPEN / UNMERGED**.
+- **Completed and verified (items 1–6):** Hub upcoming-week optimized points; shared WARNING risk band (`max(4, ceil(active/3))`, with bottom cuts AT RISK); full Hub starter/bench roster with supported weekly projection/bye/status/acquisition evidence; next-three-scoring-week starter-prioritized bye bars; actual-lineup projected slot rankings vs active teams; persisted Teams `Show eliminated teams (N)` toggle off by default.
+- **Remaining exactly unchecked:** (7) Waivers `Show rostered players` off by default, owner/ROSTERED labels, non-actionable rows, no rank/replacement changes; (8) compact mobile Waiver card redesign with before/after 375px density proof. Existing separate compact ranking-source-selector backlog item also remains unchecked.
+- **Head commits:** `8b41a87`, `4304e9e`, `779cc0c`, `366f0c3`, `72dabf1`, `dc4f15e` (current head).
+- **Final local QA at `dc4f15e`:** full **15 files / 88 tests passed**; focused Teams toggle **11/11**; lint **0 warnings / 0 errors**; TypeScript + Vite production build passed; `git diff --check origin/main...HEAD` passed; clean working tree after push.
+- **Preview:** PR #8 Azure environment is Ready at <https://nice-moss-07ec56310-8.centralus.7.azurestaticapps.net>. Automated GitHub/Azure checks were allowed to run; no manual workflow or production deploy was triggered.
+- **Browser QA status:** Final fresh-head mobile/desktop browser verification and Waiver before/after density comparison are still pending. Items 7–8 are not implemented, so their toggle/density checks cannot be claimed.
+- **Safety:** No main/master push, merge/self-merge, force-push, production deploy, or workflow dispatch.
+
+---
+
 # Final Verification — Active-Only Current Team Rankings (2026-09-22)
 
 - **Status / scope:** Independently verified complete on `feat/waiver-ranking-sources` for existing PR #7. Implementation commit `36ccdb2`; prior handoff commit `2c6c9be`. No blocker.
