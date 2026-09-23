@@ -88,6 +88,22 @@ describe('computeEliminations', () => {
     expect(result.currentWeek).toBe(1);
   });
 
+  it('separates teams entering a week from the post-elimination active count', () => {
+    const largeRosters = Array.from({ length: 30 }, (_, index) =>
+      makeRoster(index + 1, `u${index + 1}`));
+    const largeUsers = Array.from({ length: 30 }, (_, index) =>
+      makeUser(`u${index + 1}`, `Team ${index + 1}`));
+    const matchups = new Map<number, Matchup[]>([
+      [1, Array.from({ length: 30 }, (_, index) => makeMatchup(index + 1, 130 - index))],
+    ]);
+
+    const result = computeEliminations(matchups, largeRosters, largeUsers);
+
+    expect(result.weeks[0].teamsRemaining).toBe(30);
+    expect(result.weeks[0].eliminated).toHaveLength(2);
+    expect(result.activeTeamCount).toBe(28);
+  });
+
   it('correctly ranks teams by score', () => {
     const matchups = new Map<number, Matchup[]>();
     matchups.set(1, [

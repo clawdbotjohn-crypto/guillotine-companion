@@ -10,7 +10,13 @@ import {
   useAllTransactions,
   useLeagueHistory,
 } from '../api';
-import { computeEliminations, extractBids } from '../logic';
+import {
+  buildPlayerSeasons,
+  computeEliminations,
+  extractBids,
+  formatProjectedCurrentRank,
+  projectAllTeams,
+} from '../logic';
 import { Card, StatCard, StatusBadge, Skeleton, PositionBadge } from '../components/ui';
 import { SeasonPicker } from '../components/SeasonPicker';
 import { useSwitchSeason } from '../hooks/useSwitchSeason';
@@ -68,6 +74,13 @@ export function HubPage() {
   // Compute eliminations
   const elimResult = computeEliminations(matchups, rosters, users);
   const myTeam = elimResult.teams.get(rosterId);
+  const projections = projectAllTeams(
+    rosters,
+    buildPlayerSeasons(matchups),
+    league,
+    elimResult,
+  );
+  const myProjection = projections.find((team) => team.rosterId === rosterId);
   const bids = transactions ? extractBids(transactions) : [];
   const myBids = bids.filter((b) => b.rosterId === rosterId);
 
@@ -203,12 +216,7 @@ export function HubPage() {
   if (myTeam?.isChampion) status = 'champion';
   else if (myTeam?.isRunnerUp) status = 'runner-up';
   else if (myTeam?.eliminatedWeek) status = 'eliminated';
-  else if (myLastScore) {
-    const rank = myLastScore.rank;
-    const total = lastWeek.teamsRemaining;
-    if (rank <= Math.ceil(total / 3)) status = 'safe';
-    else if (rank >= Math.ceil((total * 2) / 3)) status = 'at-risk';
-  }
+  else if (myProjection) status = myProjection.risk;
 
   // Week-by-week scores for sparkline
   const weekScores = elimResult.weeks
@@ -252,7 +260,8 @@ export function HubPage() {
       <div className="grid grid-cols-2 gap-3 mb-6">
         <StatCard
           label="Current Rank"
-          value={myLastScore ? `${myLastScore.rank}/${lastWeek.teamsRemaining}` : '—'}
+          value={formatProjectedCurrentRank(myProjection)}
+          subtext="projected best lineup"
           accentColor={status === 'safe' ? '#10b981' : status === 'at-risk' ? '#f43f5e' : '#6366f1'}
         />
         <StatCard

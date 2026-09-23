@@ -20,9 +20,10 @@ interface BidGridProps {
   teams: Map<number, TeamInfo>;
   totalBudget: number;
   selectedWeek: number | null;
+  positions?: readonly string[];
 }
 
-export function BidGrid({ bids, weeks, teams, totalBudget, selectedWeek }: BidGridProps) {
+export function BidGrid({ bids, weeks, teams, totalBudget, selectedWeek, positions }: BidGridProps) {
   const bigBidThreshold = totalBudget * 0.2;
 
   // Group bids by `${week}-${position}`
@@ -41,6 +42,7 @@ export function BidGrid({ bids, weeks, teams, totalBudget, selectedWeek }: BidGr
   }, [bids]);
 
   const displayWeeks = selectedWeek ? weeks.filter((w) => w === selectedWeek) : weeks;
+  const displayPositions = positions ?? POSITIONS;
   const isExpanded = selectedWeek !== null;
 
   if (bids.length === 0) {
@@ -61,7 +63,7 @@ export function BidGrid({ bids, weeks, teams, totalBudget, selectedWeek }: BidGr
               style={{ background: '#0a0d1a', minWidth: 52 }}>
               Wk
             </th>
-            {POSITIONS.map((pos) => (
+            {displayPositions.map((pos) => (
               <th key={pos} className="px-2 py-2.5 text-center text-[10px] font-bold font-['Exo_2'] uppercase tracking-wide"
                 style={{ color: POS_HEADER_COLORS[pos], minWidth: isExpanded ? 140 : 90 }}>
                 <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full"
@@ -84,7 +86,7 @@ export function BidGrid({ bids, weeks, teams, totalBudget, selectedWeek }: BidGr
               </td>
 
               {/* Position cells */}
-              {POSITIONS.map((pos) => {
+              {displayPositions.map((pos) => {
                 const key = `${week}-${pos}`;
                 const cellBids = grouped.get(key);
 

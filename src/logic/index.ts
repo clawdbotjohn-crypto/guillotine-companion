@@ -14,17 +14,33 @@ export {
   getProjectionPoints,
   getRestOfSeasonStartWeek,
   sumRestOfSeasonProjections,
+  buildWeeklyProjectionContext,
+  getTeamByeWeek,
   type ProjectionScoring,
   type RosPlayerProjection,
+  type WeeklyPlayerProjection,
 } from './projections';
 
 export {
+  RANKING_SOURCES,
+  getReceptionScoring,
+  hasSuperflex,
+  getFantasyProsScoring,
+  normalizePlayerName,
+  buildExternalRankingMap,
+  type WaiverRankingSource,
+} from './rankingSources';
+
+export {
   buildPlayerSeasons,
+  formatCurrentRank,
+  formatProjectedCurrentRank,
   parseLineupSlots,
   projectBestLineup,
   projectAllTeams,
   computePositionGroupRanks,
   computeHistoricalRanks,
+  orderTeamProjections,
   type PlayerSeason,
   type LineupSlots,
   type TeamProjection,

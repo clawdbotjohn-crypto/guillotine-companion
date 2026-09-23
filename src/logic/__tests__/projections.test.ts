@@ -1,14 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import type { NflState, WeeklyProjectionMap } from '../../api/types';
 import {
+  buildWeeklyProjectionContext,
   getProjectionScoring,
   getRestOfSeasonStartWeek,
+  getTeamByeWeek,
   sumRestOfSeasonProjections,
 } from '../projections';
 
 const positions: Record<string, string> = {
   player: 'WR',
   standardOnly: 'RB',
+  available: 'WR',
+  rostered: 'WR',
+  other: 'WR',
 };
 
 function weekly(...entries: [number, WeeklyProjectionMap][]) {
@@ -65,6 +70,24 @@ describe('Sleeper ROS projection aggregation', () => {
     expect(half.has('standardOnly')).toBe(false);
     expect(standard.get('player')?.totalPoints).toBe(21);
     expect(standard.get('standardOnly')?.totalPoints).toBe(14);
+  });
+
+  it('ranks an available player against the complete weekly projection pool', () => {
+    const context = buildWeeklyProjectionContext({
+      rostered: { pts_ppr: 22 },
+      available: { pts_ppr: 18 },
+      other: { pts_ppr: 12 },
+    }, 'ppr', (playerId) => positions[playerId]);
+
+    // The rostered player remains in the pool, so the available player is WR2 rather than WR1.
+    expect(context.get('available')).toMatchObject({ points: 18, positionRank: 2, position: 'WR' });
+  });
+
+  it('uses the official season/team bye table and is honest for unsupported data', () => {
+    expect(getTeamByeWeek('2026', 'KC')).toBe(5);
+    expect(getTeamByeWeek('2026', 'DAL')).toBe(14);
+    expect(getTeamByeWeek('2026', null)).toBeNull();
+    expect(getTeamByeWeek('2025', 'KC')).toBeNull();
   });
 
   it('starts with the current week unless Sleeper marks it completed', () => {

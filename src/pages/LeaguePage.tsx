@@ -32,6 +32,7 @@ export function LeaguePage() {
   const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
   // Bids tab sub-mode: grid (default) or list. (Combined Bids+Grid per John feedback 2026-09-22)
   const [bidsMode, setBidsMode] = useState<'grid' | 'list'>('grid');
+  const [bidPosition, setBidPosition] = useState<'ALL' | 'QB' | 'RB' | 'WR' | 'TE' | 'FLEX' | 'DEF' | 'K'>('ALL');
 
   const isLoading = matchupsLoading || playersLoading;
 
@@ -53,6 +54,15 @@ export function LeaguePage() {
 
   const elimResult = computeEliminations(matchups, rosters, users);
   const bids = transactions ? extractBids(transactions) : [];
+  const positionMatches = (position: string) => bidPosition === 'ALL'
+    || position === bidPosition
+    || (bidPosition === 'FLEX' && ['RB', 'WR', 'TE'].includes(position));
+  const filteredBids = bids.filter((bid) => positionMatches(bid.position));
+  const visibleBidPositions = bidPosition === 'ALL'
+    ? undefined
+    : bidPosition === 'FLEX'
+      ? ['RB', 'WR', 'TE']
+      : [bidPosition];
   const hasWeekData = elimResult.weeks.length > 0;
   const leagueStatus = league?.status ?? '';
 
@@ -118,7 +128,8 @@ export function LeaguePage() {
 
       {/* Week picker — Bids (list mode) + Grid share the same week filter with an All option */}
       {hasWeekData && activeView === 'bids' && (
-        <div className="flex gap-1.5 overflow-x-auto pb-3 mb-4 scrollbar-hide">
+        <>
+        <div className="flex gap-1.5 overflow-x-auto pb-3 mb-2 scrollbar-hide">
           <button
             onClick={() => setSelectedWeek(null)}
             className={`shrink-0 px-3 h-9 rounded-lg text-xs font-['Space_Mono'] font-bold transition-all
@@ -143,6 +154,23 @@ export function LeaguePage() {
             </button>
           ))}
         </div>
+        <div className="flex gap-1 overflow-x-auto pb-3 mb-4 scrollbar-hide" aria-label="Filter bids by position">
+          {(['ALL', 'QB', 'RB', 'WR', 'TE', 'FLEX', 'DEF', 'K'] as const).map((position) => (
+            <button
+              key={position}
+              type="button"
+              onClick={() => setBidPosition(position)}
+              className={`shrink-0 px-2.5 py-1.5 rounded-md text-[10px] font-bold transition-colors ${
+                bidPosition === position
+                  ? 'bg-[#252a55] text-[#c7d2fe] ring-1 ring-[#6366f1]'
+                  : 'bg-[#101329] text-[#5f638f] hover:text-[#a5b4fc]'
+              }`}
+            >
+              {position === 'ALL' ? 'All' : position}
+            </button>
+          ))}
+        </div>
+        </>
       )}
 
       {/* Scoreboard View — Full Season Table */}
@@ -293,16 +321,17 @@ export function LeaguePage() {
 
           {bidsMode === 'grid' ? (
             <BidGrid
-              bids={bids}
+              bids={filteredBids}
               weeks={elimResult.weeks.map((w) => w.week)}
               teams={elimResult.teams}
               totalBudget={league?.settings?.waiver_budget ?? 1000}
               selectedWeek={selectedWeek}
+              positions={visibleBidPositions}
             />
           ) : (
             <Card hover={false} className="p-4">
               <div className="space-y-2">
-                {bids
+                {filteredBids
                   .filter((b) => selectedWeek === null || b.week === selectedWeek)
                   .sort((a, b) => (selectedWeek === null ? a.week - b.week || b.amount - a.amount : b.amount - a.amount))
                   .map((bid, i) => {
@@ -323,8 +352,10 @@ export function LeaguePage() {
                       </div>
                     );
                   })}
-                {bids.filter((b) => selectedWeek === null || b.week === selectedWeek).length === 0 && (
-                  <p className="text-[#4a4d77] text-xs text-center py-4">No bids{selectedWeek !== null ? ' this week' : ''}</p>
+                {filteredBids.filter((b) => selectedWeek === null || b.week === selectedWeek).length === 0 && (
+                  <p className="text-[#4a4d77] text-xs text-center py-4">
+                    No {bidPosition === 'ALL' ? '' : `${bidPosition} `}bids{selectedWeek !== null ? ' this week' : ''}
+                  </p>
                 )}
               </div>
             </Card>

@@ -10,6 +10,8 @@ import type {
   UserLeague,
   NflState,
   WeeklyProjectionMap,
+  FantasyCalcResponse,
+  FantasyProsResponse,
 } from './types';
 
 const BASE = 'https://api.sleeper.app/v1';
@@ -56,6 +58,35 @@ export const getAllPlayers = () => get<Record<string, any>>('/players/nfl');
 export const getNflState = () => get<NflState>('/state/nfl');
 export const getWeeklyProjections = (season: string, week: number) =>
   get<WeeklyProjectionMap>(`/projections/nfl/regular/${season}/${week}`);
+
+async function getLocal<T>(path: string): Promise<T> {
+  const res = await fetch(path);
+  if (!res.ok) {
+    const body = await res.json().catch(() => null) as { error?: string } | null;
+    throw new ApiError(body?.error || `Ranking source error: ${res.statusText}`, res.status);
+  }
+  return res.json();
+}
+
+export function getFantasyCalcRankings(options: {
+  teams: number;
+  ppr: number;
+  superflex: boolean;
+}): Promise<FantasyCalcResponse> {
+  const params = new URLSearchParams({
+    mode: 'redraft',
+    teams: String(options.teams),
+    ppr: String(options.ppr),
+    sf: options.superflex ? '1' : '0',
+  });
+  return getLocal(`/api/fc-rankings?${params}`);
+}
+
+export function getFantasyProsRankings(
+  scoring: 'ppr' | 'half' | 'standard',
+): Promise<FantasyProsResponse> {
+  return getLocal(`/api/ecr-rankings?scoring=${scoring}`);
+}
 
 /** Fetch projection weeks with a small concurrency cap so one page load does not fan out 16 requests. */
 export async function getProjectionWeeks(

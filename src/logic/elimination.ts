@@ -32,6 +32,8 @@ export interface TeamInfo {
 export interface EliminationResult {
   weeks: WeekResult[];
   teams: Map<number, TeamInfo>;
+  /** Teams still alive after applying the latest completed week's eliminations. */
+  activeTeamCount: number;
   champion: number | null;
   runnerUp: number | null;
   isComplete: boolean;
@@ -183,6 +185,7 @@ export function computeEliminations(
   return {
     weeks,
     teams,
+    activeTeamCount: active.size,
     champion,
     runnerUp,
     isComplete: champion !== null,

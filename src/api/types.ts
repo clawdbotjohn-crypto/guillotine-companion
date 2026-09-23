@@ -115,3 +115,27 @@ export interface SleeperProjection {
 }
 
 export type WeeklyProjectionMap = Record<string, SleeperProjection>;
+
+export interface ExternalRanking {
+  name: string;
+  position: string;
+  team: string;
+  value: number;
+  rank: number;
+  sleeperId?: string;
+}
+
+export interface FantasyCalcResponse {
+  players: ExternalRanking[];
+  scoring: number;
+  teams: number;
+  superflex: boolean;
+  fetchedAt: string;
+}
+
+export interface FantasyProsResponse {
+  players: ExternalRanking[];
+  scoring: 'ppr' | 'half' | 'standard';
+  sourceUrl: string;
+  fetchedAt: string;
+}

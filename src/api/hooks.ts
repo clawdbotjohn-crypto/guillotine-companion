@@ -12,7 +12,10 @@ import type {
   UserLeague,
   NflState,
   WeeklyProjectionMap,
+  FantasyCalcResponse,
+  FantasyProsResponse,
 } from './types';
+import { getReceptionScoring, getFantasyProsScoring, hasSuperflex } from '../logic/rankingSources';
 
 const STALE_30M = 1000 * 60 * 30;
 const STALE_1H = 1000 * 60 * 60;
@@ -144,6 +147,7 @@ export function useRestOfSeasonProjectionWeeks(
   season: string | null,
   startWeek: number | null,
   endWeek = 18,
+  enabled = true,
 ) {
   return useQuery<Map<number, WeeklyProjectionMap>>({
     queryKey: ['sleeper-ros-projections', season, startWeek, endWeek],
@@ -154,7 +158,55 @@ export function useRestOfSeasonProjectionWeeks(
       );
       return api.getProjectionWeeks(season!, weeks, 4);
     },
-    enabled: !!season && startWeek != null && startWeek >= 1 && startWeek <= endWeek,
+    enabled: enabled && !!season && startWeek != null && startWeek >= 1 && startWeek <= endWeek,
+    staleTime: STALE_30M,
+    gcTime: STALE_6H,
+    retry: 1,
+  });
+}
+
+export function useFantasyCalcRankings(league: League | undefined, enabled = true) {
+  return useQuery<FantasyCalcResponse>({
+    queryKey: [
+      'fantasycalc-redraft-rankings',
+      league?.total_rosters,
+      league ? getReceptionScoring(league) : null,
+      league ? hasSuperflex(league) : null,
+    ],
+    queryFn: () => api.getFantasyCalcRankings({
+      teams: league!.total_rosters,
+      ppr: getReceptionScoring(league!),
+      superflex: hasSuperflex(league!),
+    }),
+    enabled: enabled && !!league,
+    staleTime: STALE_6H,
+    gcTime: STALE_6H,
+    retry: 1,
+  });
+}
+
+export function useFantasyProsRankings(league: League | undefined, enabled = true) {
+  const scoring = league ? getFantasyProsScoring(league) : null;
+  return useQuery<FantasyProsResponse>({
+    queryKey: ['fantasypros-ecr-rankings', scoring],
+    queryFn: () => api.getFantasyProsRankings(scoring!),
+    enabled: enabled && !!scoring,
+    staleTime: STALE_6H,
+    gcTime: STALE_6H,
+    retry: 1,
+  });
+}
+
+/** One upcoming week, kept independent from the selected season-long value source. */
+export function useWeeklyProjections(
+  season: string | null,
+  week: number | null,
+  enabled = true,
+) {
+  return useQuery<WeeklyProjectionMap>({
+    queryKey: ['sleeper-weekly-projections', season, week],
+    queryFn: () => api.getWeeklyProjections(season!, week!),
+    enabled: enabled && !!season && week != null && week >= 1 && week <= 18,
     staleTime: STALE_30M,
     gcTime: STALE_6H,
     retry: 1,
