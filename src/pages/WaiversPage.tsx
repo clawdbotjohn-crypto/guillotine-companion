@@ -94,27 +94,29 @@ export function RankingSourceSelector({
   onChange: (source: WaiverRankingSource) => void;
 }) {
   return (
-    <section className="mb-4">
-      <label
-        htmlFor="player-values-source"
-        className="block text-[10px] uppercase tracking-wider text-[#6b6e99] mb-1.5"
-      >
-        Player Values
-      </label>
-      <select
-        id="player-values-source"
-        value={value}
-        aria-describedby="player-values-source-help"
-        onChange={(event) => onChange(event.target.value as WaiverRankingSource)}
-        className="min-h-11 w-fit max-w-full rounded-lg border border-[#2a2e55] bg-[#0e1025] px-3 py-2.5 text-xs text-[#f0f0ff] outline-none focus:border-[#6366f1] focus:ring-1 focus:ring-[#6366f1]"
-      >
-        {RANKING_SOURCES.map((source) => (
-          <option key={source.key} value={source.key}>{source.label}</option>
-        ))}
-      </select>
-      <p id="player-values-source-help" className="mt-1.5 max-w-xl text-[10px] leading-4 text-[#6b6e99]">
-        Rest-of-season value source: Sleeper uses projected fantasy points, Fantasy Pros uses ROS ECR,
-        and FantasyCalc uses redraft market values. Next-week context below always comes from Sleeper.
+    <section className="mb-3 flex items-end gap-3">
+      <div className="shrink-0">
+        <label
+          htmlFor="player-values-source"
+          className="mb-1.5 block text-[10px] uppercase tracking-wider text-[#6b6e99]"
+        >
+          Player Values
+        </label>
+        <select
+          id="player-values-source"
+          value={value}
+          aria-describedby="player-values-source-help"
+          onChange={(event) => onChange(event.target.value as WaiverRankingSource)}
+          className="min-h-11 w-fit max-w-full rounded-lg border border-[#2a2e55] bg-[#0e1025] px-3 py-2.5 text-xs text-[#f0f0ff] outline-none focus:border-[#6366f1] focus:ring-1 focus:ring-[#6366f1]"
+        >
+          {RANKING_SOURCES.map((source) => (
+            <option key={source.key} value={source.key}>{source.label}</option>
+          ))}
+        </select>
+      </div>
+      <p id="player-values-source-help" className="min-w-0 flex-1 text-[10px] leading-4 text-[#6b6e99]">
+        ROS sources: Sleeper projections, Fantasy Pros ECR, or FantasyCalc market values.
+        Next-week context always uses Sleeper.
       </p>
     </section>
   );

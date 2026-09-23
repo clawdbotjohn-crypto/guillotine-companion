@@ -56,9 +56,8 @@ describe('waiver controls', () => {
     expect(select.className).toContain('w-fit');
     expect(select.className).toContain('max-w-full');
     expect(select.className.split(/\s+/)).not.toContain('w-full');
-    expect(screen.getByText(/Rest-of-season value source: Sleeper uses projected fantasy points/i)).toBeTruthy();
-    expect(screen.getByText(/Fantasy Pros uses ROS ECR/i)).toBeTruthy();
-    expect(screen.getByText(/Next-week context below always comes from Sleeper/i)).toBeTruthy();
+    expect(screen.getByText(/ROS sources: Sleeper projections, Fantasy Pros ECR, or FantasyCalc market values/i)).toBeTruthy();
+    expect(screen.getByText(/Next-week context always uses Sleeper/i)).toBeTruthy();
     expect(screen.queryByText(/Football Absurdity/i)).toBeNull();
     expect(screen.queryByText(/Active:/i)).toBeNull();
 
