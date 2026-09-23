@@ -12,9 +12,11 @@ import {
   useLeagueHistory,
   useNflState,
   useWeeklyProjections,
+  useDraftPicks,
 } from '../api';
 import {
   buildWeeklyScoredPlayers,
+  buildHubRosterRows,
   computeEliminations,
   extractBids,
   formatProjectedCurrentRank,
@@ -25,6 +27,7 @@ import {
 } from '../logic';
 import { Card, StatCard, StatusBadge, Skeleton, PositionBadge } from '../components/ui';
 import { SeasonPicker } from '../components/SeasonPicker';
+import { HubRosterCard } from '../components/HubRosterCard';
 import { useSwitchSeason } from '../hooks/useSwitchSeason';
 import { LogOut, Calendar } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -68,9 +71,10 @@ export function HubPage() {
   const { data: league } = useLeague(leagueId);
   const { data: users } = useLeagueUsers(leagueId);
   const { data: rosters } = useRosters(leagueId);
-  const { isLoading: playersLoading } = usePlayers();
+  const { data: players, isLoading: playersLoading } = usePlayers();
   const { data: matchups, isLoading: matchupsLoading } = useAllMatchups(leagueId, 18);
   const { data: transactions } = useAllTransactions(leagueId, 18);
+  const { data: draftPicks } = useDraftPicks(league?.draft_id ?? null);
   const { data: leagueHistory, isLoading: historyLoading } = useLeagueHistory(rootLeagueId);
   const nflStateQuery = useNflState();
   const projectionWeek = league && nflStateQuery.data && league.season === nflStateQuery.data.season
@@ -148,6 +152,18 @@ export function HubPage() {
 
   // FAAB budget (available even pre-season)
   const myRoster = rosters.find((r) => r.roster_id === rosterId);
+  const rosterRows = myRoster
+    ? buildHubRosterRows({
+        roster: myRoster,
+        teamProjection: myProjection,
+        weeklyProjections: weeklyScoredPlayers,
+        players,
+        season: league?.season,
+        transactions,
+        draftPicks,
+      })
+    : [];
+  const rosterIsOptimized = (myProjection?.starters.length ?? 0) > 0;
   const totalBudget = league?.settings?.waiver_budget ?? 1000;
   const budgetUsed = myRoster?.settings?.waiver_budget_used ?? 0;
   const budgetRemaining = totalBudget - budgetUsed;
@@ -243,6 +259,12 @@ export function HubPage() {
             accentColor="#f59e0b"
           />
         </div>
+
+        <HubRosterCard
+          rows={rosterRows}
+          week={projectionWeek}
+          optimized={rosterIsOptimized}
+        />
 
         {/* Recent bids (unlikely pre-season but safe to show) */}
         {myBids.length > 0 && (
@@ -367,6 +389,12 @@ export function HubPage() {
           subtext={myLastScore ? `Wk ${lastWeek.week}` : undefined}
         />
       </div>
+
+      <HubRosterCard
+        rows={rosterRows}
+        week={projectionWeek}
+        optimized={rosterIsOptimized}
+      />
 
       {/* Week-by-week scores */}
       <Card hover={false} className="p-4 mb-6">

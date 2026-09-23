@@ -47,3 +47,12 @@ export {
   type PosGroupRank,
   type HistoricalRank,
 } from './analytics';
+
+export {
+  resolvePlayerAcquisition,
+  buildHubRosterRows,
+  type AcquisitionKind,
+  type PlayerAcquisition,
+  type HubRosterRow,
+  type BuildHubRosterRowsOptions,
+} from './hubRoster';
