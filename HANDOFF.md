@@ -1,126 +1,84 @@
-# Guillotine Companion PR #8 Handoff
+# Guillotine Companion — PR #8 Final Review Handoff
 
-**Updated:** 2026-09-22 19:42 PDT
-**Status:** COMPLETE
-**Branch:** `feat/hub-roster-visibility`
-**Implementation head:** `e188a39bbd49bc20ffe654ef300d175d8914227f` (a subsequent HANDOFF-only commit contains this report)
-**PR:** OPEN / CLEAN / MERGEABLE / **UNMERGED** — https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/8
-**Exact preview:** https://nice-moss-07ec56310-8.centralus.7.azurestaticapps.net
+## State
 
-## Commits in this follow-up
+- PR: https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/8
+- Branch: `feat/hub-roster-visibility`
+- Status: **OPEN / UNMERGED**
+- Start HEAD verified before edits: `ed86f385cbdec31a451662f9b0ee20d427d16836` locally and on origin, clean tree.
+- Implementation commit: `b5f03b8` — `refine projection ranks and waiver hierarchy`
 
-- `fa4139b2646df643a9f5ab44a2abd749f685a4c5` — Keep projected lineup rankings coherent
-- `7a5e77fbdb0b6ed770143a4c54b5b8b6b55016bc` — Add compact roster-aware waiver board
-- `e188a39bbd49bc20ffe654ef300d175d8914227f` — Tighten waiver source controls on mobile
+## Projection investigation (real endpoint evidence)
 
-All three commits were normally pushed only to `origin/feat/hub-roster-visibility`.
+Investigated before changing completeness behavior on 2026-09-22 PDT:
 
-## Delivered behavior
+- `GET https://api.sleeper.app/v1/projections/nfl/regular/2026/3` returned an object with **9,421 player-ID keys**, so the weekly endpoint itself was available.
+- Only **859 rows** had numeric `pts_half_ppr`; many endpoint rows contain ADP/rank metadata but no weekly fantasy-points field.
+- Numeric weekly field counts were identical for `pts_ppr`, `pts_half_ppr`, and `pts_std` (859 each); 40 explicit zero values existed for each.
+- IDs are mixed by design: normal players use Sleeper IDs (examples from the response/player directory included kicker IDs such as `11538`, `12620`, `10244`), while defenses use team abbreviation IDs. Verified numeric DEF values for `ARI`, `ATL`, `BAL`, `BUF`, `SEA`, and `WAS`.
+- Cross-checking `/v1/players/nfl` showed legitimate omissions/no numeric weekly row across positions, including bye/inactive/stale-directory cases. This confirms that player-row completeness is not a valid league-wide availability test.
+- The initially guessed old league ID `1237312439318478848` returned 404 and was not used as real-league proof. No claim is made that a specific private roster payload was verified.
 
-### 1. Hub compact rank labels
+Conclusion implemented: an empty weekly map remains the honest endpoint-unavailable state. Once a usable weekly map exists, missing player rows/unfilled assignments contribute zero; they no longer suppress that configured group for every active roster.
 
-- Every visible Projected Lineup Strength rank now uses compact `rank/active-count` text such as `26/28`.
-- Each group retains a detailed accessible label with group/duplicate-slot context, points, exact upcoming NFL week, rank, and active-team denominator (for example: `WR ×2: 16.0 projected points for NFL Week 3, rank 26 of 28 active teams`).
-- Focused component tests cover compact visible text, removal of the verbose visible form, and detailed accessible text.
+## Completed scope
 
-### 2. Shared optimal upcoming-week lineup coherence
+- Projected lineup coverage:
+  - Removed the all-or-nothing per-player completeness gate.
+  - Every configured supported group is ranked for every active roster.
+  - Missing/bye/unfilled assignment points are honest zero.
+  - Historical mode remains based on historical starters and actual matchup points.
+  - Fixtures cover all groups, duplicate WR slots, FLEX, SUPER_FLEX, K, DEF, omitted projection=0, all active teams, and excluded eliminated teams.
+- Lineup-strength cards:
+  - Aggregate labels are plain (`WR`, never visible `WR ×2`).
+  - Compact rank is `4/28` style.
+  - Points/slot/week/rank detail moved to shared accessible hover/focus/tap disclosure.
+  - Duplicate active-team/week/source chrome removed.
+- Hub summary:
+  - One `Week N projected points` heading with prominent total.
+  - Added ordinal rank among every original roster, including eliminated teams, distinct from active-only current/risk rank.
+  - Last Week Score now displays ordinal rank using that historical week's entrant count (pre-elimination denominator).
+- Shared bye proximity:
+  - `ByeWeekText` + `getByeProximity` reused by Hub roster and Waivers.
+  - passed=green; current/+1=red; +2/+3=orange; +4/future/unknown=neutral; color-independent labels retained.
+- Waiver hierarchy:
+  - Bright left position marker; status beside player name.
+  - One compact `WR #4 • NYG • Bye Wk 6` metadata line; only bye fragment gets proximity color.
+  - Source/ROS details moved behind the rank's accessible disclosure.
+  - Strategy words removed from the selected-value display; warnings retained.
+  - Starter weeks display only for Weeks-as-Starter.
+  - Predicted bid moved directly under suggested value and remains hidden for Aggressive.
+  - Deleted hardcoded `predictedConfidence` model/UI and updated regressions.
+- Copy/control refinements:
+  - Visible `ROS sources: …` sentence removed; compact source help is disclosed accessibly.
+  - Requested Weeks-as-Starter/Safe/Aggressive/VoRP copy implemented and tested.
+  - Renamed to `VoRP team count`; old visible definition removed and replaced by accessible hover/focus/tap help with the 1-QB/16th-best-QB example.
+  - VoRP-only control behavior and honest Sleeper ROS unavailable text preserved.
 
-- Hub score/current rank and Teams Projected total/order/rank continue to share `projectBestLineup` through `projectAllTeams`.
-- Teams expanded breakdown now selects `computeProjectedLineupGroupRanks` in Projected mode and historical `computePositionGroupRanks` only in Historical mode.
-- Projected unavailable states now honestly say `Projected lineup-group rankings unavailable.` instead of implying historical starter data.
-- A realistic regression fixture proves a higher-projected current BENCH WR displaces a lower-projected Sleeper starter, and proves agreement across the optimized total/rank, Hub STARTER/BENCH assignment, Teams Projected order/total/rank, and RB/WR/FLEX/SUPER_FLEX group ranks.
-- The fixture includes duplicate RB slots, FLEX, SUPER_FLEX, every roster player, three active survivors, and an eliminated team with intentionally huge projections that is excluded from all current projected pools.
+## Files
 
-### 3. Waivers show rostered players
-
-- Added accessible checkbox exactly labeled `Show rostered players`; default is OFF.
-- Enabled mode keeps one source/strategy-sorted board and adds active-roster players with both `Rostered` and `Owner: <identity>`.
-- Rostered cards have `aria-disabled="true"` and contain no add/bid action control.
-- Eliminated-team players are not considered rostered and remain eligible as available players.
-- Default available rows continue to use the existing capped candidate display; the expanded all-player display does not feed back into source rank, positional rank, replacement baselines, VoRP, starter weeks, or bid values.
-- Focused logic tests compare complete available-row objects with the same rows in the all-player board and test active owner/eliminated release semantics. UI tests cover OFF-by-default, enable callback, owner/rostered labels, disabled semantics, and no action button.
-
-### 4. Compact 375px waiver cards
-
-- Cards use dense header/context rows while retaining player name, position/NFL team, strategy value, owner/rostered status, over-budget warning, injury status, next-week points/rank or bye, bye week, starter weeks, selected ROS source/rank/value, and predicted-bid context (still intentionally suppressed for Aggressive).
-- Strategy/source/position/toggle controls retain 44px targets (the checkbox uses a 44px label target); no tiny card actions were introduced.
-- Focused UI tests prove retained context/warnings and Aggressive-only duplicate suppression.
-
-**Exact density method:** Browser DOM `getBoundingClientRect()` on the old deployed PR preview at head `449712e` and the fresh PR preview at head `e188a39`, both at an exact `375 × 812` viewport, using the first ten available-player cards.
-
-- Before: first-ten heights `194.5, 155.5, 155.5, 179.5, 155.5, 155.5, 179.5, 155.5, 179.5, 155.5px`; average **166.9px**.
-- After: all first ten cards **111px**; average **111px**, a **33.5% height reduction**.
-- Full cards per list-aligned 812px viewport: **4 → 6** (**50% more**).
-- Full cards in the initial 375×812 page viewport: **2 → 3**; partially visible card count: **3 → 4**, despite adding the required roster toggle and source explanation.
-
-### 5. Compact ranking-source selector
-
-- Visible options are exactly `Sleeper`, `Fantasy Pros`, and `FantasyCalc`.
-- Closed selector uses `w-fit max-w-full`, measured at **117px** inside a **321px** mobile content width (and 117px inside 464px on desktop).
-- Accessible `Player Values` label and `aria-describedby` help clearly distinguish ROS sources: Sleeper projections, Fantasy Pros ECR, and FantasyCalc market values; it explicitly says next-week context always uses Sleeper.
-- Focused tests cover exact options, content sizing classes, accessible relationship, explanatory semantics, and source changes.
-
-## Files changed in this follow-up
-
-- `src/components/HubPositionRankings.tsx`
-- `src/components/HubPositionRankings.test.tsx`
-- `src/logic/analytics.ts` tests in `src/logic/__tests__/analytics.test.ts`
-- `src/logic/teamPositionGroups.ts`
-- `src/pages/TeamsPage.tsx`
-- `src/pages/TeamsPage.test.tsx`
-- `src/logic/rankingSources.ts`
-- `src/logic/waivers.ts`
-- `src/logic/__tests__/waivers.test.ts`
-- `src/pages/WaiversPage.tsx`
-- `src/pages/WaiversPage.test.tsx`
-
-The full PR diff also contains the previously delivered Hub roster/warning/bye/visibility work from earlier PR #8 commits; scope review found no unrelated new files in this follow-up.
+- Shared UI/helpers: `src/components/ContextDisclosure.tsx`, `src/components/ByeWeekText.tsx`, `src/logic/byeProximity.ts`, `src/logic/rankFormat.ts`
+- Projection semantics/UI: `src/logic/analytics.ts`, `src/components/HubPositionRankings.tsx`, `src/pages/HubPage.tsx`
+- Waiver semantics/UI: `src/logic/waivers.ts`, `src/logic/waiverDisplay.ts`, `src/pages/WaiversPage.tsx`
+- Focused regressions in corresponding `*.test.ts(x)` plus `src/logic/__tests__/byeProximity.test.ts`.
 
 ## Verification
 
-### Automated
+Passed at implementation commit:
 
-- Focused item 1: `HubPositionRankings.test.tsx` — pass.
-- Focused item 2: `analytics.test.ts`, `hubRoster.test.ts`, `TeamsPage.test.tsx` — pass.
-- Focused items 3–5: `waivers.test.ts`, `WaiversPage.test.tsx` — pass.
-- Full suite: **15 files / 96 tests passed**.
-- Lint: **0 warnings / 0 errors**.
-- Production build: TypeScript + Vite passed.
-- `git diff --check origin/main...HEAD`: passed.
-- Working tree: clean; local head equals origin feature head.
-- Fresh-head GitHub CI `build`: passed.
-- Fresh-head Azure `Build and Deploy`: passed normally.
+- `npm test -- --run` — **16 files, 104 tests passed**
+- `npm run lint` — **0 warnings, 0 errors**
+- `npm run build` — production TypeScript/Vite build passed
+- `git diff --check origin/main...HEAD` — passed
+- `git diff --check` — passed
 
-### Browser — fresh PR preview
+## Browser / preview
 
-Real browser data: SeaMex Guillotine 2026, 28 active / 32 total. Fixture-only proof is explicitly distinguished below.
+- Fresh-head Azure preview verification: **not yet performed at this handoff update**. Do not treat earlier preview observations as proof for `b5f03b8`.
+- Mobile 375px/desktop checks still required if normal PR automation publishes a fresh preview before cutoff: Hub, Teams Projected/Historical, strategy switching, disclosure hover/focus/tap, bye colors, Waiver density/bid column, and VoRP control.
 
-**375×812**
+## Remaining / constraints
 
-- Hub: visible group ranks `26/28`, `18/28`, `27/28`; DOM accessibility text includes NFL Week 3, points, rank, and 28 active teams. Real optimized full roster showed 9 STARTERS and 4 BENCH plus projected team score/current active rank.
-- Teams Projected: active-only order showed `proj #1/28 · 101.1 pts`; expanded `nexs83` projected groups showed only the honestly available WR/K/DEF projection groups (`WR #25 18p`, `K #7 8p`, `DEF #21 6p`) because the live weekly payload lacked complete QB/RB/TE/FLEX data.
-- Teams Historical: the same expanded team changed to historical `hist #3/28 · 219.6 pts` and historical QB/RB/WR/TE/FLEX/K/DEF group results, proving tab-specific models in the live UI.
-- The higher-bench-player displacement across every surface is proven by the focused realistic fixture; live data did not expose an unambiguous displacement case for manual assertion.
-- Waivers: checkbox was OFF with 43 default rows. Enabled mode showed 445 source-ranked rows, including 271 disabled rostered cards. Example: `Jahmyr Gibbs, rostered by 5cents87`, visible `ROSTERED`, `Owner: 5cents87`, `aria-disabled=true`, and zero card buttons.
-- Zay Flowers retained identical `$105`, `WR#4`, `276.0` ROS points, `17.3/wk`, `14/14 starter wks`, next-week rank/value, bye, injury, and predicted bid when rostered display was toggled. It also remained identical after selecting Safe + WR and toggling rostered display back off.
-- Compact selector/options/help and exact density measurements are documented above.
-
-**1440×900**
-
-- Hub compact/accessibility semantics and 9 STARTERS / 4 BENCH remained present with no horizontal overflow.
-- Teams Historical expanded breakdown remained tab-correct with no horizontal overflow; Projected had been verified at 375px on the same fresh code path.
-- Waiver card remained 111px; selector remained 117px inside 464px content; no horizontal overflow.
-
-## Remaining work
-
-- No remaining implementation or QA work from requested items 1–5.
-- Human review/merge decision remains. PR #8 is intentionally **OPEN and UNMERGED**.
-- Unrelated product backlog items in `PROGRESS.md` were not touched.
-
-## Safety statement
-
-- No push to main/master.
-- No merge or self-merge.
-- No production deployment.
-- No `workflow_dispatch`, `gh workflow run`, or manual workflow trigger.
-- Only normal PR push automation produced the Azure preview.
+- Push feature branch only, then update PR description and record fresh checks/exact preview URL.
+- Do not merge, deploy production, force-push, run `workflow_dispatch`, or run `gh workflow run`.
+- `PROGRESS.md` PR #8 review items were checked with concise evidence after all implementation/tests passed.
