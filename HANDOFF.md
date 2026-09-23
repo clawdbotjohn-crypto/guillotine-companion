@@ -6,7 +6,10 @@
 - Branch: `feat/hub-roster-visibility`
 - Status: **OPEN / UNMERGED**
 - Start HEAD verified before edits: `ed86f385cbdec31a451662f9b0ee20d427d16836` locally and on origin, clean tree.
-- Implementation commit: `b5f03b8` — `refine projection ranks and waiver hierarchy`
+- Commits:
+  - `b5f03b8` — `refine projection ranks and waiver hierarchy`
+  - `80bc04f` — `document PR 8 final review verification`
+  - `bff6e11` — `make shared disclosures hover-state reliable`
 
 ## Projection investigation (real endpoint evidence)
 
@@ -74,11 +77,23 @@ Passed at implementation commit:
 
 ## Browser / preview
 
-- Fresh-head Azure preview verification: **not yet performed at this handoff update**. Do not treat earlier preview observations as proof for `b5f03b8`.
-- Mobile 375px/desktop checks still required if normal PR automation publishes a fresh preview before cutoff: Hub, Teams Projected/Historical, strategy switching, disclosure hover/focus/tap, bye colors, Waiver density/bid column, and VoRP control.
+Fresh normal Azure PR preview for code head `bff6e1134f83bfced796fb96fd42ffa795bccf25` deployed successfully:
+
+- Exact URL: https://nice-moss-07ec56310-8.centralus.7.azurestaticapps.net
+- Azure `Build and Deploy` run: https://github.com/clawdbotjohn-crypto/guillotine-companion/actions/runs/35817328660 (success; `headSha` verified as `bff6e1134f83bfced796fb96fd42ffa795bccf25`).
+- 375×812 mobile verified:
+  - Hub renders `Week 3 projected points`, `13th/32 among original rosters`, compact projected ranks, every configured group for this league (QB/RB/WR/TE/FLEX/K/DEF), and no horizontal overflow.
+  - Tapping the WR rank changed `aria-expanded` to true and exposed the projected-points/slot/rank detail.
+  - Waiver first card rendered compact metadata and right column (`WR #4 • BAL • Bye Wk 13`, `$105`, `21%`, predicted bid below); disclosure tap opened; Aggressive removed predicted bid and starter weeks; VoRP rendered only its team-count control and tappable exact help.
+  - Teams Projected first expanded row showed every configured group above; Historical switched to actual historical position totals/ranks; no horizontal overflow.
+- 1280×900 desktop verified:
+  - Hub heading/grid, configured groups, original-roster rank, and bye classes rendered without horizontal overflow.
+  - Waiver compact hierarchy/source help rendered without overflow.
+  - Keyboard focus displayed the rank tooltip; a real browser hover initially revealed a CSS-only variant ordering issue, fixed in `bff6e11`; the fresh-head preview was reloaded and hover was re-tested successfully (`display: flex`, `aria-expanded: false`).
+  - Tap/open behavior had already been verified and focused regression now explicitly covers hover, focus, and tap.
+- Browser tab closed after verification.
 
 ## Remaining / constraints
 
-- Push feature branch only, then update PR description and record fresh checks/exact preview URL.
 - Do not merge, deploy production, force-push, run `workflow_dispatch`, or run `gh workflow run`.
 - `PROGRESS.md` PR #8 review items were checked with concise evidence after all implementation/tests passed.
