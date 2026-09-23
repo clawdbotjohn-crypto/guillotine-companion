@@ -2,7 +2,7 @@
 // All values are % of the league's FAAB budget, scaled to the detected budget.
 // Ships 4 core strategies + predicted winning bid.
 
-import type { League, Roster } from '../api/types';
+import type { League, Roster, SleeperUser } from '../api/types';
 import type { RosPlayerProjection } from './projections';
 import type { BidInfo, EliminationResult } from './elimination';
 
@@ -15,6 +15,11 @@ export interface BidSuggestion {
   value: number | null;
   pctOfBudget: number | null;
   note?: string;
+}
+
+export interface RosteredPlayerOwner {
+  rosterId: number;
+  ownerName: string;
 }
 
 export interface WaiverPlayerRow {
@@ -30,7 +35,6 @@ export interface WaiverPlayerRow {
   possibleStarterWeeks: number;
   suggestions: BidSuggestion[];
   predictedWinningBid: number;
-  predictedConfidence: 'low' | 'medium' | 'high';
 }
 
 export interface StarterPositionCounts {
@@ -291,11 +295,8 @@ export function predictedBidMultiplier(currentWeek: number): number {
   return 2 * (1 - seasonProgress);
 }
 
-function predictWinningBid(modeledValue: number, currentWeek: number): {
-  value: number;
-  confidence: 'low' | 'medium' | 'high';
-} {
-  return { value: Math.round(modeledValue * predictedBidMultiplier(currentWeek)), confidence: 'medium' };
+function predictWinningBid(modeledValue: number, currentWeek: number): number {
+  return Math.round(modeledValue * predictedBidMultiplier(currentWeek));
 }
 
 export function calculateRemainingFaab(budget: number, roster: Roster | undefined): number | null {
@@ -371,7 +372,7 @@ export function buildWaiverBoard(
       const safe = safeStrategy(base, ctx);
       const starterWeeks = projectedStarterWeeks(base, ctx);
       const weeks = weeksStarterStrategy(base, ctx);
-      const pred = predictWinningBid(weeks, ctx.currentWeek);
+      const predictedWinningBid = predictWinningBid(weeks, ctx.currentWeek);
       const playerVorp = calibration
         ? calculatePlayerVorp(sleeperRos?.get(p.playerId), calibration.replacementByPosition)
         : null;
@@ -393,11 +394,10 @@ export function buildWaiverBoard(
         suggestions: [
           mk('weeks-starter', 'Weeks-as-Starter', weeks, ctx.budget),
           mk('safe', 'Safe', safe, ctx.budget),
-          mk('aggressive', 'Aggressive', pred.value, ctx.budget),
+          mk('aggressive', 'Aggressive', predictedWinningBid, ctx.budget),
           mk('vorp', 'VoRP', vorp, ctx.budget),
         ],
-        predictedWinningBid: pred.value,
-        predictedConfidence: pred.confidence,
+        predictedWinningBid,
       });
     });
   }
@@ -451,6 +451,26 @@ function computeLeagueWidePositionRanks(
       .forEach((player, index) => ranks.set(player.playerId, index + 1));
   }
   return ranks;
+}
+
+/** Resolve current active-roster ownership for display without changing any valuation pool. */
+export function computeRosteredPlayerOwners(
+  rosters: Roster[],
+  users: SleeperUser[],
+  elim: EliminationResult,
+): Map<string, RosteredPlayerOwner> {
+  const namesByUserId = new Map(users.map((user) => [user.user_id, user.display_name]));
+  const ownership = new Map<string, RosteredPlayerOwner>();
+  for (const roster of rosters) {
+    const info = elim.teams.get(roster.roster_id);
+    if (info?.eliminatedWeek != null) continue;
+    const ownerName = namesByUserId.get(roster.owner_id) || `Team ${roster.roster_id}`;
+    for (const playerId of roster.players ?? []) {
+      if (!playerId || playerId === '0') continue;
+      ownership.set(playerId, { rosterId: roster.roster_id, ownerName });
+    }
+  }
+  return ownership;
 }
 
 /** Determine which players are available (not rostered by any active team). */

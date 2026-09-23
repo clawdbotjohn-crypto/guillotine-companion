@@ -6,11 +6,14 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { Card, StatusBadge } from './ui';
 import type { Roster, SleeperUser } from '../api/types';
 import type { TeamInfo, BidInfo } from '../logic/elimination';
+import type { TeamProjection } from '../logic/analytics';
+import { formatFaabCurrency, getFaabTeamStatus, summarizeRemainingFaab } from '../logic/faabDisplay';
 
 interface FaabTrackerProps {
   rosters: Roster[];
   users: SleeperUser[];
   teams: Map<number, TeamInfo>;
+  projections: readonly TeamProjection[];
   totalBudget: number;
   bids: BidInfo[];
 }
@@ -24,19 +27,11 @@ interface TeamFaab {
   team: TeamInfo | undefined;
 }
 
-function getTeamStatus(team: TeamInfo | undefined): 'champion' | 'runner-up' | 'eliminated' | 'safe' | 'middle' | 'at-risk' {
-  if (!team) return 'safe';
-  if (team.isChampion) return 'champion';
-  if (team.isRunnerUp) return 'runner-up';
-  if (team.eliminatedWeek !== null) return 'eliminated';
-  return 'safe';
-}
-
-export function FaabTracker({ rosters, users, teams, totalBudget, bids }: FaabTrackerProps) {
+export function FaabTracker({ rosters, users, teams, projections, totalBudget, bids }: FaabTrackerProps) {
   // Hide eliminated teams by default (John feedback 2026-09-22)
   const [hideEliminated, setHideEliminated] = useState(true);
 
-  const { sorted, leagueTotal, avgRemaining, medianRemaining } = useMemo(() => {
+  const sorted = useMemo(() => {
     const userMap = new Map(users.map((u) => [u.user_id, u]));
 
     const entries: TeamFaab[] = rosters.map((r) => {
@@ -55,31 +50,23 @@ export function FaabTracker({ rosters, users, teams, totalBudget, bids }: FaabTr
       };
     });
 
-    // Sort by remaining budget descending
-    const sorted = entries.sort((a, b) => b.remaining - a.remaining);
-
-    const leagueTotal = totalBudget * rosters.length;
-    const remainingValues = sorted.map((e) => e.remaining);
-    const avgRemaining = remainingValues.length > 0
-      ? remainingValues.reduce((sum, v) => sum + v, 0) / remainingValues.length
-      : 0;
-
-    // Median
-    const sortedVals = [...remainingValues].sort((a, b) => a - b);
-    const mid = Math.floor(sortedVals.length / 2);
-    const medianRemaining = sortedVals.length === 0
-      ? 0
-      : sortedVals.length % 2 === 0
-        ? (sortedVals[mid - 1] + sortedVals[mid]) / 2
-        : sortedVals[mid];
-
-    return { sorted, leagueTotal, avgRemaining, medianRemaining };
+    return entries.sort((a, b) => b.remaining - a.remaining || a.rosterId - b.rosterId);
   }, [rosters, users, teams, totalBudget]);
 
-  const eliminatedCount = sorted.filter((e) => getTeamStatus(e.team) === 'eliminated').length;
+  const projectionByRosterId = useMemo(
+    () => new Map(projections.map((projection) => [projection.rosterId, projection])),
+    [projections],
+  );
+  const eliminatedCount = sorted.filter((entry) => (
+    getFaabTeamStatus(entry.team, projectionByRosterId.get(entry.rosterId)) === 'eliminated'
+  )).length;
   const visibleTeams = hideEliminated
-    ? sorted.filter((e) => getTeamStatus(e.team) !== 'eliminated')
+    ? sorted.filter((entry) => (
+        getFaabTeamStatus(entry.team, projectionByRosterId.get(entry.rosterId)) !== 'eliminated'
+      ))
     : sorted;
+  const summary = summarizeRemainingFaab(visibleTeams);
+  const poolLabel = `${hideEliminated ? 'Active teams' : 'All teams'} · ${visibleTeams.length} displayed`;
 
   const deflationData = useMemo(() => {
     if (!bids || bids.length === 0) return [];
@@ -101,25 +88,22 @@ export function FaabTracker({ rosters, users, teams, totalBudget, bids }: FaabTr
   return (
     <div>
       {/* Summary stats */}
+      <p className="mb-2 text-[10px] uppercase tracking-wider text-[#6b6e99]" aria-label={`FAAB summary pool: ${poolLabel}`}>
+        Remaining FAAB · {poolLabel}
+      </p>
       <div className="grid grid-cols-3 gap-2 mb-4">
-        <div className="bg-[#161a3a] rounded-lg p-3 text-center">
-          <div className="text-[9px] text-[#4a4d77] uppercase tracking-wider">League Total</div>
-          <div className="font-['Space_Mono'] text-sm text-[#a5b4fc] font-bold tabular-nums">
-            ${leagueTotal}
+        {([
+          ['Min', summary.min],
+          ['Avg', summary.avg],
+          ['Max', summary.max],
+        ] as const).map(([label, value]) => (
+          <div key={label} className="bg-[#161a3a] rounded-lg p-3 text-center">
+            <div className="text-[9px] text-[#4a4d77] uppercase tracking-wider">{label}</div>
+            <div className="font-['Space_Mono'] text-sm text-[#f59e0b] font-bold tabular-nums">
+              {formatFaabCurrency(value)}
+            </div>
           </div>
-        </div>
-        <div className="bg-[#161a3a] rounded-lg p-3 text-center">
-          <div className="text-[9px] text-[#4a4d77] uppercase tracking-wider">Avg Left</div>
-          <div className="font-['Space_Mono'] text-sm text-[#f59e0b] font-bold tabular-nums">
-            ${avgRemaining.toFixed(0)}
-          </div>
-        </div>
-        <div className="bg-[#161a3a] rounded-lg p-3 text-center">
-          <div className="text-[9px] text-[#4a4d77] uppercase tracking-wider">Median</div>
-          <div className="font-['Space_Mono'] text-sm text-[#f59e0b] font-bold tabular-nums">
-            ${medianRemaining.toFixed(0)}
-          </div>
-        </div>
+        ))}
       </div>
 
       {/* Header */}
@@ -146,7 +130,8 @@ export function FaabTracker({ rosters, users, teams, totalBudget, bids }: FaabTr
       <Card hover={false} className="p-4">
         <div className="space-y-3">
           {visibleTeams.map((entry, i) => {
-            const status = getTeamStatus(entry.team);
+            const projection = projectionByRosterId.get(entry.rosterId);
+            const status = getFaabTeamStatus(entry.team, projection);
             const isEliminated = status === 'eliminated';
 
             return (
@@ -162,10 +147,18 @@ export function FaabTracker({ rosters, users, teams, totalBudget, bids }: FaabTr
                     <span className={`text-sm ${isEliminated ? 'text-[#4a4d77]' : 'text-[#f0f0ff]'}`}>
                       {entry.displayName}
                     </span>
-                    <StatusBadge status={status} />
+                    {status ? <StatusBadge status={status} /> : <span className="text-[9px] text-[#6b6e99]">Projection unavailable</span>}
+                    {!isEliminated && projection?.projPoints != null && (
+                      <span
+                        className="font-['Space_Mono'] text-[9px] text-[#6b6e99] tabular-nums"
+                        aria-label={`Active survivor projection rank ${projection.projRank} of ${projection.projOutOf}`}
+                      >
+                        Proj {projection.projRank}/{projection.projOutOf}
+                      </span>
+                    )}
                   </div>
                   <span className="font-['Space_Mono'] text-sm text-[#f59e0b] font-bold tabular-nums">
-                    ${entry.remaining}
+                    {formatFaabCurrency(entry.remaining)}
                   </span>
                 </div>
 

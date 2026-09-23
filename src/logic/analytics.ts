@@ -1,22 +1,15 @@
 // Analytics engine: projected best-lineup, position-group ranks, safe/at-risk.
-//
-// PROJECTION SOURCE DECISION (John review, 2026-09-22):
-// Sleeper's public v1 API does not expose forward-looking projections reliably.
-// Rather than depend on an undocumented endpoint, we project each player's next
-// score as their season-to-date average points (from matchup players_points).
-// This is a solid proxy in-season and auto-updates as weeks accrue. If a team
-// buys a stud on waivers, their prior weeks lift the average within a week or two.
-// Swap in a real projections feed later without changing the UI contract.
 
 import type { Matchup, Roster, League } from '../api/types';
 import { getPlayerPosition } from '../store/players';
 import type { EliminationResult } from './elimination';
+import type { WeeklyScoredPlayer } from './projections';
 
 export function formatCurrentRank(rank: number | undefined, activeTeamCount: number): string {
   return rank == null || activeTeamCount <= 0 ? '—' : `${rank}/${activeTeamCount}`;
 }
 
-export type TeamRisk = 'safe' | 'middle' | 'at-risk';
+export type TeamRisk = 'safe' | 'warning' | 'at-risk';
 
 export interface ActiveStanding {
   rosterId: number;
@@ -33,8 +26,10 @@ interface StandingCandidate {
 
 /**
  * Rank one current-team metric among survivors and derive guillotine risk from
- * that same order. Eliminated teams never receive a current standing. Equal
- * values use roster ID so API/input ordering cannot change the result.
+ * that same order. The bottom max(4, ceil(active / 3)) teams are flagged, capped
+ * to the active field: the bottom elimination count is at risk and the rest are
+ * warnings. Eliminated teams never receive a current standing. Equal values use
+ * roster ID so API/input ordering cannot change the result.
  */
 export function rankActiveTeams(
   candidates: readonly StandingCandidate[],
@@ -44,16 +39,17 @@ export function rankActiveTeams(
     .filter((candidate) => !candidate.eliminated)
     .sort((a, b) => b.value - a.value || a.rosterId - b.rosterId);
   const outOf = active.length;
-  const riskWidth = Math.max(1, elimsPerWeek);
+  const flaggedWidth = Math.min(outOf, Math.max(4, Math.ceil(outOf / 3)));
+  const atRiskWidth = Math.min(flaggedWidth, Math.max(0, elimsPerWeek));
   const standings = new Map<number, ActiveStanding>();
 
   active.forEach((candidate, index) => {
     const rank = index + 1;
     const fromBottom = outOf - rank;
-    const risk: TeamRisk = fromBottom < riskWidth
+    const risk: TeamRisk = fromBottom < atRiskWidth
       ? 'at-risk'
-      : fromBottom < riskWidth * 2
-        ? 'middle'
+      : fromBottom < flaggedWidth
+        ? 'warning'
         : 'safe';
     standings.set(candidate.rosterId, { rosterId: candidate.rosterId, rank, outOf, risk });
   });
@@ -64,43 +60,6 @@ export function rankActiveTeams(
 function currentElimsPerWeek(elim: EliminationResult): number {
   const lastWeek = elim.weeks[elim.weeks.length - 1];
   return Math.max(1, lastWeek?.eliminated.length || 1);
-}
-
-export interface PlayerSeason {
-  playerId: string;
-  position: string;
-  totalPoints: number;
-  games: number;
-  avgPoints: number;
-}
-
-/** Build per-player season averages from all weekly matchups. */
-export function buildPlayerSeasons(weekMatchups: Map<number, Matchup[]>): Map<string, PlayerSeason> {
-  const acc = new Map<string, { total: number; games: number }>();
-  for (const matchups of weekMatchups.values()) {
-    for (const m of matchups) {
-      if (!m.players_points) continue;
-      for (const [pid, pts] of Object.entries(m.players_points)) {
-        if (pts == null) continue;
-        const cur = acc.get(pid) ?? { total: 0, games: 0 };
-        cur.total += pts;
-        // Count a "game" only when the player actually featured (nonzero or listed as starter-eligible)
-        cur.games += 1;
-        acc.set(pid, cur);
-      }
-    }
-  }
-  const out = new Map<string, PlayerSeason>();
-  for (const [pid, v] of acc.entries()) {
-    out.set(pid, {
-      playerId: pid,
-      position: getPlayerPosition(pid),
-      totalPoints: v.total,
-      games: v.games,
-      avgPoints: v.games > 0 ? v.total / v.games : 0,
-    });
-  }
-  return out;
 }
 
 /** Parse league roster_positions into slot requirements. FLEX kept as its own category. */
@@ -138,21 +97,20 @@ export function parseLineupSlots(rosterPositions: string[] | undefined): LineupS
 }
 
 /**
- * Compute a team's best possible starting lineup projected points given a pool
- * of players and their season averages. Greedy fill: fixed positions first, then
- * FLEX from best remaining eligible, then SUPER_FLEX.
+ * Compute a team's best possible starting lineup from one shared weekly projection map.
+ * Greedy fill: fixed positions first, then FLEX from best remaining eligible, then SUPER_FLEX.
+ * Missing player projections are worth zero; historical scores are never substituted.
  */
 export function projectBestLineup(
   playerIds: string[],
-  seasons: Map<string, PlayerSeason>,
+  projections: ReadonlyMap<string, WeeklyScoredPlayer>,
   slots: LineupSlots,
 ): { total: number; starters: { playerId: string; position: string; proj: number }[] } {
-  // Group available players by position, sorted desc by projected avg
   const byPos = new Map<string, { playerId: string; proj: number }[]>();
   for (const pid of playerIds) {
-    const s = seasons.get(pid);
-    const pos = s?.position ?? getPlayerPosition(pid);
-    const proj = s?.avgPoints ?? 0;
+    const projection = projections.get(pid);
+    const pos = projection?.position ?? getPlayerPosition(pid);
+    const proj = projection?.points ?? 0;
     const arr = byPos.get(pos) ?? [];
     arr.push({ playerId: pid, proj });
     byPos.set(pos, arr);
@@ -215,7 +173,8 @@ export function projectBestLineup(
 export interface TeamProjection {
   rosterId: number;
   displayName: string;
-  projPoints: number;
+  /** Null when a current Sleeper weekly projection is unavailable. */
+  projPoints: number | null;
   eliminated: boolean;
   projRank: number; // 1 = highest projected survivor; 0 when eliminated
   projOutOf: number; // active-team count; 0 when eliminated
@@ -229,55 +188,151 @@ export function formatProjectedCurrentRank(projection: TeamProjection | undefine
 }
 
 /**
- * Project every active team's best lineup and classify safe/at-risk.
- * Risk is relative among ACTIVE teams: the bottom N (where N = elims/week)
- * are "at-risk"; a small cushion above are "middle"; the rest "safe".
+ * Project every team's optimized lineup from the same Sleeper weekly point map and classify
+ * survivors by that score. A null/empty map keeps projection fields unavailable; it never falls
+ * back to historical matchup scoring.
  */
 export function projectAllTeams(
   rosters: Roster[],
-  seasons: Map<string, PlayerSeason>,
+  weeklyProjections: ReadonlyMap<string, WeeklyScoredPlayer> | null,
   league: League | undefined,
   elim: EliminationResult,
 ): TeamProjection[] {
   const slots = parseLineupSlots(league?.roster_positions);
+  const projectionsAvailable = weeklyProjections != null && weeklyProjections.size > 0;
   const rows: TeamProjection[] = rosters.map((r) => {
     const info = elim.teams.get(r.roster_id);
     const eliminated = info?.eliminatedWeek != null;
-    const pool = r.players ?? [];
-    const { total, starters } = projectBestLineup(pool, seasons, slots);
+    const lineup = projectionsAvailable
+      ? projectBestLineup(r.players ?? [], weeklyProjections, slots)
+      : { total: null, starters: [] };
     return {
       rosterId: r.roster_id,
       displayName: info?.displayName ?? `Team ${r.roster_id}`,
-      projPoints: total,
+      projPoints: lineup.total,
       eliminated,
       projRank: 0,
       projOutOf: 0,
-      risk: 'middle',
-      starters,
+      risk: 'warning',
+      starters: lineup.starters,
     };
   });
 
-  const standings = rankActiveTeams(
-    rows.map((row) => ({
-      rosterId: row.rosterId,
-      value: row.projPoints,
-      eliminated: row.eliminated,
-    })),
-    currentElimsPerWeek(elim),
-  );
-  for (const row of rows) {
-    const standing = standings.get(row.rosterId);
-    if (!standing) continue;
-    row.projRank = standing.rank;
-    row.projOutOf = standing.outOf;
-    row.risk = standing.risk;
+  if (projectionsAvailable) {
+    const standings = rankActiveTeams(
+      rows.map((row) => ({
+        rosterId: row.rosterId,
+        value: row.projPoints ?? 0,
+        eliminated: row.eliminated,
+      })),
+      currentElimsPerWeek(elim),
+    );
+    for (const row of rows) {
+      const standing = standings.get(row.rosterId);
+      if (!standing) continue;
+      row.projRank = standing.rank;
+      row.projOutOf = standing.outOf;
+      row.risk = standing.risk;
+    }
   }
 
   return rows.sort((a, b) => {
     if (a.eliminated !== b.eliminated) return a.eliminated ? 1 : -1;
     if (a.eliminated) return a.rosterId - b.rosterId;
-    return a.projRank - b.projRank;
+    return a.projRank - b.projRank || a.rosterId - b.rosterId;
   });
+}
+
+export type ProjectedLineupGroup = keyof LineupSlots;
+
+export interface ProjectedLineupGroupRank {
+  group: ProjectedLineupGroup;
+  slotCount: number;
+  points: number;
+  rank: number;
+  outOf: number;
+}
+
+export interface ProjectedLineupGroupRankings {
+  byRosterId: Map<number, ProjectedLineupGroupRank[]>;
+  unavailableGroups: ProjectedLineupGroup[];
+}
+
+const PROJECTED_GROUP_ORDER: ProjectedLineupGroup[] = [
+  'QB', 'RB', 'WR', 'TE', 'FLEX', 'SUPER_FLEX', 'K', 'DEF',
+];
+const SUPPORTED_LINEUP_POSITIONS = new Set([
+  'QB', 'RB', 'WR', 'TE', 'FLEX', 'WRRB_FLEX', 'REC_FLEX',
+  'SUPER_FLEX', 'QB_FLEX', 'K', 'DEF',
+]);
+
+function starterGroup(position: string): ProjectedLineupGroup | null {
+  if (position === 'SFLEX' || position === 'SUPER_FLEX') return 'SUPER_FLEX';
+  return PROJECTED_GROUP_ORDER.includes(position as ProjectedLineupGroup)
+    ? position as ProjectedLineupGroup
+    : null;
+}
+
+/**
+ * Rank actual optimized lineup assignments by configured slot group. Duplicate fixed/flex slots
+ * are aggregated into one position-strength row. Once the weekly endpoint is available, every
+ * configured group is ranked across every active team. Players omitted by Sleeper (including bye
+ * weeks) and unfilled assignments honestly contribute zero, matching `projectBestLineup`.
+ */
+export function computeProjectedLineupGroupRanks(
+  teamProjections: readonly TeamProjection[],
+  weeklyProjections: ReadonlyMap<string, WeeklyScoredPlayer> | null,
+  league: League | undefined,
+): ProjectedLineupGroupRankings {
+  const byRosterId = new Map<number, ProjectedLineupGroupRank[]>();
+  const rosterPositions = league?.roster_positions;
+  const hasActualConfiguration = rosterPositions?.some((position) =>
+    SUPPORTED_LINEUP_POSITIONS.has(position)) ?? false;
+  if (!hasActualConfiguration) return { byRosterId, unavailableGroups: [] };
+
+  const slots = parseLineupSlots(rosterPositions);
+  const configuredGroups = PROJECTED_GROUP_ORDER.filter((group) => slots[group] > 0);
+  const activeTeams = teamProjections
+    .filter((team) => !team.eliminated)
+    .sort((a, b) => a.rosterId - b.rosterId);
+  if (!weeklyProjections?.size || activeTeams.length === 0) {
+    return { byRosterId, unavailableGroups: configuredGroups };
+  }
+
+  const unavailableGroups: ProjectedLineupGroup[] = [];
+  for (const group of configuredGroups) {
+    const slotCount = slots[group];
+    const candidates = activeTeams.map((team) => {
+      const assigned = team.starters.filter((starter) => starterGroup(starter.position) === group);
+      return {
+        rosterId: team.rosterId,
+        points: assigned.reduce(
+          (sum, starter) => sum + (Number.isFinite(starter.proj) ? starter.proj : 0),
+          0,
+        ),
+      };
+    });
+
+    candidates
+      .sort((a, b) => b.points - a.points || a.rosterId - b.rosterId)
+      .forEach((candidate, index) => {
+        const rows = byRosterId.get(candidate.rosterId) ?? [];
+        rows.push({
+          group,
+          slotCount,
+          points: candidate.points,
+          rank: index + 1,
+          outOf: activeTeams.length,
+        });
+        byRosterId.set(candidate.rosterId, rows);
+      });
+  }
+
+  for (const rows of byRosterId.values()) {
+    rows.sort((a, b) => PROJECTED_GROUP_ORDER.indexOf(a.group)
+      - PROJECTED_GROUP_ORDER.indexOf(b.group));
+  }
+  return { byRosterId, unavailableGroups };
 }
 
 // ---- Position-group scoring ranks (Teams section) ----
@@ -350,6 +405,41 @@ export function computePositionGroupRanks(
 // ---- Historical points rank (total season points) ----
 export interface HistoricalRank extends ActiveStanding {
   totalPoints: number;
+}
+
+export interface AllRosterHistoricalRank {
+  rosterId: number;
+  rank: number;
+  outOf: number;
+  totalPoints: number;
+}
+
+/**
+ * Cumulative season-to-date scoring rank across every original roster. Eliminated
+ * teams remain in this historical comparison pool and missing weekly scores count
+ * as zero. Ties use roster ID so the result is stable across API ordering.
+ */
+export function computeAllRosterHistoricalRanks(
+  elim: EliminationResult,
+): Map<number, AllRosterHistoricalRank> {
+  const totals = new Map<number, number>(
+    [...elim.teams.keys()].map((rosterId) => [rosterId, 0]),
+  );
+  for (const week of elim.weeks) {
+    for (const score of week.scores) {
+      if (!totals.has(score.rosterId)) continue;
+      totals.set(score.rosterId, (totals.get(score.rosterId) ?? 0) + score.points);
+    }
+  }
+
+  const ordered = [...totals.entries()]
+    .map(([rosterId, totalPoints]) => ({ rosterId, totalPoints }))
+    .sort((a, b) => b.totalPoints - a.totalPoints || a.rosterId - b.rosterId);
+  const outOf = ordered.length;
+  return new Map(ordered.map((entry, index) => [
+    entry.rosterId,
+    { ...entry, rank: index + 1, outOf },
+  ]));
 }
 
 /** Cumulative points standings for current survivors only. */

@@ -1,13 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { League, Matchup, Roster, SleeperUser } from '../../api/types';
 import {
-  buildPlayerSeasons,
+  computeAllRosterHistoricalRanks,
   computeHistoricalRanks,
   computePositionGroupRanks,
+  computeProjectedLineupGroupRanks,
   formatProjectedCurrentRank,
+  orderTeamProjections,
   projectAllTeams,
+  rankActiveTeams,
 } from '../analytics';
 import { computeEliminations } from '../elimination';
+import { buildHubRosterRows } from '../hubRoster';
 
 vi.mock('../../store/players', () => ({
   getPlayerPosition: (id: string) => id.split('-')[1] ?? '',
@@ -61,6 +65,49 @@ function matchup(rosterId: number, points: number, starterPoints: number[]): Mat
   };
 }
 
+describe('active-team risk thresholds', () => {
+  const standingsByRank = (activeTeams: number, elimsPerWeek: number) => {
+    const standings = rankActiveTeams(
+      Array.from({ length: activeTeams }, (_, index) => ({
+        rosterId: index + 1,
+        value: activeTeams - index,
+        eliminated: false,
+      })),
+      elimsPerWeek,
+    );
+    return [...standings.values()].sort((a, b) => a.rank - b.rank);
+  };
+
+  it('flags exactly ranks 19-28 in a 28-team, two-cut league', () => {
+    const standings = standingsByRank(28, 2);
+
+    expect(standings.slice(0, 18).every((standing) => standing.risk === 'safe')).toBe(true);
+    expect(standings.slice(18, 26).every((standing) => standing.risk === 'warning')).toBe(true);
+    expect(standings.slice(26).every((standing) => standing.risk === 'at-risk')).toBe(true);
+    expect(standings[17]).toMatchObject({ rank: 18, risk: 'safe' });
+    expect(standings[18]).toMatchObject({ rank: 19, risk: 'warning' });
+    expect(standings[25]).toMatchObject({ rank: 26, risk: 'warning' });
+    expect(standings[26]).toMatchObject({ rank: 27, risk: 'at-risk' });
+    expect(standings[27]).toMatchObject({ rank: 28, risk: 'at-risk' });
+  });
+
+  it('uses the four-team minimum and caps it to leagues smaller than four', () => {
+    expect(standingsByRank(6, 1).map((standing) => standing.risk)).toEqual([
+      'safe',
+      'safe',
+      'warning',
+      'warning',
+      'warning',
+      'at-risk',
+    ]);
+    expect(standingsByRank(3, 1).map((standing) => standing.risk)).toEqual([
+      'warning',
+      'warning',
+      'at-risk',
+    ]);
+  });
+});
+
 describe('computePositionGroupRanks', () => {
   it('ranks every supported position only among surviving teams with stable roster-ID ties', () => {
     const rosters = [1, 2, 3, 4].map(roster);
@@ -112,6 +159,282 @@ describe('computePositionGroupRanks', () => {
     expect(team3.TE).toMatchObject({ points: 12, rank: 1 });
     expect(team1.K).toMatchObject({ points: 9, rank: 1 });
     expect(team1.DEF).toMatchObject({ points: 12, rank: 1 });
+  });
+});
+
+describe('Sleeper weekly best-lineup projections', () => {
+  it('optimizes fixed and flex slots once for both team score and projected rank', () => {
+    const rosters = [roster(1), roster(2), roster(3)];
+    rosters[0].players = ['1-RB-a', '1-RB-b', '1-WR-a'];
+    rosters[1].players = ['2-RB-a', '2-WR-a'];
+    rosters[2].players = ['3-RB-a', '3-WR-a'];
+    const users = [user(1), user(2), user(3)];
+    const matchups = new Map<number, Matchup[]>([[1, [
+      matchup(1, 100, [1, 1, 1, 1, 1, 1, 1]),
+      matchup(2, 90, [99, 99, 99, 99, 99, 99, 99]),
+      matchup(3, 1, [500, 500, 500, 500, 500, 500, 500]),
+    ]]]);
+    const elimination = computeEliminations(matchups, rosters, users);
+    const weekly = new Map([
+      ['1-RB-a', { playerId: '1-RB-a', position: 'RB', points: 20 }],
+      ['1-RB-b', { playerId: '1-RB-b', position: 'RB', points: 15 }],
+      ['1-WR-a', { playerId: '1-WR-a', position: 'WR', points: 19 }],
+      ['2-RB-a', { playerId: '2-RB-a', position: 'RB', points: 17 }],
+      ['2-WR-a', { playerId: '2-WR-a', position: 'WR', points: 16 }],
+      ['3-RB-a', { playerId: '3-RB-a', position: 'RB', points: 100 }],
+    ]);
+    const projections = projectAllTeams(
+      rosters,
+      weekly,
+      { ...league, roster_positions: ['RB', 'FLEX'] },
+      elimination,
+    );
+    const team1 = projections.find((team) => team.rosterId === 1)!;
+
+    expect(team1.projPoints).toBe(39);
+    expect(team1.starters).toEqual([
+      { playerId: '1-RB-a', position: 'RB', proj: 20 },
+      { playerId: '1-WR-a', position: 'FLEX', proj: 19 },
+    ]);
+    expect(team1).toMatchObject({ projRank: 1, projOutOf: 2, risk: 'warning' });
+  });
+
+  it('keeps Hub and Teams coherent when an optimized bench player displaces a Sleeper starter', () => {
+    const rosters = [roster(1), roster(2), roster(3), roster(4)];
+    const lineupLeague = {
+      ...league,
+      roster_positions: ['QB', 'RB', 'RB', 'WR', 'FLEX', 'SUPER_FLEX', 'BN'],
+    };
+    const pointsByRoster: Record<number, Array<[string, string, number]>> = {
+      1: [
+        ['1-QB-a', 'QB', 20], ['1-QB-b', 'QB', 14],
+        ['1-RB-a', 'RB', 18], ['1-RB-b', 'RB', 17], ['1-RB-c', 'RB', 16],
+        ['1-WR-current-low', 'WR', 1], ['1-WR-bench-high', 'WR', 15],
+      ],
+      2: [
+        ['2-QB-a', 'QB', 18], ['2-QB-b', 'QB', 12],
+        ['2-RB-a', 'RB', 17], ['2-RB-b', 'RB', 16], ['2-RB-c', 'RB', 14],
+        ['2-WR-a', 'WR', 13],
+      ],
+      3: [
+        ['3-QB-a', 'QB', 16], ['3-QB-b', 'QB', 10],
+        ['3-RB-a', 'RB', 15], ['3-RB-b', 'RB', 14], ['3-RB-c', 'RB', 12],
+        ['3-WR-a', 'WR', 11],
+      ],
+      // Official Week 1 elimination keeps this absurd projected lineup out of every current pool.
+      4: [
+        ['4-QB-a', 'QB', 100], ['4-QB-b', 'QB', 99],
+        ['4-RB-a', 'RB', 100], ['4-RB-b', 'RB', 99], ['4-RB-c', 'RB', 98],
+        ['4-WR-a', 'WR', 100],
+      ],
+    };
+    for (const team of rosters) {
+      team.players = pointsByRoster[team.roster_id].map(([playerId]) => playerId);
+      team.starters = team.roster_id === 1
+        ? ['1-QB-a', '1-RB-a', '1-RB-b', '1-WR-current-low', '1-RB-c', '1-QB-b']
+        : team.players.slice(0, 6);
+    }
+    const weekly = new Map(
+      Object.values(pointsByRoster).flat().map(([playerId, position, points]) => [playerId, {
+        playerId,
+        position,
+        points,
+      }]),
+    );
+    const matchups = new Map<number, Matchup[]>([[1, [
+      matchup(1, 120, [1, 1, 1, 1, 1, 1, 1]),
+      matchup(2, 110, [1, 1, 1, 1, 1, 1, 1]),
+      matchup(3, 100, [1, 1, 1, 1, 1, 1, 1]),
+      matchup(4, 1, [100, 100, 100, 100, 100, 100, 100]),
+    ]]]);
+    const elimination = computeEliminations(matchups, rosters, [1, 2, 3, 4].map(user));
+
+    const projections = projectAllTeams(rosters, weekly, lineupLeague, elimination);
+    const projectedGroups = computeProjectedLineupGroupRanks(projections, weekly, lineupLeague);
+    const historical = computeHistoricalRanks(elimination);
+    const team1 = projections.find((team) => team.rosterId === 1)!;
+    const hubRows = buildHubRosterRows({
+      roster: rosters[0],
+      teamProjection: team1,
+      weeklyProjections: weekly,
+      players: undefined,
+      season: undefined,
+      transactions: undefined,
+      draftPicks: undefined,
+    });
+
+    // Hub optimized total/current rank and Teams Projected total/order/rank are the same object/model.
+    expect(team1).toMatchObject({ projPoints: 100, projRank: 1, projOutOf: 3 });
+    expect(formatProjectedCurrentRank(team1)).toBe('1/3');
+    expect(orderTeamProjections(projections, historical, 'projected').map((team) => team.rosterId))
+      .toEqual([1, 2, 3, 4]);
+    expect(orderTeamProjections(projections, historical, 'projected')[0])
+      .toMatchObject({ rosterId: 1, projPoints: 100, projRank: 1, projOutOf: 3 });
+
+    // The higher-projected current BENCH WR becomes STARTER; the low current starter becomes BENCH.
+    expect(hubRows.find((row) => row.playerId === '1-WR-bench-high'))
+      .toMatchObject({ isStarter: true, starterSlot: 'WR', projection: 15 });
+    expect(hubRows.find((row) => row.playerId === '1-WR-current-low'))
+      .toMatchObject({ isStarter: false, starterSlot: null, projection: 1 });
+
+    // Teams Projected expanded groups come directly from those optimized assignments.
+    const team1Groups = Object.fromEntries(
+      projectedGroups.byRosterId.get(1)!.map((row) => [row.group, row]),
+    );
+    expect(team1Groups.RB).toMatchObject({ slotCount: 2, points: 35, rank: 1, outOf: 3 });
+    expect(team1Groups.WR).toMatchObject({ slotCount: 1, points: 15, rank: 1, outOf: 3 });
+    expect(team1Groups.FLEX).toMatchObject({ slotCount: 1, points: 16, rank: 1, outOf: 3 });
+    expect(team1Groups.SUPER_FLEX).toMatchObject({ slotCount: 1, points: 14, rank: 1, outOf: 3 });
+    expect(projectedGroups.byRosterId.has(4)).toBe(false);
+  });
+
+  it('keeps score and rank unavailable without a usable weekly payload', () => {
+    const rosters = [roster(1), roster(2)];
+    const users = [user(1), user(2)];
+    const matchups = new Map<number, Matchup[]>([[1, [
+      matchup(1, 100, [50, 50, 50, 50, 50, 50, 50]),
+      matchup(2, 90, [40, 40, 40, 40, 40, 40, 40]),
+    ]]]);
+    const elimination = computeEliminations(matchups, rosters, users);
+
+    const projections = projectAllTeams(rosters, null, league, elimination);
+
+    expect(projections.every((team) => team.projPoints == null)).toBe(true);
+    expect(projections.every((team) => team.projRank === 0 && team.projOutOf === 0)).toBe(true);
+  });
+});
+
+describe('projected lineup group rankings', () => {
+  it('uses optimized duplicate, FLEX, and SUPER_FLEX assignments and excludes eliminated teams', () => {
+    const rosters = [roster(1), roster(2), roster(3), roster(4)];
+    const playerPoints: Record<number, Array<[string, number]>> = {
+      1: [
+        ['1-QB-a', 20], ['1-QB-b', 12],
+        ['1-RB-a', 18], ['1-RB-b', 16], ['1-RB-c', 14],
+        ['1-WR-a', 15], ['1-WR-b', 13],
+      ],
+      2: [
+        ['2-QB-a', 19], ['2-QB-b', 18],
+        ['2-RB-a', 20], ['2-RB-b', 17], ['2-RB-c', 12],
+        ['2-WR-a', 16], ['2-WR-b', 15],
+      ],
+      3: [
+        ['3-QB-a', 10], ['3-QB-b', 9],
+        ['3-RB-a', 13], ['3-RB-b', 11], ['3-RB-c', 8],
+        ['3-WR-a', 12], ['3-WR-b', 7],
+      ],
+      // This eliminated roster would rank first in every group if it leaked
+      // into either the comparison pool or denominator.
+      4: [
+        ['4-QB-a', 100], ['4-QB-b', 99],
+        ['4-RB-a', 100], ['4-RB-b', 99], ['4-RB-c', 98],
+        ['4-WR-a', 100], ['4-WR-b', 99],
+      ],
+    };
+    for (const team of rosters) {
+      team.players = playerPoints[team.roster_id].map(([playerId]) => playerId);
+    }
+    const users = [1, 2, 3, 4].map(user);
+    const matchups = new Map<number, Matchup[]>([[1, [
+      matchup(1, 120, [1, 1, 1, 1, 1, 1, 1]),
+      matchup(2, 110, [1, 1, 1, 1, 1, 1, 1]),
+      matchup(3, 100, [1, 1, 1, 1, 1, 1, 1]),
+      matchup(4, 1, [1, 1, 1, 1, 1, 1, 1]),
+    ]]]);
+    const elimination = computeEliminations(matchups, rosters, users);
+    const weekly = new Map(
+      Object.values(playerPoints).flat().map(([playerId, points]) => [playerId, {
+        playerId,
+        position: playerId.split('-')[1],
+        points,
+      }]),
+    );
+    const nonstandardLeague: League = {
+      ...league,
+      roster_positions: ['QB', 'RB', 'RB', 'WR', 'FLEX', 'SUPER_FLEX', 'BN'],
+    };
+
+    const projections = projectAllTeams(rosters, weekly, nonstandardLeague, elimination);
+    const rankings = computeProjectedLineupGroupRanks(projections, weekly, nonstandardLeague);
+    const team1Projection = projections.find((team) => team.rosterId === 1)!;
+    const team1 = Object.fromEntries(
+      rankings.byRosterId.get(1)!.map((row) => [row.group, row]),
+    );
+
+    // These are the actual assignments made by projectAllTeams. In particular,
+    // FLEX receives the best remaining FLEX player and SF receives the next
+    // remaining QB/RB/WR/TE; no hard-coded position subtotal is reconstructed.
+    expect(team1Projection.starters).toEqual([
+      { playerId: '1-QB-a', position: 'QB', proj: 20 },
+      { playerId: '1-RB-a', position: 'RB', proj: 18 },
+      { playerId: '1-RB-b', position: 'RB', proj: 16 },
+      { playerId: '1-WR-a', position: 'WR', proj: 15 },
+      { playerId: '1-RB-c', position: 'FLEX', proj: 14 },
+      { playerId: '1-WR-b', position: 'SFLEX', proj: 13 },
+    ]);
+    expect(team1.RB).toMatchObject({ slotCount: 2, points: 34, rank: 2, outOf: 3 });
+    expect(team1.FLEX).toMatchObject({ slotCount: 1, points: 14, rank: 2, outOf: 3 });
+    expect(team1.SUPER_FLEX).toMatchObject({ slotCount: 1, points: 13, rank: 2, outOf: 3 });
+    expect(rankings.byRosterId.has(4)).toBe(false);
+    expect([...rankings.byRosterId.keys()].sort()).toEqual([1, 2, 3]);
+    expect(rankings.unavailableGroups).toEqual([]);
+
+    const qbFlexLeague = {
+      ...nonstandardLeague,
+      roster_positions: nonstandardLeague.roster_positions.map((slot) =>
+        slot === 'SUPER_FLEX' ? 'QB_FLEX' : slot),
+    };
+    const qbFlexProjections = projectAllTeams(rosters, weekly, qbFlexLeague, elimination);
+    const qbFlexRankings = computeProjectedLineupGroupRanks(
+      qbFlexProjections,
+      weekly,
+      qbFlexLeague,
+    );
+    expect(qbFlexRankings.byRosterId.get(1)?.find((row) => row.group === 'SUPER_FLEX'))
+      .toMatchObject({ points: 13, rank: 2, outOf: 3 });
+  });
+
+  it('keeps the configured group and treats an omitted/bye player projection as honest zero', () => {
+    const rosters = [roster(1), roster(2), roster(3)];
+    rosters[0].players = ['1-QB-a'];
+    rosters[1].players = ['2-QB-a'];
+    rosters[2].players = ['3-QB-a'];
+    const users = [user(1), user(2), user(3)];
+    const matchups = new Map<number, Matchup[]>([[1, [
+      matchup(1, 100, [1, 1, 1, 1, 1, 1, 1]),
+      matchup(2, 90, [1, 1, 1, 1, 1, 1, 1]),
+      matchup(3, 1, [1, 1, 1, 1, 1, 1, 1]),
+    ]]]);
+    const elimination = computeEliminations(matchups, rosters, users);
+    const weekly = new Map([
+      ['1-QB-a', { playerId: '1-QB-a', position: 'QB', points: 20 }],
+    ]);
+    const qbLeague = { ...league, roster_positions: ['QB'] };
+
+    const projections = projectAllTeams(rosters, weekly, qbLeague, elimination);
+    const rankings = computeProjectedLineupGroupRanks(projections, weekly, qbLeague);
+
+    expect(rankings.byRosterId.get(1)?.[0]).toMatchObject({ group: 'QB', points: 20, rank: 1, outOf: 2 });
+    expect(rankings.byRosterId.get(2)?.[0]).toMatchObject({ group: 'QB', points: 0, rank: 2, outOf: 2 });
+    expect(rankings.unavailableGroups).toEqual([]);
+  });
+
+  it('ranks every configured fixed/flex/kicker/defense group for all active teams', () => {
+    const configuredLeague = { ...league, roster_positions: ['QB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'SUPER_FLEX', 'K', 'DEF'] };
+    const starters = (prefix: string, multiplier: number) => [
+      ['QB', 20], ['RB', 15], ['WR', 14], ['WR', 13], ['TE', 10], ['FLEX', 12], ['SFLEX', 11], ['K', 8], ['DEF', 0],
+    ].map(([position, points], index) => ({ playerId: `${prefix}-${position}-${index}`, position: position as string, proj: Number(points) * multiplier }));
+    const projections = [
+      { rosterId: 1, displayName: 'One', projPoints: 103, eliminated: false, projRank: 1, projOutOf: 2, risk: 'safe' as const, starters: starters('a', 1) },
+      { rosterId: 2, displayName: 'Two', projPoints: 51.5, eliminated: false, projRank: 2, projOutOf: 2, risk: 'warning' as const, starters: starters('b', 0.5) },
+      { rosterId: 3, displayName: 'Cut', projPoints: 999, eliminated: true, projRank: 0, projOutOf: 0, risk: 'at-risk' as const, starters: starters('c', 9) },
+    ];
+    const weekly = new Map([['endpoint-available', { playerId: 'endpoint-available', position: 'QB', points: 1 }]]);
+    const rankings = computeProjectedLineupGroupRanks(projections, weekly, configuredLeague);
+    expect(rankings.byRosterId.get(1)?.map((row) => row.group)).toEqual(['QB', 'RB', 'WR', 'TE', 'FLEX', 'SUPER_FLEX', 'K', 'DEF']);
+    expect(rankings.byRosterId.get(1)?.find((row) => row.group === 'WR')).toMatchObject({ slotCount: 2, points: 27, outOf: 2 });
+    expect(rankings.byRosterId.get(2)?.every((row) => row.outOf === 2)).toBe(true);
+    expect(rankings.byRosterId.has(3)).toBe(false);
   });
 });
 
@@ -173,9 +496,19 @@ describe('current team ranking semantics', () => {
     };
 
     const elimination = computeEliminations(matchups, rosters, users);
+    const weeklyProjections = new Map(
+      rosters.map((entry) => {
+        const playerId = `${entry.roster_id}-QB`;
+        return [playerId, {
+          playerId,
+          position: 'QB',
+          points: projectedPoints(entry.roster_id),
+        }];
+      }),
+    );
     const projections = projectAllTeams(
       rosters,
-      buildPlayerSeasons(matchups),
+      weeklyProjections,
       rankingLeague,
       elimination,
     );
@@ -210,21 +543,49 @@ describe('current team ranking semantics', () => {
     expect(team29Historical).toMatchObject({ rank: 28, outOf: 28, risk: 'at-risk' });
     expect(formatProjectedCurrentRank(team29Projection)).toBe('1/28');
 
-    expect(activeProjections.slice(-4).map((standing) => standing.risk)).toEqual([
-      'middle',
-      'middle',
+    expect(activeProjections.map((standing) => standing.risk)).toEqual([
+      ...Array(18).fill('safe'),
+      ...Array(8).fill('warning'),
       'at-risk',
       'at-risk',
     ]);
     const historicalByRank = [...historical.values()].sort((a, b) => a.rank - b.rank);
-    expect(historicalByRank.slice(-4).map((standing) => standing.risk)).toEqual([
-      'middle',
-      'middle',
+    expect(historicalByRank.map((standing) => standing.risk)).toEqual([
+      ...Array(18).fill('safe'),
+      ...Array(8).fill('warning'),
       'at-risk',
       'at-risk',
     ]);
     expect(projections.filter((team) => team.eliminated).every((team) =>
       team.projRank === 0 && team.projOutOf === 0 && !historical.has(team.rosterId)
     )).toBe(true);
+  });
+});
+
+describe('all-roster historical total rank', () => {
+  it('ranks season-to-date totals across every original roster, including eliminated teams', () => {
+    const rosters = [roster(1), roster(2), roster(3), roster(4)];
+    const users = [user(1), user(2), user(3), user(4)];
+    const matchups = new Map<number, Matchup[]>([
+      [1, [
+        matchup(1, 100, [1, 1, 1, 1, 1, 1, 1]),
+        matchup(2, 90, [1, 1, 1, 1, 1, 1, 1]),
+        matchup(3, 80, [1, 1, 1, 1, 1, 1, 1]),
+        matchup(4, 70, [1, 1, 1, 1, 1, 1, 1]),
+      ]],
+      [2, [
+        matchup(1, 20, [1, 1, 1, 1, 1, 1, 1]),
+        matchup(2, 25, [1, 1, 1, 1, 1, 1, 1]),
+        matchup(3, 30, [1, 1, 1, 1, 1, 1, 1]),
+      ]],
+    ]);
+    const elimination = computeEliminations(matchups, rosters, users);
+
+    const ranks = computeAllRosterHistoricalRanks(elimination);
+
+    expect(ranks.size).toBe(4);
+    expect(ranks.get(3)).toMatchObject({ rank: 3, outOf: 4, totalPoints: 110 });
+    expect(ranks.get(4)).toMatchObject({ rank: 4, outOf: 4, totalPoints: 70 });
+    expect(elimination.teams.get(4)?.eliminatedWeek).toBe(1);
   });
 });

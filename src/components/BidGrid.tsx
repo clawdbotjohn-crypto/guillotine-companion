@@ -1,6 +1,6 @@
 // Bid Grid — league-wide waiver bid grid organized by week × position
 
-import { useMemo } from 'react';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import type { BidInfo, TeamInfo } from '../logic/elimination';
 
 const POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
@@ -24,6 +24,7 @@ interface BidGridProps {
 }
 
 export function BidGrid({ bids, weeks, teams, totalBudget, selectedWeek, positions }: BidGridProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
   const bigBidThreshold = totalBudget * 0.2;
 
   // Group bids by `${week}-${position}`
@@ -44,6 +45,12 @@ export function BidGrid({ bids, weeks, teams, totalBudget, selectedWeek, positio
   const displayWeeks = selectedWeek ? weeks.filter((w) => w === selectedWeek) : weeks;
   const displayPositions = positions ?? POSITIONS;
   const isExpanded = selectedWeek !== null;
+  const isPositionFiltered = displayPositions.length === 1;
+  const positionFilterKey = displayPositions.join(',');
+
+  useLayoutEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollLeft = 0;
+  }, [positionFilterKey, selectedWeek]);
 
   if (bids.length === 0) {
     return (
@@ -54,13 +61,23 @@ export function BidGrid({ bids, weeks, teams, totalBudget, selectedWeek, positio
   }
 
   return (
-    <div className="overflow-x-auto -mx-2 px-2 scrollbar-hide">
-      <table className="w-full min-w-[600px] border-collapse" style={{ background: '#0e1025' }}>
+    <div
+      ref={scrollRef}
+      data-testid="bid-grid-scroll-container"
+      className="-mx-2 overflow-x-auto scrollbar-hide"
+    >
+      <table
+        className={`w-full border-collapse ${isPositionFiltered ? 'min-w-[260px]' : 'min-w-[600px]'}`}
+        style={{ background: '#0e1025' }}
+      >
         {/* Header */}
         <thead>
           <tr style={{ background: '#0a0d1a' }}>
-            <th className="sticky left-0 z-10 px-3 py-2.5 text-left text-[10px] font-['Space_Mono'] uppercase tracking-wider text-[#4a4d77]"
-              style={{ background: '#0a0d1a', minWidth: 52 }}>
+            <th
+              data-testid="bid-grid-week-header"
+              className="sticky left-0 z-30 w-[52px] min-w-[52px] max-w-[52px] border-r border-[#1a1e3a] bg-[#0a0d1a] px-3 py-2.5 text-left text-[10px] font-['Space_Mono'] uppercase tracking-wider text-[#4a4d77]"
+              style={{ left: 0 }}
+            >
               Wk
             </th>
             {displayPositions.map((pos) => (
@@ -80,8 +97,11 @@ export function BidGrid({ bids, weeks, teams, totalBudget, selectedWeek, positio
           {displayWeeks.map((week) => (
             <tr key={week} style={{ borderBottom: '1px solid #1a1e3a' }}>
               {/* Sticky week column */}
-              <td className="sticky left-0 z-10 px-3 py-2 font-['Space_Mono'] text-xs font-bold text-[#6b6e99] align-top"
-                style={{ background: '#0e1025' }}>
+              <td
+                data-testid="bid-grid-week-cell"
+                className="sticky left-0 z-20 w-[52px] min-w-[52px] max-w-[52px] border-r border-[#1a1e3a] bg-[#0e1025] px-3 py-2 font-['Space_Mono'] text-xs font-bold text-[#6b6e99] align-top"
+                style={{ left: 0 }}
+              >
                 {week}
               </td>
 

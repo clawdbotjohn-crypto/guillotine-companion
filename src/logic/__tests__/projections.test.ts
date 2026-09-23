@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { NflState, WeeklyProjectionMap } from '../../api/types';
 import {
   buildWeeklyProjectionContext,
+  buildWeeklyScoredPlayers,
   getProjectionScoring,
   getRestOfSeasonStartWeek,
   getTeamByeWeek,
@@ -14,6 +15,7 @@ const positions: Record<string, string> = {
   available: 'WR',
   rostered: 'WR',
   other: 'WR',
+  kicker: 'K',
 };
 
 function weekly(...entries: [number, WeeklyProjectionMap][]) {
@@ -70,6 +72,18 @@ describe('Sleeper ROS projection aggregation', () => {
     expect(half.has('standardOnly')).toBe(false);
     expect(standard.get('player')?.totalPoints).toBe(21);
     expect(standard.get('standardOnly')?.totalPoints).toBe(14);
+  });
+
+  it('builds lineup points from the selected weekly scoring field for every position', () => {
+    const scored = buildWeeklyScoredPlayers({
+      player: { pts_ppr: 20, pts_half_ppr: 17, pts_std: 14 },
+      kicker: { pts_ppr: 9, pts_half_ppr: 9, pts_std: 9 },
+      standardOnly: { pts_std: 8 },
+    }, 'half-ppr', (playerId) => positions[playerId]);
+
+    expect(scored.get('player')).toEqual({ playerId: 'player', position: 'WR', points: 17 });
+    expect(scored.get('kicker')).toEqual({ playerId: 'kicker', position: 'K', points: 9 });
+    expect(scored.has('standardOnly')).toBe(false);
   });
 
   it('ranks an available player against the complete weekly projection pool', () => {

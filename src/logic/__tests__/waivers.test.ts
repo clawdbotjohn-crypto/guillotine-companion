@@ -11,7 +11,9 @@ import {
   calculateDollarsPerVorp,
   calculatePlayerVorp,
   calculateRemainingFaab,
+  computeAvailablePlayers,
   computeReplacementBaselines,
+  computeRosteredPlayerOwners,
   getReplacementTeamBounds,
   normalizeReplacementTeamTarget,
   predictedBidMultiplier,
@@ -464,6 +466,80 @@ describe('buildWaiverBoard', () => {
     );
 
     expect(rows).toEqual([]);
+  });
+
+  it('keeps ranks, replacement calibration, starter weeks, and values invariant when rostered rows are displayed', () => {
+    const projections = new Map([
+      ['rostered-qb-1', projection('rostered-qb-1', 'QB', 30)],
+      ['available-qb-2', projection('available-qb-2', 'QB', 25)],
+      ['rostered-qb-3', projection('rostered-qb-3', 'QB', 20)],
+      ['available-qb-4', projection('available-qb-4', 'QB', 15)],
+    ]);
+    const availableOnly = buildWaiverBoard(
+      ['available-qb-2', 'available-qb-4'],
+      projections,
+      context,
+      [],
+      (id) => id,
+    );
+    const allPlayers = buildWaiverBoard(
+      [...projections.keys()],
+      projections,
+      context,
+      [],
+      (id) => id,
+      { maxPerPos: Number.POSITIVE_INFINITY },
+    );
+
+    for (const availableRow of availableOnly) {
+      const rowWithRosteredVisible = allPlayers.find((row) => row.playerId === availableRow.playerId);
+      expect(rowWithRosteredVisible).toEqual(availableRow);
+    }
+    expect(allPlayers.map((row) => row.playerId)).toEqual([
+      'rostered-qb-1', 'available-qb-2', 'rostered-qb-3', 'available-qb-4',
+    ]);
+  });
+
+  it('resolves active owner identity while treating eliminated roster players as available', () => {
+    const rosters: Roster[] = [
+      {
+        roster_id: 1,
+        owner_id: 'active-owner',
+        players: ['active-player'],
+        starters: [],
+        settings: { wins: 0, losses: 0, fpts: 0, waiver_budget_used: 0 },
+      },
+      {
+        roster_id: 2,
+        owner_id: 'chopped-owner',
+        players: ['released-player'],
+        starters: [],
+        settings: { wins: 0, losses: 0, fpts: 0, waiver_budget_used: 0 },
+      },
+    ];
+    const elim: EliminationResult = {
+      weeks: [],
+      teams: new Map([
+        [1, { rosterId: 1, userId: 'active-owner', displayName: 'Active', eliminatedWeek: null, isChampion: false, isRunnerUp: false }],
+        [2, { rosterId: 2, userId: 'chopped-owner', displayName: 'Chopped', eliminatedWeek: 1, isChampion: false, isRunnerUp: false }],
+      ]),
+      activeTeamCount: 1,
+      champion: null,
+      runnerUp: null,
+      isComplete: false,
+      currentWeek: 1,
+    };
+    const ownership = computeRosteredPlayerOwners(rosters, [
+      { user_id: 'active-owner', display_name: 'Alpha Manager', avatar: null, username: 'alpha' },
+      { user_id: 'chopped-owner', display_name: 'Chopped Manager', avatar: null, username: 'chopped' },
+    ], elim);
+
+    expect(ownership.get('active-player')).toEqual({ rosterId: 1, ownerName: 'Alpha Manager' });
+    expect(ownership.has('released-player')).toBe(false);
+    expect(computeAvailablePlayers(rosters, new Map([
+      ['active-player', projection('active-player', 'QB', 20)],
+      ['released-player', projection('released-player', 'QB', 15)],
+    ]), elim)).toEqual(['released-player']);
   });
 
   it('preserves raw model values without any budget-floor clamp path', () => {

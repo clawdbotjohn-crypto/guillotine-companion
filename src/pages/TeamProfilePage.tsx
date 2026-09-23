@@ -11,7 +11,7 @@ import {
   useDraftPicks,
   useLeagueHistory,
 } from '../api';
-import { computeEliminations, extractBids } from '../logic';
+import { computeEliminations, computeHistoricalRanks, extractBids } from '../logic';
 import { Card, StatCard, StatusBadge, Skeleton, PositionBadge } from '../components/ui';
 import { SeasonPicker } from '../components/SeasonPicker';
 import { useSwitchSeason } from '../hooks/useSwitchSeason';
@@ -94,19 +94,11 @@ export function TeamProfilePage() {
   }
 
   // Determine status
-  const lastWeek = elimResult.weeks[elimResult.weeks.length - 1];
-  const lastScore = lastWeek?.scores.find((s) => s.rosterId === rosterId);
-
-  let status: 'champion' | 'runner-up' | 'eliminated' | 'safe' | 'at-risk' | 'middle' = 'middle';
+  let status: 'champion' | 'runner-up' | 'eliminated' | 'safe' | 'at-risk' | 'warning' = 'warning';
   if (team.isChampion) status = 'champion';
   else if (team.isRunnerUp) status = 'runner-up';
   else if (team.eliminatedWeek) status = 'eliminated';
-  else if (lastScore) {
-    const rank = lastScore.rank;
-    const total = lastWeek.teamsRemaining;
-    if (rank <= Math.ceil(total / 3)) status = 'safe';
-    else if (rank >= Math.ceil((total * 2) / 3)) status = 'at-risk';
-  }
+  else status = computeHistoricalRanks(elimResult).get(rosterId)?.risk ?? 'warning';
 
   // Week-by-week scores
   const weekScores = elimResult.weeks

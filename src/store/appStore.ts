@@ -17,8 +17,9 @@ interface AppState {
   rosterId: number | null;
   teamName: string | null;
 
-  // Strategy preference
+  // Strategy and UI preferences
   activeStrategy: StrategyKey;
+  showEliminatedTeams: boolean;
 
   // Actions
   setUser: (username: string, userId: string) => void;
@@ -26,6 +27,7 @@ interface AppState {
   switchSeason: (leagueId: string, name: string, season: string) => void;
   setTeam: (rosterId: number, teamName: string) => void;
   setStrategy: (s: AppState['activeStrategy']) => void;
+  setShowEliminatedTeams: (show: boolean) => void;
   reset: () => void;
 }
 
@@ -51,6 +53,7 @@ const initialState = {
   rosterId: null as number | null,
   teamName: null as string | null,
   activeStrategy: 'safe' as const,
+  showEliminatedTeams: false,
 };
 
 export const useAppStore = create<AppState>()(
@@ -76,6 +79,8 @@ export const useAppStore = create<AppState>()(
       setTeam: (rosterId, teamName) => set({ rosterId, teamName }),
 
       setStrategy: (activeStrategy) => set({ activeStrategy }),
+
+      setShowEliminatedTeams: (showEliminatedTeams) => set({ showEliminatedTeams }),
 
       reset: () => set(initialState),
     }),

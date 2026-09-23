@@ -9,10 +9,29 @@ export const RANKING_SOURCES: Array<{
   label: string;
   shortLabel: string;
   metricLabel: string;
+  description: string;
 }> = [
-  { key: 'sleeper', label: 'Sleeper rest-of-season projections', shortLabel: 'Sleeper ROS', metricLabel: 'ROS pts' },
-  { key: 'fantasycalc', label: 'FantasyCalc redraft market values', shortLabel: 'FantasyCalc', metricLabel: 'FC value' },
-  { key: 'fantasypros', label: 'FantasyPros rest-of-season expert consensus rankings', shortLabel: 'FantasyPros ROS ECR', metricLabel: 'ROS ECR' },
+  {
+    key: 'sleeper',
+    label: 'Sleeper',
+    shortLabel: 'Sleeper ROS',
+    metricLabel: 'ROS pts',
+    description: 'Sleeper rest-of-season projected fantasy points',
+  },
+  {
+    key: 'fantasypros',
+    label: 'Fantasy Pros',
+    shortLabel: 'FantasyPros ROS ECR',
+    metricLabel: 'ROS ECR',
+    description: 'FantasyPros rest-of-season expert consensus rankings',
+  },
+  {
+    key: 'fantasycalc',
+    label: 'FantasyCalc',
+    shortLabel: 'FantasyCalc',
+    metricLabel: 'FC value',
+    description: 'FantasyCalc redraft market values',
+  },
 ];
 
 export function getReceptionScoring(league: League): number {

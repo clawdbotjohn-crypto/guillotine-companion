@@ -1,18 +1,30 @@
 // Teams page — rethought per John feedback (2026-09-22).
 // - Rank teams by PROJECTED best-lineup points for the coming week
-// - Show risk (safe / middle / at-risk) from projection
+// - Show risk (safe / warning / at-risk) from projection
 // - Per team: historical points rank + position-group scoring breakdown (FLEX its own category)
 // Toggle between Projected and Historical ordering.
 
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore, usePlayers } from '../store';
-import { useLeague, useLeagueUsers, useRosters, useAllMatchups, useLeagueHistory } from '../api';
+import { getPlayerPosition } from '../store/players';
 import {
+  useLeague,
+  useLeagueUsers,
+  useRosters,
+  useAllMatchups,
+  useLeagueHistory,
+  useNflState,
+  useWeeklyProjections,
+} from '../api';
+import {
+  buildWeeklyScoredPlayers,
   computeEliminations,
-  buildPlayerSeasons,
+  getProjectionScoring,
+  getRestOfSeasonStartWeek,
   projectAllTeams,
   computePositionGroupRanks,
+  computeProjectedLineupGroupRanks,
   computeHistoricalRanks,
   orderTeamProjections,
   type HistoricalRank,
@@ -22,9 +34,11 @@ import {
 import { Card, Skeleton, StatusBadge } from '../components/ui';
 import { SeasonPicker } from '../components/SeasonPicker';
 import { useSwitchSeason } from '../hooks/useSwitchSeason';
-import { ChevronRight, ShieldCheck, ShieldAlert, Shield } from 'lucide-react';
+import { ChevronRight, ShieldCheck, ShieldAlert, Shield, TriangleAlert } from 'lucide-react';
+import { filterTeamsByEliminatedVisibility } from '../logic/teamVisibility';
+import { getTeamPositionGroups, type TeamOrder } from '../logic/teamPositionGroups';
 
-const POS_ORDER = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'K', 'DEF'];
+const POS_ORDER = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'SUPER_FLEX', 'K', 'DEF'];
 
 function rankColor(rank: number, outOf: number): string {
   if (outOf <= 1) return '#a5b4fc';
@@ -35,7 +49,30 @@ function rankColor(rank: number, outOf: number): string {
   return '#f43f5e';
 }
 
-type TeamOrder = 'projected' | 'historical';
+export function EliminatedTeamsVisibilityToggle({
+  eliminatedCount,
+}: {
+  eliminatedCount: number;
+}) {
+  const showEliminatedTeams = useAppStore((state) => state.showEliminatedTeams);
+  const setShowEliminatedTeams = useAppStore((state) => state.setShowEliminatedTeams);
+
+  return (
+    <label
+      className={`mb-3 flex w-fit items-center gap-2 text-[11px] text-[#a5b4fc]
+        ${eliminatedCount === 0 ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+    >
+      <input
+        type="checkbox"
+        checked={showEliminatedTeams}
+        disabled={eliminatedCount === 0}
+        onChange={(event) => setShowEliminatedTeams(event.target.checked)}
+        className="h-4 w-4 rounded border-[#4a4d77] bg-[#0a0d1a] accent-[#6366f1]"
+      />
+      <span>Show eliminated teams ({eliminatedCount})</span>
+    </label>
+  );
+}
 
 export function TeamStandingDetails({
   team,
@@ -47,8 +84,11 @@ export function TeamStandingDetails({
   orderBy: TeamOrder;
 }) {
   if (team.eliminated) return <StatusBadge status="eliminated" />;
+  if (orderBy === 'projected' && team.projPoints == null) {
+    return <span className="text-[10px] text-[#6b6e99]">Sleeper projection unavailable</span>;
+  }
 
-  const status = orderBy === 'projected' ? team.risk : historical?.risk ?? 'middle';
+  const status = orderBy === 'projected' ? team.risk : historical?.risk ?? 'warning';
   const rank = orderBy === 'projected' ? team.projRank : historical?.rank;
   const outOf = orderBy === 'projected' ? team.projOutOf : historical?.outOf;
   const points = orderBy === 'projected' ? team.projPoints : historical?.totalPoints;
@@ -72,13 +112,29 @@ export function TeamStandingDetails({
 
 export function TeamsPage() {
   const navigate = useNavigate();
-  const { leagueId, leagueName, leagueSeason, rootLeagueId, rosterId: myRosterId } = useAppStore();
+  const {
+    leagueId,
+    leagueName,
+    leagueSeason,
+    rootLeagueId,
+    rosterId: myRosterId,
+    showEliminatedTeams,
+  } = useAppStore();
   const { data: league } = useLeague(leagueId);
   const { data: users } = useLeagueUsers(leagueId);
   const { data: rosters } = useRosters(leagueId);
   const { isLoading: playersLoading } = usePlayers();
   const { data: matchups, isLoading: matchupsLoading } = useAllMatchups(leagueId, 18);
   const { data: leagueHistory, isLoading: historyLoading } = useLeagueHistory(rootLeagueId);
+  const nflStateQuery = useNflState();
+  const projectionWeek = league && nflStateQuery.data && league.season === nflStateQuery.data.season
+    ? getRestOfSeasonStartWeek(nflStateQuery.data)
+    : null;
+  const weeklyProjectionQuery = useWeeklyProjections(
+    league?.season ?? null,
+    projectionWeek,
+    projectionWeek != null,
+  );
   const handleSwitchSeason = useSwitchSeason();
 
   const [orderBy, setOrderBy] = useState<TeamOrder>('projected');
@@ -93,17 +149,28 @@ export function TeamsPage() {
   const model = useMemo(() => {
     if (!matchups || !rosters || !users) return null;
     const elim = computeEliminations(matchups, rosters, users);
-    const playerSeasons = buildPlayerSeasons(matchups);
-    const projections = projectAllTeams(rosters, playerSeasons, league, elim);
+    const weeklyScoredPlayers = weeklyProjectionQuery.data
+      ? buildWeeklyScoredPlayers(
+          weeklyProjectionQuery.data,
+          getProjectionScoring(league?.scoring_settings?.rec),
+          getPlayerPosition,
+        )
+      : null;
+    const projections = projectAllTeams(rosters, weeklyScoredPlayers, league, elim);
     const activeRosterIds = new Set(
       [...elim.teams.values()]
         .filter((team) => team.eliminatedWeek == null)
         .map((team) => team.rosterId),
     );
-    const posRanks = computePositionGroupRanks(matchups, league, activeRosterIds);
+    const historicalPosRanks = computePositionGroupRanks(matchups, league, activeRosterIds);
+    const projectedPosRanks = computeProjectedLineupGroupRanks(
+      projections,
+      weeklyScoredPlayers,
+      league,
+    );
     const histRanks = computeHistoricalRanks(elim);
-    return { elim, projections, posRanks, histRanks };
-  }, [matchups, rosters, users, league]);
+    return { elim, projections, historicalPosRanks, projectedPosRanks, histRanks };
+  }, [matchups, rosters, users, league, weeklyProjectionQuery.data]);
 
   if (!leagueId) {
     return (
@@ -123,10 +190,12 @@ export function TeamsPage() {
     );
   }
 
-  const { elim, projections, posRanks, histRanks } = model;
+  const { elim, projections, historicalPosRanks, projectedPosRanks, histRanks } = model;
   const hasScores = elim.weeks.length > 0;
 
   const rows = orderTeamProjections(projections, histRanks, orderBy);
+  const eliminatedCount = projections.filter((team) => team.eliminated).length;
+  const visibleRows = filterTeamsByEliminatedVisibility(rows, showEliminatedTeams);
 
   return (
     <div className="px-6 py-6 pb-24 max-w-lg mx-auto">
@@ -144,9 +213,11 @@ export function TeamsPage() {
         isLoading={historyLoading}
       />
 
+      <EliminatedTeamsVisibilityToggle eliminatedCount={eliminatedCount} />
+
       {/* Order toggle */}
       {hasScores && (
-        <div className="flex gap-1 bg-[#0a0d1a] rounded-lg p-1 mb-4 w-fit">
+        <div className="flex gap-1 bg-[#0a0d1a] rounded-lg p-1 mb-2 w-fit">
           {(['projected', 'historical'] as const).map((o) => (
             <button
               key={o}
@@ -163,6 +234,16 @@ export function TeamsPage() {
         </div>
       )}
 
+      {hasScores && orderBy === 'projected' && (
+        <p className="text-[10px] text-[#4a4d77] mb-4">
+          {weeklyProjectionQuery.isLoading || nflStateQuery.isLoading
+            ? 'Loading Sleeper weekly projections…'
+            : projectionWeek != null && projections.some((team) => team.projPoints != null)
+              ? `NFL Week ${projectionWeek} · Sleeper weekly projections`
+              : 'Sleeper weekly projections unavailable for this scoring week.'}
+        </p>
+      )}
+
       {!hasScores && (
         <p className="text-[#6b6e99] text-sm mb-4">
           Projections appear once the season has weekly scores. Showing roster list.
@@ -170,13 +251,18 @@ export function TeamsPage() {
       )}
 
       <div className="space-y-2">
-        {rows.map((t) => {
+        {visibleRows.map((t) => {
           const hist = histRanks.get(t.rosterId);
-          const groups = (posRanks.get(t.rosterId) ?? [])
+          const groups = getTeamPositionGroups(
+            t.rosterId,
+            orderBy,
+            projectedPosRanks.byRosterId,
+            historicalPosRanks,
+          )
             .filter((g) => g.outOf > 0)
             .sort((a, b) => POS_ORDER.indexOf(a.position) - POS_ORDER.indexOf(b.position));
           const isMine = t.rosterId === myRosterId;
-          const modeRisk = orderBy === 'projected' ? t.risk : hist?.risk ?? 'middle';
+          const modeRisk = orderBy === 'projected' ? t.risk : hist?.risk ?? 'warning';
           const isOpen = expanded === t.rosterId;
 
           return (
@@ -202,7 +288,13 @@ export function TeamsPage() {
               {/* Position-group breakdown */}
               {isOpen && (
                 <div className="mt-3 pt-3 border-t border-[#1a1e3a]">
-                  <PositionGroupBreakdown groups={groups} eliminated={t.eliminated} />
+                  <PositionGroupBreakdown
+                    groups={groups}
+                    eliminated={t.eliminated}
+                    unavailableMessage={orderBy === 'projected'
+                      ? 'Projected lineup-group rankings unavailable.'
+                      : 'No starter scoring data yet.'}
+                  />
                   <button
                     onClick={() => navigate(`/teams/${t.rosterId}`)}
                     className="mt-3 text-[11px] text-[#6366f1] underline underline-offset-4 hover:text-[#8b5cf6]"
@@ -222,9 +314,11 @@ export function TeamsPage() {
 export function PositionGroupBreakdown({
   groups,
   eliminated,
+  unavailableMessage = 'No starter scoring data yet.',
 }: {
   groups: PosGroupRank[];
   eliminated: boolean;
+  unavailableMessage?: string;
 }) {
   if (eliminated) {
     return (
@@ -234,7 +328,7 @@ export function PositionGroupBreakdown({
     );
   }
   if (groups.length === 0) {
-    return <p className="text-[10px] text-[#4a4d77]">No starter scoring data yet.</p>;
+    return <p className="text-[10px] text-[#4a4d77]">{unavailableMessage}</p>;
   }
   return (
     <div className="grid grid-cols-4 gap-2">
@@ -245,11 +339,11 @@ export function PositionGroupBreakdown({
   );
 }
 
-function RiskIcon({ risk }: { risk: 'safe' | 'middle' | 'at-risk' | 'eliminated' }) {
+function RiskIcon({ risk }: { risk: 'safe' | 'warning' | 'at-risk' | 'eliminated' }) {
   if (risk === 'safe') return <ShieldCheck size={18} className="text-[#10b981] shrink-0" />;
   if (risk === 'at-risk') return <ShieldAlert size={18} className="text-[#f43f5e] shrink-0" />;
-  if (risk === 'eliminated') return <Shield size={18} className="text-[#4a4d77] shrink-0" />;
-  return <Shield size={18} className="text-[#a5b4fc] shrink-0" />;
+  if (risk === 'warning') return <TriangleAlert size={18} className="text-[#f59e0b] shrink-0" />;
+  return <Shield size={18} className="text-[#4a4d77] shrink-0" />;
 }
 
 function PosCell({ g }: { g: PosGroupRank }) {

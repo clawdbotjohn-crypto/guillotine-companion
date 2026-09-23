@@ -1,365 +1,154 @@
-# Final Verification — Active-Only Current Team Rankings (2026-09-22)
+# Guillotine Companion — PR #8 Final Review Handoff
 
-- **Status / scope:** Independently verified complete on `feat/waiver-ranking-sources` for existing PR #7. Implementation commit `36ccdb2`; prior handoff commit `2c6c9be`. No blocker.
-- **Local verification:** focused **3 files / 8 tests passed**; full **11 files / 59 tests passed**; lint **0 warnings / 0 errors**; production build passed with **2,467 modules transformed**; `git diff --check` passed. The working tree was clean before this documentation update.
-- **CI / preview:** GitHub CI `build` and Azure SWA `Build and Deploy` both reported **SUCCESS** for head `2c6c9be`. The fresh preview at <https://nice-moss-07ec56310-7.centralus.7.azurestaticapps.net> was browser-tested with `Houston0ilers` in `SeaMex Guillotine 2026` (32 original teams, 28 active).
-- **Browser evidence:** Hub Current Rank showed **`21/28`** with **“projected best lineup”**, matching Houston0ilers' Teams Projected rank and **SAFE** status. Teams showed **`28 active · 32 total`**. Projected survivors ranked `#1/28` through `#28/28`; `#25–#26` were MIDDLE and `#27–#28` AT RISK, with Houston0ilers `#21/28` SAFE. Historical survivors independently reordered and ranked `#1/28` through `#28/28`; Houston0ilers became `#25/28` MIDDLE, while chiefsyear became `#28/28` AT RISK despite being projected `#23/28` SAFE, proving the Historical tab does not retain Projected status. All four eliminated teams appeared below survivors as ELIMINATED with no stale rank.
-- **Regression evidence:** The realistic fixture additionally proves the formerly `#29/32 SAFE` survivor is capped at `#28/28`, each tab uses its own order/status, and Hub uses projected rank.
-- **PR / safety:** PR #7 remains **OPEN** and **CLEAN/MERGEABLE** and must remain unmerged. No production deployment or manual workflow was performed.
-- **Supersession note:** This final verification supersedes the earlier implementation-handoff statement below that browser QA had not been performed and checks were pending. Those statements accurately described only the earlier handoff state, before independent CI and preview verification completed.
+## State
 
----
+- PR: https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/8
+- Branch: `feat/hub-roster-visibility`
+- Status: **OPEN / UNMERGED**
+- Start HEAD verified before edits: `ed86f385cbdec31a451662f9b0ee20d427d16836` locally and on origin, clean tree.
+- Commits:
+  - `b5f03b8` — `refine projection ranks and waiver hierarchy`
+  - `80bc04f` — `document PR 8 final review verification`
+  - `bff6e11` — `make shared disclosures hover-state reliable`
 
-# Follow-up — Active-Only Current Team Rankings (2026-09-22)
+## Projection investigation (real endpoint evidence)
 
-- **Timestamp / status:** 2026-09-22 17:01 PDT — COMPLETE on `feat/waiver-ranking-sources` for existing open PR #7.
-- **Exact semantics:** Hub **Current Rank** now comes from the same projected best-lineup model as Teams Projected and renders projected survivor rank / active count. Teams Projected ranks survivors only and derives SAFE/MIDDLE/AT RISK from that projected order. Teams Historical recomputes cumulative points among survivors only and derives the badge/icon from historical order (bottom `elimsPerWeek` AT RISK, next `elimsPerWeek` MIDDLE, rest SAFE). Eliminated teams stay below survivors, render ELIMINATED, receive no projected/historical current standing, and cannot affect either risk pool. Equal metrics use ascending roster ID.
-- **Regression:** realistic 32-original / 28-active fixture recreates a survivor formerly shown `#29/32`; proves projected/historical maximum `#28/28`, mode-specific ordering and status (`SAFE` projected vs `AT RISK` historical), Hub projected rank `1/28`, exact bottom-two/next-two bands, and no eliminated current ranks.
-- **Files changed:** `src/logic/analytics.ts`, `src/logic/index.ts`, `src/logic/__tests__/analytics.test.ts`, `src/pages/HubPage.tsx`, `src/pages/HubPage.test.ts`, `src/pages/TeamsPage.tsx`, `src/pages/TeamsPage.test.tsx`. No Waivers/VoRP files changed; commit `74d2387` behavior and VoRP-only controls are preserved.
-- **Commit / push:** `36ccdb2` (`Fix active-only projected team standings`) pushed only to `origin/feat/waiver-ranking-sources`; local and remote heads match. PR #7 remains OPEN and MERGEABLE against `main`; it was not merged.
-- **Verification:** focused **3 files / 8 tests passed**; full **11 files / 59 tests passed**; lint **0 warnings / 0 errors**; TypeScript + Vite production build passed (2,467 modules); `git diff --check` passed; scope review found only the seven files above.
-- **Preview / checks:** no browser preview was independently exercised in this implementation session. Fresh PR `build` and Azure `Build and Deploy` checks were pending at handoff; no deploy/workflow was manually triggered.
-- **Safety:** no main/master push, merge, force-push, production deploy, `gh workflow run`, `workflow_dispatch`, Discord post, or global `PROGRESS.md` update.
+Investigated before changing completeness behavior on 2026-09-22 PDT:
 
----
+- `GET https://api.sleeper.app/v1/projections/nfl/regular/2026/3` returned an object with **9,421 player-ID keys**, so the weekly endpoint itself was available.
+- Only **859 rows** had numeric `pts_half_ppr`; many endpoint rows contain ADP/rank metadata but no weekly fantasy-points field.
+- Numeric weekly field counts were identical for `pts_ppr`, `pts_half_ppr`, and `pts_std` (859 each); 40 explicit zero values existed for each.
+- IDs are mixed by design: normal players use Sleeper IDs (examples from the response/player directory included kicker IDs such as `11538`, `12620`, `10244`), while defenses use team abbreviation IDs. Verified numeric DEF values for `ARI`, `ATL`, `BAL`, `BUF`, `SEA`, and `WAS`.
+- Cross-checking `/v1/players/nfl` showed legitimate omissions/no numeric weekly row across positions, including bye/inactive/stale-directory cases. This confirms that player-row completeness is not a valid league-wide availability test.
+- The initially guessed old league ID `1237312439318478848` returned 404 and was not used as real-league proof. No claim is made that a specific private roster payload was verified.
 
-# Follow-up — Post-Elimination Active-Team Count (2026-09-22)
+Conclusion implemented: an empty weekly map remains the honest endpoint-unavailable state. Once a usable weekly map exists, missing player rows/unfilled assignments contribute zero; they no longer suppress that configured group for every active roster.
 
-- **Status:** COMPLETE on PR #7 branch.
-- Root cause: `WeekResult.teamsRemaining` intentionally records how many teams entered/scored in that historical week before its cuts. Current Waiver and Hub UI incorrectly reused that pre-cut value, so a 30-team week with two eliminations displayed 30 instead of the 28 survivors.
-- `EliminationResult.activeTeamCount` now records the post-elimination active set. Waivers uses it for `teams left`, VoRP replacement-depth default/max, and weeks-to-final calculations. Hub uses it for the current-rank denominator and current safe/at-risk tiers. Historical weekly results retain the pre-elimination denominator.
-- Added exact 30→28 elimination coverage, league-context coverage, and Hub rank-label coverage (`12/28`).
-- Verification: focused 34/34 passed; full suite 11 files / 56 tests passed; lint 0 warnings/errors; production build and `git diff --check` passed.
-- No merge, main push, force-push, production deploy, or workflow dispatch was performed.
+## Completed scope
 
----
+- Projected lineup coverage:
+  - Removed the all-or-nothing per-player completeness gate.
+  - Every configured supported group is ranked for every active roster.
+  - Missing/bye/unfilled assignment points are honest zero.
+  - Historical mode remains based on historical starters and actual matchup points.
+  - Fixtures cover all groups, duplicate WR slots, FLEX, SUPER_FLEX, K, DEF, omitted projection=0, all active teams, and excluded eliminated teams.
+- Lineup-strength cards:
+  - Aggregate labels are plain (`WR`, never visible `WR ×2`).
+  - Compact rank is `4/28` style.
+  - Points/slot/week/rank detail moved to shared accessible hover/focus/tap disclosure.
+  - Duplicate active-team/week/source chrome removed.
+- Hub summary:
+  - One `Week N projected points` heading with prominent total.
+  - Added ordinal rank among every original roster, including eliminated teams, distinct from active-only current/risk rank.
+  - Last Week Score now displays ordinal rank using that historical week's entrant count (pre-elimination denominator).
+- Shared bye proximity:
+  - `ByeWeekText` + `getByeProximity` reused by Hub roster and Waivers.
+  - passed=green; current/+1=red; +2/+3=orange; +4/future/unknown=neutral; color-independent labels retained.
+- Waiver hierarchy:
+  - Bright left position marker; status beside player name.
+  - One compact `WR #4 • NYG • Bye Wk 6` metadata line; only bye fragment gets proximity color.
+  - Source/ROS details moved behind the rank's accessible disclosure.
+  - Strategy words removed from the selected-value display; warnings retained.
+  - Starter weeks display only for Weeks-as-Starter.
+  - Predicted bid moved directly under suggested value and remains hidden for Aggressive.
+  - Deleted hardcoded `predictedConfidence` model/UI and updated regressions.
+- Copy/control refinements:
+  - Visible `ROS sources: …` sentence removed; compact source help is disclosed accessibly.
+  - Requested Weeks-as-Starter/Safe/Aggressive/VoRP copy implemented and tested.
+  - Renamed to `VoRP team count`; old visible definition removed and replaced by accessible hover/focus/tap help with the 1-QB/16th-best-QB example.
+  - VoRP-only control behavior and honest Sleeper ROS unavailable text preserved.
 
-# Follow-up — VoRP-Only Controls (2026-09-22)
+## Files
 
-- **Status:** COMPLETE on PR #7 branch; implementation commit `5cd0778`.
-- The `Replacement/startable depth teams` selector and independent Sleeper ROS notice now render only when the **VoRP** strategy is selected. Weeks-as-Starter, Safe, and Aggressive no longer show irrelevant VoRP configuration.
-- The selected replacement depth remains in page state when switching strategies, so returning to VoRP preserves the user's choice.
-- Added a DOM regression that renders a non-VoRP strategy, proves both controls absent, switches to VoRP, and proves the selector and source notice appear.
-- Verification: focused 7/7 tests, full 10 files / 52 tests, lint 0 warnings/errors, production build, and `git diff --check` passed.
-- No merge, main push, force-push, production deploy, or workflow dispatch was performed.
-
----
-
-# Final Orchestrator Handoff — Required P0 Set (2026-09-22)
-
-- **Verified session time:** 45 min of 60 target; exited early because all required P0 work was complete rather than inventing unrelated work.
-- **Branch / PR:** `feat/waiver-ranking-sources`, existing PR #7 only. No merge, main/master push, force-push, production deployment, or workflow dispatch.
-- **Required work completed:** Aggressive now equals the established player-sensitive Predicted Winning Bid; dynamic Sleeper ROS championship-calibrated VoRP is implemented; current Teams positional standings exclude eliminated rosters.
-- **Independent preview QA:**
-  - **Aggressive:** On the deployed preview with real 2025 FantasyPros ROS data, the explanation states maximum-bid/spending-ceiling, non-intrinsic-value, and intentional overpay semantics. Cards sorted by the same values previously shown as Predicted Winning Bid (`$19, $19, $15, $15…`), and the redundant Predicted Winning Bid footer was absent only on Aggressive.
-  - **VoRP:** With the historical two-team league, replacement/startable depth correctly used the four-team floor; the external-source message stated independent Sleeper ROS usage; VoRP copy named the optimized four-team pool; unavailable rows rendered `Unavailable / Sleeper ROS required`, never fabricated `$0`.
-  - **Active positional standings:** The preview identified exactly two surviving teams. Expanding active `jma1271` showed all QB/RB/WR/TE/FLEX/K/DEF ranks within `#1–#2`; expanding eliminated `4thandLange` showed `Eliminated — no current positional standing.`
-- **Final full verification at head `c6c957e`:** 10 test files / **51 tests passed**; lint **0 warnings/errors**; production build passed; `git diff --check` passed; working tree clean and tracking only `origin/feat/waiver-ranking-sources`.
-- **Blockers:** None.
-
----
-
-# Handoff — Active-Team Positional Standings (2026-09-22)
-
-- **Timestamp:** 2026-09-22 16:10:51 PDT
-- **Task:** Fix the final documented P0 so current QB/RB/WR/TE/FLEX/K/DEF standings exclude eliminated teams.
-- **Status:** COMPLETE on `feat/waiver-ranking-sources` for existing open PR #7. No merge, production deploy, workflow dispatch, force push, main-branch push, or Discord post was performed.
-- **Implementation commit:** `a8da8a2` — `Exclude eliminated teams from positional ranks`
-
-## Exact behavior
-
-- `TeamsPage` derives `activeRosterIds` directly from the existing `computeEliminations(...)` result by selecting only `TeamInfo` entries where `eliminatedWeek == null`, then passes that required set into `computePositionGroupRanks`.
-- `computePositionGroupRanks` still accumulates each team's actual historical `starters_points` and preserves fixed-slot/FLEX allocation, but constructs every current positional comparator from active roster IDs only. `outOf` is therefore exactly the active-team count, eliminated totals cannot shift an active rank, and no active rank can exceed that count.
-- Equal position totals now explicitly sort by numeric roster ID ascending after points descending, so ties do not depend on Map/Set insertion order.
-- Eliminated rosters are omitted from the rank result. Their expanded Teams card now says **“Eliminated — no current positional standing.”** and cannot display stale/misleading current rank cells. Active cards retain the existing rank colors and points UI.
-- Production call-site search found exactly one current positional-standings caller (`src/pages/TeamsPage.tsx`), and it passes `activeRosterIds`. The helper's required third argument also prevents an unfiltered production call from compiling. Historical weekly total ranks were not changed.
-
-## Regression coverage
-
-- Added a realistic four-roster guillotine fixture where roster 4 is eliminated despite extreme 100-point historical totals in every position. Tests prove only rosters 1–3 are returned, all `outOf` values equal 3, every rank is at most 3, and the eliminated totals do not push active teams to rank 4.
-- The same regression covers QB/RB/WR/TE/FLEX/K/DEF, historical point totals, distinct FLEX allocation from an extra RB starter, and equal QB totals with active IDs deliberately supplied in reverse order to prove numeric-roster-ID tie-breaking.
-- Added Teams-card UI coverage proving eliminated cards suppress rank cells even if rank data is supplied, while active cards continue rendering position, rank, and points.
+- Shared UI/helpers: `src/components/ContextDisclosure.tsx`, `src/components/ByeWeekText.tsx`, `src/logic/byeProximity.ts`, `src/logic/rankFormat.ts`
+- Projection semantics/UI: `src/logic/analytics.ts`, `src/components/HubPositionRankings.tsx`, `src/pages/HubPage.tsx`
+- Waiver semantics/UI: `src/logic/waivers.ts`, `src/logic/waiverDisplay.ts`, `src/pages/WaiversPage.tsx`
+- Focused regressions in corresponding `*.test.ts(x)` plus `src/logic/__tests__/byeProximity.test.ts`.
 
 ## Verification
 
-- `npm test -- --run`: **PASS** — 10 test files, 51 tests.
-- `npm run lint`: **PASS** — 0 warnings, 0 errors across 49 files.
-- `npm run build`: **PASS** — TypeScript and Vite production build completed; 2,467 modules transformed.
-- `git diff --check`: **PASS**.
-- `grep -RIn "computePositionGroupRanks" src`: **PASS** — the production call in `TeamsPage.tsx` and focused analytics test both pass active roster IDs; no other caller exists.
+Passed at implementation commit:
 
-## Preview / checks state
+- `npm test -- --run` — **16 files, 104 tests passed**
+- `npm run lint` — **0 warnings, 0 errors**
+- `npm run build` — production TypeScript/Vite build passed
+- `git diff --check origin/main...HEAD` — passed
+- `git diff --check` — passed
 
-- Implementation commit pushed only to `origin/feat/waiver-ranking-sources`; PR #7 remained **OPEN**, unmerged, with head advanced from `1706c0a` to `a8da8a2`.
-- Immediately after that push, GitHub `build` and Azure SWA `Build and Deploy` were **QUEUED**. The existing PR #7 preview environment remained **Ready** at <https://nice-moss-07ec56310-7.centralus.7.azurestaticapps.net>; the fresh deployment had not completed at handoff time.
+## Browser / preview
 
----
+Fresh normal Azure PR preview for code head `bff6e1134f83bfced796fb96fd42ffa795bccf25` deployed successfully:
 
-# Handoff — Aggressive Equals Predicted Winning Bid (2026-09-22)
+- Exact URL: https://nice-moss-07ec56310-8.centralus.7.azurestaticapps.net
+- Azure `Build and Deploy` run: https://github.com/clawdbotjohn-crypto/guillotine-companion/actions/runs/35817328660 (success; `headSha` verified as `bff6e1134f83bfced796fb96fd42ffa795bccf25`).
+- 375×812 mobile verified:
+  - Hub renders `Week 3 projected points`, `13th/32 among original rosters`, compact projected ranks, every configured group for this league (QB/RB/WR/TE/FLEX/K/DEF), and no horizontal overflow.
+  - Tapping the WR rank changed `aria-expanded` to true and exposed the projected-points/slot/rank detail.
+  - Waiver first card rendered compact metadata and right column (`WR #4 • BAL • Bye Wk 13`, `$105`, `21%`, predicted bid below); disclosure tap opened; Aggressive removed predicted bid and starter weeks; VoRP rendered only its team-count control and tappable exact help.
+  - Teams Projected first expanded row showed every configured group above; Historical switched to actual historical position totals/ranks; no horizontal overflow.
+- 1280×900 desktop verified:
+  - Hub heading/grid, configured groups, original-roster rank, and bye classes rendered without horizontal overflow.
+  - Waiver compact hierarchy/source help rendered without overflow.
+  - Keyboard focus displayed the rank tooltip; a real browser hover initially revealed a CSS-only variant ordering issue, fixed in `bff6e11`; the fresh-head preview was reloaded and hover was re-tested successfully (`display: flex`, `aria-expanded: false`).
+  - Tap/open behavior had already been verified and focused regression now explicitly covers hover, focus, and tap.
+- Browser tab closed after verification.
 
-- **Timestamp:** 2026-09-22 16:02 PDT
-- **Task:** Correct the P0 Aggressive formula to use the established player-sensitive Predicted Winning Bid logic and remove the obsolete step caps.
-- **Status:** COMPLETE on `feat/waiver-ranking-sources` for existing open PR #7. No merge, production deploy, workflow dispatch, force push, or main-branch push was performed.
-- **Implementation commit:** `88c8cac` — `Fix Aggressive waiver bids to match predicted values`
+## Remaining / constraints
 
-## Exact formula and behavior
+- Do not merge, deploy production, force-push, run `workflow_dispatch`, or run `gh workflow run`.
+- `PROGRESS.md` PR #8 review items were checked with concise evidence after all implementation/tests passed.
 
-- Each row computes Weeks-as-Starter once, passes that exact value through the existing `predictWinningBid` helper, and uses the returned value for both `row.predictedWinningBid` and the **Aggressive** suggestion. Therefore `Aggressive === row.predictedWinningBid` exactly for every player.
-- The established continuous Weeks 1–17 season multiplier remains `2 × (17 - currentWeek) / 16`; no duplicate formula was added to production code.
-- Removed `aggressiveStrategy` and all of its 50% / 25% / 12.5% step-cap and rank-factor behavior. Deep players with zero Weeks-as-Starter now correctly have both Aggressive and Predicted Winning Bid equal to `$0`.
-- Preserved the Aggressive name/tab, persisted legacy-key migration, selected-strategy sorting, player-sensitive Weeks-as-Starter basis, and honest maximum-bid/spending-ceiling, non-intrinsic-value, overpay-risk semantics.
+## Sep 22 21:49 final follow-up — investigation before patching
 
-## UX change
+- **Hub rank contexts:** `HubPage` built a second projection order from every roster and rendered it with `ordinal()` plus “among original rosters,” even though `projectAllTeams` had already computed the required active-only rank/risk together. The historical Total Points card independently summed only the selected roster and had no all-original-roster ranking helper. `formatHistoricalWeekRank` itself injected ordinal suffixes. The header also rendered the same projected status later represented by the summary.
+- **Waiver ownership/help/copy:** ownership was passed only as a truthy rostered marker, so `WaiverPlayerCard` could not compare the owner roster ID with the selected roster. The source disclosure was a sibling of the entire label/select block, visually placing it away from the heading; its content repeated source details. The first rendered strategy occurrence was the abbreviated `VoRP` toggle label.
+- **Bid grid mobile behavior:** the horizontal scroller had no ref/effect tied to week/position filtering, preserving stale `scrollLeft` after the columns changed. The sticky header/body cells specified only `minWidth` (body did not even specify that), reused `z-10`, and had no fixed/max width or separating border, permitting the sticky layer and underlying content to overlap at mobile scroll offsets.
+- **FAAB consistency/summary:** `FaabTracker` owned a local `getTeamStatus` that returned `safe` for every active team and never received shared weekly projections. Its summary was computed over all rosters before the visibility filter and mixed league total/average/median, so the figures did not describe the displayed pool.
 
-- When **Aggressive** is selected, cards no longer render a second redundant **Predicted winning bid** footer because the two values are identical. The footer remains visible, including confidence, for every other strategy.
-- Updated the strategy explanation to say explicitly that Aggressive equals Predicted Winning Bid and declines continuously as the season advances.
+## Sep 22 final follow-up — implementation and validation
 
-## Files changed
+### Delivered
 
-- `src/logic/waivers.ts`
-- `src/logic/waiverDisplay.ts`
-- `src/logic/__tests__/waivers.test.ts`
-- `src/pages/WaiversPage.tsx`
-- `src/pages/WaiversPage.test.tsx`
+- **Hub rank contexts:** `formatHistoricalWeekRank` now emits compact `rank/entrants`; `computeAllRosterHistoricalRanks` provides season-to-date rank across all original rosters (including eliminated); the projected card consumes `projectAllTeams`' active-only `projRank/projOutOf/risk` and the shared `StatusBadge`. Removed the duplicate header badge and all “among original rosters” projection copy.
+- **Waivers:** cards compare ownership against the selected roster and only selected-team-owned rows receive the green 4px border plus explicit screen-reader copy. Every rostered article remains `aria-disabled`. Player Values uses compact `Sleeper` / `Fantasy Pros` / `FantasyCalc` options, an adjacent disclosure with exact copy `Choose your player rankings source.`, and the first visible VoRP term is `Value over Replacement Player (VoRP)`.
+- **League Bids:** `BidGrid` resets its own scroller in a layout effect whenever week/position columns change. A one-position grid uses a compact 260px minimum, keeping player and bid amount in the viewport. WK cells use opaque backgrounds, inline/class `left: 0`, fixed/min/max 52px width, distinct z-indexes, and a right border.
+- **League FAAB:** `LeaguePage` feeds the same `projectAllTeams` result used by Hub/Teams into `FaabTracker`. Active rows render that projection's shared risk and active-only projected rank; eliminated rows remain eliminated with no active rank. Summary is displayed-pool Remaining FAAB Min / Avg / Max via `logic/faabDisplay.ts`, with one currency formatter.
 
-## Verification
+### Files
 
-- `npm test -- --run`: **PASS** — 8 test files, 48 tests passed. Coverage proves exact Aggressive/predicted equality across representative players and Weeks 1, 6, 14, and 17; Week 6 continuous interpolation; player-sensitive Aggressive sorting; removal of old thresholds; explanation semantics; and strategy-specific footer visibility.
-- `npm run lint`: **PASS** — 0 warnings, 0 errors across 47 files.
-- `npm run build`: **PASS** — TypeScript and Vite production build completed; 2,467 modules transformed.
-- `git diff --check`: **PASS**.
-- Scoped grep over the five relevant source/test files found no old `1/2 budget`, `1/4`, `1/8`, `50%`, `25%`, `12.5%`, or `aggressiveStrategy` implementation/copy.
+- Runtime: `src/pages/HubPage.tsx`, `src/pages/WaiversPage.tsx`, `src/pages/LeaguePage.tsx`, `src/components/BidGrid.tsx`, `src/components/FaabTracker.tsx`, `src/logic/analytics.ts`, `src/logic/faabDisplay.ts`, `src/logic/rankFormat.ts`, `src/logic/waiverDisplay.ts`, `src/logic/index.ts`.
+- Focused regressions: `src/pages/HubPage.test.tsx`, `src/pages/WaiversPage.test.tsx`, `src/components/BidGrid.test.tsx`, `src/components/FaabTracker.test.tsx`, `src/logic/__tests__/analytics.test.ts`.
+- Implementation commit: `12433cccbec28d89c4b4ed9ca89007a41335c8f7` (`fix final hub waiver bids and FAAB review`).
 
-## Preview / checks state
+### Exact automated validation
 
-- Implementation commit pushed only to `origin/feat/waiver-ranking-sources`. PR #7 is **OPEN**, unmerged, and its head advanced from `e2ff7d7` to `88c8cac`.
-- GitHub `build` and Azure SWA `Build and Deploy` checks were **QUEUED** immediately after the feature-branch push. Existing PR preview environment: <https://nice-moss-07ec56310-7.centralus.7.azurestaticapps.net>.
+- Focused: `npm test -- --run src/pages/WaiversPage.test.tsx src/components/FaabTracker.test.tsx src/components/BidGrid.test.tsx src/pages/HubPage.test.tsx src/logic/__tests__/analytics.test.ts` → **5 files, 30 tests passed**.
+- Full: `npm test -- --run` → **19 files, 111 tests passed**.
+- `npm run lint` → **0 warnings, 0 errors**.
+- `npm run build` → production TypeScript/Vite build passed (existing Vite >500 kB advisory only; not a lint warning/error).
+- `git diff --check` → passed.
+- `git diff --check origin/main...HEAD` → passed.
 
----
+### Fresh real-preview browser evidence
 
-# Handoff — Dynamic Championship-Calibrated VoRP (2026-09-22)
+Implementation-head Azure run `35821608642` succeeded with `headSha=12433cccbec28d89c4b4ed9ca89007a41335c8f7`; preview: <https://nice-moss-07ec56310-8.centralus.7.azurestaticapps.net>.
 
-- **Timestamp:** 2026-09-22 15:49 PDT
-- **Task:** Replace the arbitrary `$30 per weekly point` VoRP model with independent Sleeper ROS point projections calibrated to championship roster value.
-- **Status:** COMPLETE on `feat/waiver-ranking-sources` for existing open PR #7. No merge, production deploy, workflow dispatch, force push, or main-branch push was performed.
-- **Implementation commit:** `fb2f571` — `Implement championship-calibrated Sleeper VoRP`
+Real league `SeaMex Guillotine 🪓` / selected `Houston0ilers`:
 
-## Exact algorithm
+- **375px Hub:** projected `91.3`, active `13/28`, `Safe`; Total Points `136.5`, all-original `25/32`; Last Week `68.4`, historical-week `26/30`; no “among original rosters.”
+- **375px Waivers:** compact options and expanded first VoRP term rendered; disclosure was 4px beside heading on the same row and showed exact copy. With rostered enabled: 10 selected-team rows had 4px green `rgb(16,185,129)` border and screen-reader ownership text, 260 other rostered rows were neutral, and all 270 were `aria-disabled=true`.
+- **375px Bids:** All/Grid verified at `scrollLeft=0`, `200`, and max `457`; WK header/body remained at x=16 (the scroller's exact left), 52px wide, opaque, bordered, and above underlying cells with no screenshot bleed/seam. From max scroll, selecting WR immediately reset to `scrollLeft=0`; `Jordan Addison` and `$50` were both fully in bounds, and filtered table had no horizontal overflow. List retained WR filtering and real bid rows.
+- **375px FAAB:** active pool explicitly said `28 displayed`, Min `$215`, Avg `$468`, Max `$500`; `Houston0ilers` showed `Safe · Proj 13/28`, exactly matching Hub/Teams. Showing eliminated changed the label to `All teams · 32 displayed`, rendered four Eliminated badges, and retained exactly 28 active projected ranks.
+- **1280px desktop:** Hub, Waivers, Bids All/Grid, WR/Grid, WR/List, and FAAB were rechecked with real data; no page-level horizontal overflow. Hub retained all three contexts, Waivers retained compact source/VoRP/alignment, WR grid retained `$50` at scroll zero, list retained the filter, and FAAB retained displayed-pool labels/statuses.
+- Browser tab was closed; no local dev server was started.
 
-- VoRP exclusively consumes an independent `Map<string, RosPlayerProjection>` built from actual Sleeper remaining-season weekly projections. `totalPoints` is the single basis for player values, replacement baselines, and championship calibration; FantasyCalc normalized values and FantasyPros ECR never enter VoRP math.
-- The target-N optimized pool first fills `N ×` actual QB/RB/WR/TE base slots. It then fills all `N × FLEX` slots from one shared pool of the best remaining RB/WR/TE players and all `N × SUPER_FLEX/QB_FLEX` slots from one shared best-remaining QB/RB/WR/TE pool, without duplicate players. Projection ties break by Sleeper player ID.
-- Each positional replacement baseline is the lowest-point player of that position actually selected into the optimized target-N pool: the last starter (for example QB28), never the first excluded player. Player VoRP is `max(0, player Sleeper ROS totalPoints - positional replacement Sleeper ROS totalPoints)`.
-- A separate optimized starter pool is built for exactly four teams from the same lineup settings. Its player VoRPs are summed against the selected target-N baselines and divided by four. `dollarsPerVorp = initial league FAAB / average championship-team VoRP`; each bid is rounded from `playerVorp × dollarsPerVorp`. The model uses `ctx.budget`, not a roster's remaining FAAB, and returns unavailable for missing projections, incomplete pools, or zero/invalid calibration denominators.
+### Remaining / safety state
 
-## UX
+- No requested Sep 22 final-follow-up item remains unchecked in `PROGRESS.md`.
+- PR #8 remains **OPEN and UNMERGED**. No main/master push, merge, force-push, production deploy, workflow dispatch, manual workflow run, or OpenClaw change was performed.
 
-- Added an accessible **Replacement/startable depth teams** selector with individual integer choices from the current surviving-team count down to four. Default/max are `max(4, surviving teams)` and effective values are normalized safely as league/team counts change.
-- External Player Values sources keep controlling display ranks/source metrics and non-VoRP strategies, while a visible status bar states that VoRP independently uses Sleeper ROS projected fantasy points.
-- VoRP strategy copy dynamically names Sleeper, the selected N-team optimized pool, the last-startable baseline, and final-four calibration. Missing Sleeper ROS shows a specific unavailable reason; card values render **Unavailable / Sleeper ROS required**, never `$0`. Other source-driven strategies remain usable.
-- Preserved Aggressive semantics/math, selected-strategy sorting, FantasyPros ROS behavior, next-week projections, bye/injury display, and the remaining FAAB warning.
+## Sep 22 22:30 post-QA corrections
 
-## Files changed
+John found two regressions on the fresh preview. Removed the remaining local Hub switch-league/logout arrow and empty right-side wrapper from both active and preseason headers; the global header remains the single league-switch control. Restored the strategy selector label to compact `VoRP`; only its first visible explanation expands `Value over Replacement Player (VoRP)`, then uses VoRP normally. Updated the selector/description regression separately.
 
-- `src/logic/waivers.ts`
-- `src/logic/waiverDisplay.ts`
-- `src/logic/rankingSources.ts`
-- `src/logic/__tests__/waivers.test.ts`
-- `src/pages/WaiversPage.tsx`
-- `src/pages/WaiversPage.test.tsx`
-
-## Verification
-
-- `npm test -- --run`: **PASS** — 8 test files, 46 tests passed (expanded from 35). Focused tests cover base+shared FLEX, shared SUPER_FLEX, deterministic non-duplication, QB28 replacement, target-depth changes and normalization including fewer than four survivors, final-four calibration, exact `500 / 900` and 90 VoRP → `$50`, external-source isolation, and honest unavailable/source UI.
-- `npm run lint`: **PASS** — 0 warnings, 0 errors across 47 files.
-- `npm run build`: **PASS** — TypeScript and Vite production build completed; 2,467 modules transformed.
-- `git diff --check`: **PASS**.
-- Focused scan of `src/logic/waivers.ts`: no `30`, replacement-index, points-per-week replacement, or per-position FLEX replacement expression remains. Shared-pool evidence is in `selectShared(FLEX_POSITIONS, ...)` and `selectShared(SUPER_FLEX_POSITIONS, ...)`; dollar conversion is explicit at `initialLeagueFaab / averageChampionshipTeamVorp`.
-
-## Preview / checks / browser evidence
-
-- Implementation commit pushed only to `origin/feat/waiver-ranking-sources`; PR #7 remained **OPEN** and unmerged with head `fb2f571`.
-- GitHub CI `build`: **PASS** (19s). Azure SWA `Build and Deploy`: **PASS** (1m07s). Preview environment: <https://nice-moss-07ec56310-7.centralus.7.azurestaticapps.net>.
-- Browser-tested the deployed preview using the persisted real historical league `#SFB15 - Dallas Wings` (2025, two teams surviving). FantasyPros loaded and remained usable; the replacement selector correctly defaulted/maxed to **4 teams** despite fewer than four survivors. The visible status bar said VoRP independently uses Sleeper ROS and was unavailable for historical season 2025. Selecting VoRP changed the dynamic copy to the optimized **4-team** baseline and rendered all 48 shown recommendations as **Unavailable / Sleeper ROS required**, not `$0`.
-- **Limitation:** the available real browser league is historical, so live positive 2026 Sleeper calibration could not be visually proven there. The historical preview did exercise the required unavailable path and external-source independence; full positive calibration and selector math are covered by focused pure/UI tests.
-
----
-
-# Handoff — PR #7 Aggressive Maximum-Bid Reframe (2026-09-22)
-
-- **Timestamp:** 2026-09-22 15:34:05 PDT
-- **Task:** Replace the misleading maximum-bid strategy presentation and implementation naming with **Aggressive** while preserving its current math.
-- **Status:** COMPLETE on `feat/waiver-ranking-sources` for existing PR #7. No VoRP, ranking-source, endpoint, merge, deploy, workflow-dispatch, or main-branch changes were made.
-- **Implementation commit:** `1656925` — `Reframe maximum waiver bid as Aggressive`
-
-## Summary
-
-- Renamed the strategy key, calculation function, suggestion label, and tab to semantic `aggressive` / **Aggressive** naming.
-- Reframed the dynamic explanation as the maximum bid to consider: a spending ceiling, not intrinsic player value. It explicitly says the strategy intentionally accepts overpay risk to land elite players.
-- Preserved the existing ceiling math exactly: 50% of FAAB in weeks 1–8, 25% in weeks 9–12, and 12.5% thereafter, with the unchanged positional-rank factor.
-- Preserved strategy-selected sorting and displayed recommendation lookup by the new key.
-- Added Zustand persist version 1 migration so a legacy stored strategy key hydrates as `aggressive` instead of becoming invalid.
-- Added focused coverage for strategy order/label/copy, unchanged representative early/mid/late and rank-adjusted values, Aggressive sorting, absence of stale visible wording, and legacy state migration.
-
-## Files changed
-
-- `src/logic/waiverDisplay.ts`
-- `src/logic/waivers.ts`
-- `src/store/appStore.ts`
-- `src/store/appStore.test.ts`
-- `src/logic/__tests__/waivers.test.ts`
-- `src/pages/WaiversPage.test.tsx`
-
-## Exact verification results
-
-- `npm test -- --run`: **PASS** — 8 test files, 35 tests passed.
-- `npm run lint`: **PASS** — 0 warnings, 0 errors across 47 files.
-- `npm run build`: **PASS** — TypeScript and Vite production build completed; 2,467 modules transformed.
-- `git diff --check`: **PASS** — no whitespace errors.
-- Stale wording search over source/docs/public: only `src/store/appStore.ts` contains the legacy lowercase key, exclusively in the required persistence migration. No user-facing `Exp. Starter` or `Exponential` wording remains.
-
----
-
-# Handoff — PR #7 Review Changes (2026-09-22)
-
-## FantasyPros ROS source correction
-
-- Review found the first FantasyPros integration used draft/preseason ECR endpoints; the PPR URL redirects to FantasyPros' **2026 Fantasy Football Draft Rankings** consensus cheat sheet.
-- Corrected all scoring modes to verified current rest-of-season pages:
-  - PPR: `https://www.fantasypros.com/nfl/rankings/ros-ppr-overall.php`
-  - Half-PPR: `https://www.fantasypros.com/nfl/rankings/ros-half-point-ppr-overall.php`
-  - Standard: `https://www.fantasypros.com/nfl/rankings/ros-overall.php`
-- Renamed the source to **FantasyPros ROS ECR** and added endpoint regression coverage so draft URLs cannot silently return.
-- Direct handler probes succeeded for all formats: 349 PPR players, 350 half-PPR players, and 349 standard players; each returned the exact ROS source URL and Jahmyr Gibbs at current ROS ECR #1.
-
-## Status
-Implemented on `feat/waiver-ranking-sources` for existing PR #7. No merge, production deployment, workflow dispatch, or push to `main` was performed.
-
-## Source provenance and selector
-- Replaced the three source buttons with one native accessible `Player Values` select. It has Sleeper ROS, FantasyCalc, and FantasyPros ECR options and no redundant `Active:` copy.
-- Removed Football Absurdity from the UI, client, types, API route, and API dependencies. It was **not** relabeled.
-- Added a direct FantasyPros ROS ECR Azure Function adapted from the proven Draft Assistant proxy pattern. The function fetches FantasyPros' verified `ros-ppr-overall.php`, `ros-half-point-ppr-overall.php`, or `ros-overall.php` page, parses embedded `ecrData`, retains each actual `rank_ecr`, and reports the exact source URL. Direct live handler invocations returned HTTP 200 and 349–350 eligible QB/RB/WR/TE players depending on scoring, led by Jahmyr Gibbs at current ROS ECR #1. The season-value score only converts ECR into descending positive numbers for model math; cards display the original ROS ECR rank.
-- League reception scoring selects the matching FantasyPros PPR, half-PPR, or standard page. No third-party feed is attributed to FantasyPros.
-
-## Waiver UX/model changes
-- Weeks-as-Starter is first and is the initial strategy. The pure board builder also defaults to Weeks-as-Starter ordering. Suggestions are selected by `strategy` key, not tab/array index.
-- Each of Weeks-as-Starter, Safe, Exponential Starter, and VoRP has concise strategy-specific copy.
-- Removed the Floor control, local state, clamp option, clamp function, and dead path. Raw recommendations and the existing over-budget warning remain.
-- Cards show official 2026 team bye weeks from the NFL schedule release. Missing teams/unsupported seasons say `Bye unavailable`; completed byes say `Bye passed (W#)`.
-- An independent Sleeper weekly query runs for the upcoming week regardless of season-long source. It uses league reception scoring and shows `Next week: N.N pts · WR#`. Positional ranks are computed from the full weekly projection payload before roster/availability filtering. Exact Sleeper injury metadata renders as a compact badge; projection values are never used to infer injury or matchup quality. Bye and missing-projection states are explicit.
-
-## Regression coverage
-- Native dropdown label/options/change behavior, no Football Absurdity, no `Active:` copy.
-- Weeks-as-Starter first/default and default board ordering.
-- Key-based strategy outputs and unclamped raw recommendation behavior.
-- Official bye lookup plus honest unsupported-season behavior.
-- Weekly positional rank includes rostered players from the complete projection pool (available WR remains WR2 behind a rostered WR).
-- External original source rank plumbing and league-to-FantasyPros scoring format.
-
-## Exact browser verification
-Ran the final production bundle with Azure Static Web Apps CLI and local API functions, then tested in headless Chromium against real Sleeper league **#SFB15 - Dallas Wings** (`1237312439318478848`, 2025), roster 1 / user `4thandLange`.
-- The `Player Values` control appeared as an accessible combobox with exactly Sleeper ROS, FantasyCalc, and FantasyPros ECR.
-- Sleeper ROS honestly showed unavailable because the real league is 2025 while Sleeper state is 2026; the dropdown remained usable.
-- Selecting FantasyPros loaded live direct ECR data. The board opened with Weeks-as-Starter first/selected and showed Jahmyr Gibbs `RB#1 · ECR #1`, Ja'Marr Chase `WR#1 · ECR #2`, model dollars, predictions, `Next week: No projection`, `Bye unavailable`, and real Sleeper injury badges including Out/IR/Questionable.
-- Clicking Safe changed both per-card strategy values/labels and the explanation to `Uses a conservative position-and-rank baseline for steady bidding.`
-- The browser caught and prompted a fix for a null comparison that initially rendered unsupported historical byes as `Bye`; the rebuilt final bundle correctly renders `Next week: No projection · Bye unavailable`.
-- Limitation: no accessible real 2026 Sleeper league was available for browser proof of live weekly-point/rank and 2026 bye text. That data path is covered by focused regression tests; the historical real-league browser correctly exercises the honest unavailable states.
-
-## Verification
-- `npm test`: **PASS** — 6 files, 30 tests
-- `npm run lint`: **PASS** — 0 warnings/errors
-- `npm run build`: **PASS**
-- `git diff --check`: **PASS**
-- Direct FantasyPros function invocation: **PASS** — HTTP 200, 132 players, direct fantasypros.com source URL
-
-## Remaining
-- Optional active-team positional-rank bug was not attempted; required review changes took priority.
-- After push, confirm PR #7 preview/check status and, if a real current-season league becomes available, repeat browser verification for numeric weekly projection rank and 2026 bye text.
-
----
-
-# PR #6 Sleeper ROS Waiver Handoff
-
-## Follow-up season-deflation prediction model (2026-09-22)
-
-- Replaced the temporary historical-ratio predictor with John's deterministic Weeks-as-Starter season curve.
-- Exact anchors for a 17-week fantasy season: Week 1 = `2.0×`, Week 9 = `1.0×`, Week 13 = `0.5×`, Week 15 = `0.25×`, Week 17 = `0×`.
-- The sequence simplifies exactly to `multiplier = 2 × season fraction remaining`, or `2 × (17 - currentWeek) / 16` for Weeks 1–17.
-- Predicted bid is `Weeks-as-Starter value × current-week multiplier`, preserving player quality and `$0 → $0` behavior while converging to zero at season end.
-- Historical 2025 report supports strong deflation (average winning bid $88 W1 → $12 W9 → $3 W13), but exact bid/WAS ratios cannot be backtested without weekly projection snapshots.
-- Added exact multiplier-anchor unit tests. Verification: targeted 10/10, full 23/23, lint clean, build and diff-check passed.
-
-## Follow-up selected-strategy sorting (2026-09-22)
-
-- Waiver rows now re-sort descending whenever the active strategy changes; Safe, Exponential, Weeks-as-Starter, and VoRP no longer reuse Safe's ordering.
-- Regression tests cover active-strategy ordering, deep-player prediction `$0`, and player-sensitive predictions.
-- The intermediate historical-ratio prediction experiment from this commit was superseded by the season-deflation model documented above.
-
-## Follow-up Safe / Weeks-as-Starter corrections (2026-09-22)
-
-- Removed Safe's artificial `0.4` minimum rank premium; sufficiently deep players now decay to `$0` rather than retaining a position-specific dollar floor.
-- Fixed Weeks-as-Starter to include the two-team championship week. Positional rank #1 now starts every remaining week and exactly matches Safe value.
-- Waiver rows expose and display `starterWeeks / possibleStarterWeeks` when Weeks-as-Starter is selected.
-- Regression coverage includes a QB22 worth `$0` under Safe and QB1 receiving full Safe value for 11/11 starter weeks.
-- Verification: targeted tests 7/7, full tests 20/20, lint clean, production build passed, `git diff --check` passed.
-
-## Branch / PR
-
-- Branch: `feat/john-feedback-batch-0922`
-- PR: #6 (`feat/john-feedback-batch-0922` → `main`)
-- Sleeper ROS implementation commit: `ca512d1` — `feat: use Sleeper ROS projections for waivers`
-- Prior review fixes preserved:
-  - `e7aa3b9` — league-wide rank basis + raw over-remaining-FAAB warning
-  - `5ed7475` — prior review handoff
-- No merge, deploy, workflow dispatch, production action, or `main` push was performed.
-
-## Projection source and exact semantics
-
-Waiver rankings and values now use Sleeper **rest-of-season projections**, not matchup scoring history.
-
-1. Fetch `GET /v1/state/nfl`.
-2. Require the selected league season to equal the current Sleeper NFL state season. The page shows an honest unavailable state for a historical season; it never substitutes historical averages.
-3. Choose the first ROS week as `max(state.week, state.display_week + 1, 1)`:
-   - With the verified 2026 state (`week: 3`, `display_week: 2`), week 3 is included.
-   - If Sleeper marks the nominal current week completed (`display_week >= week`), aggregation advances to the next week.
-4. Fetch every weekly endpoint from that week through week 18: `GET /v1/projections/nfl/regular/{leagueSeason}/{week}`.
-   - Requests use a concurrency cap of four, avoiding a sequential waterfall and unbounded fan-out.
-   - TanStack Query caches the aggregate by season/start/end for 30 minutes, retains it for six hours, and retries once.
-   - The full-season endpoint is intentionally not used because its `gp: 18` totals are not exact ROS totals.
-5. Select `pts_ppr`, `pts_half_ppr`, or `pts_std` using the league's `scoring_settings.rec`, matching the Draft Assistant behavior.
-6. Sum the selected field across all requested weeks. Missing player weeks contribute zero (bye/inactive). `pointsPerWeek` is the ROS sum divided by every requested week, so byes remain represented rather than disappearing from the denominator.
-7. A player with no selected Sleeper scoring field is omitted. There is no fallback to matchup scores or another projection field.
-
-A bounded live endpoint verification on 2026-09-22 confirmed weeks 3, 4, and 18 return projection maps containing all three selected totals. Representative counts were 1,057 scored records in week 3, 1,118 in week 4, and 1,144 in week 18. No payload was saved or committed.
-
-## Waiver / FAAB behavior
-
-- All projected players are ranked at each position before availability and display filtering. The regression still proves the available QB behind 21 stronger projected QBs is QB22.
-- Available-player detection is projection-driven; a historical scorer with no ROS projection does not appear.
-- Board ordering and Safe, Exponential Starter, and Weeks-as-Starter values use projection-driven league-wide position rank.
-- Replacement levels and VoRP use Sleeper ROS projected points per remaining week.
-- The existing predicted-winning-bid display continues to describe historical league bid behavior, while the four recommendation strategies use ROS values.
-- The raw recommendation and over-remaining-FAAB warning behavior from `e7aa3b9` remains unchanged.
-- UI copy explicitly says `Sleeper rest-of-season projections`, shows ROS total and per-week values, and includes honest loading/error/empty-season states with retry where actionable.
-- If projection requests fail or return no usable totals, the page does not render historical waiver values.
-- Teams/Hub analytics remain on their prior data source; this change is scoped to Waivers/FAAB.
-
-## Files changed in `ca512d1`
-
-- `src/api/types.ts` — typed NFL state and weekly Sleeper projection payloads
-- `src/api/client.ts` — state/weekly projection endpoints and concurrency-limited week fetcher
-- `src/api/hooks.ts` — cached state and aggregate ROS projection hooks
-- `src/logic/projections.ts` — scoring selection, start-week semantics, and weekly ROS summation
-- `src/logic/waivers.ts` — projection-driven ranks, ordering, replacement level, VoRP, and availability
-- `src/pages/WaiversPage.tsx` — ROS wiring, labels, loading/error/retry states, and projection display
-- `src/logic/index.ts` — projection exports
-- `src/logic/__tests__/projections.test.ts` — weekly sum, format selection, no field fallback, and week semantics
-- `src/logic/__tests__/waivers.test.ts` — projection-driven QB22/ranks, VoRP, no historical fallback, and preserved raw-bid behavior
-
-## Verification
-
-- Targeted projection + waiver tests: **passed** — 2 files, 9 tests
-- Full `npm test`: **passed** — 4 files, 19 tests
-- `npm run lint`: **passed** — 0 warnings, 0 errors
-- `npm run build`: **passed**
-- `git diff --check origin/main...HEAD`: **passed**
-- Reviewed the complete PR file list and implementation scope; the continuation changes only projection plumbing and Waivers/FAAB calculations/tests, not Teams/Hub analytics.
+Validation: focused Hub/Waivers **14/14**, full **111/111**, lint **0 warnings / 0 errors**, production build, `git diff --check`, and comparison diff check all pass.
