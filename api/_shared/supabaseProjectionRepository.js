@@ -48,7 +48,9 @@ function createSupabaseProjectionRepository({ env = process.env, fetchImpl = fet
       const params = new URLSearchParams({
         select: 'id,source,season,decision_week,canonical_cutoff_at,capture_started_at,fetched_at,endpoint_template,row_count,content_hash,status,provenance',
         season: `eq.${season}`, decision_week: `lte.${decisionWeek}`, status: 'eq.completed',
-        order: 'decision_week.desc,canonical_cutoff_at.desc', limit: '1',
+        // "exact" sorts before "reconstructed". The remaining keys make selection stable even if
+        // a future additive migration permits more than one completed row per capture kind.
+        order: 'decision_week.desc,provenance.asc,canonical_cutoff_at.desc,id.asc', limit: '1',
       });
       const runResponse = await request(`projection_snapshot_runs?${params}`);
       const runs = await runResponse.json();

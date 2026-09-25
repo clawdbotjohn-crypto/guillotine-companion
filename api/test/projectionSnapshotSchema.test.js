@@ -16,6 +16,8 @@ const correctionMigration = fs.readFileSync(
   path.join(migrationDir, '202609250003_dst_provenance_and_seed_correction.sql'),
   'utf8',
 );
+const coexistenceMigrationName = '202609250005_exact_reconstructed_coexistence.sql';
+const coexistenceMigration = fs.readFileSync(path.join(migrationDir, coexistenceMigrationName), 'utf8');
 
 test('schema keeps both snapshot tables forced-RLS and direct browser roles default-deny', () => {
   for (const table of ['projection_snapshot_runs', 'projection_snapshot_values', 'projection_season_calendar']) {
@@ -95,4 +97,39 @@ test('seed correction no-ops when the audited ID is absent and rejects present m
     /enable trigger projection_snapshot_runs_immutable; end if; end; \$\$;/i,
     'trigger restoration and mutation must remain inside the absent-safe ID guard',
   );
+});
+
+test('migration 005 replaces the coordinate key with one evidence key per provenance kind', () => {
+  const sql = coexistenceMigration.replace(/\s+/g, ' ');
+  assert.match(sql, /drop constraint projection_snapshot_runs_cutoff_unique/i);
+  assert.match(sql, /add constraint projection_snapshot_runs_evidence_unique unique \(source, season, decision_week, canonical_cutoff_at, provenance\)/i);
+  assert.match(sql, /on conflict on constraint projection_snapshot_runs_evidence_unique do nothing/i);
+  assert.match(sql, /canonical_cutoff_at = p_canonical_cutoff_at and r\.provenance = p_provenance/i);
+  assert.match(sql, /content_hash is distinct from p_content_hash or r\.row_count is distinct from v_count/i);
+  assert.match(sql, /projection_snapshot_values[\s\S]*except[\s\S]*jsonb_to_recordset\(p_values\)[\s\S]*jsonb_to_recordset\(p_values\)[\s\S]*except[\s\S]*projection_snapshot_values/i);
+  assert.match(sql, /snapshot conflict: evidence key already has different immutable content/i);
+  assert.match(sql, /p_provenance = 'exact'[\s\S]*p_capture_started_at < v_expected_cutoff[\s\S]*p_fetched_at > v_expected_cutoff \+ interval '15 minutes'/i);
+});
+
+test('migration-chain static guard keeps immutable/calendar defenses and recreates only the current RPC signature', () => {
+  const names = fs.readdirSync(migrationDir).filter((name) => name.endsWith('.sql')).sort();
+  assert.equal(names.at(-1), coexistenceMigrationName);
+  assert.match(coexistenceMigration, /drop function public\.ingest_projection_snapshot\(text, integer, integer, timestamptz, timestamptz, timestamptz, text, text, text, jsonb\)/i);
+  assert.match(coexistenceMigration, /create function public\.ingest_projection_snapshot\([\s\S]*security invoker/i);
+  assert.match(coexistenceMigration, /service_role required/i);
+  assert.match(coexistenceMigration, /canonical cutoff does not match season % decision week % calendar/i);
+  assert.match(coexistenceMigration, /grant execute on function[\s\S]*to service_role/i);
+  assert.doesNotMatch(coexistenceMigration, /drop trigger|disable trigger|drop table|alter table public\.projection_season_calendar/i);
+});
+
+test('RPC exact retry is scoped to exact evidence and differing exact content conflicts', () => {
+  const sql = coexistenceMigration.replace(/\s+/g, ' ');
+  const conflictTarget = sql.indexOf('on conflict on constraint projection_snapshot_runs_evidence_unique do nothing');
+  const exactLookup = sql.indexOf('and r.provenance = p_provenance', conflictTarget);
+  const differingContent = sql.indexOf('r.content_hash is distinct from p_content_hash', exactLookup);
+  const conflict = sql.indexOf("raise exception 'snapshot conflict: evidence key already has different immutable content'", differingContent);
+  const returnExisting = sql.indexOf('return query', conflict);
+  assert.ok(conflictTarget > -1 && exactLookup > conflictTarget);
+  assert.ok(differingContent > exactLookup && conflict > differingContent);
+  assert.ok(returnExisting > conflict, 'identical exact retries reach the existing-row return path');
 });

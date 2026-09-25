@@ -1,5 +1,23 @@
 # Guillotine Companion — Progress
 
+## ✅ PR #9 activation blocker — corrected without deleting evidence (2026-09-25)
+
+- [x] Current date is NFL playing Week 3; DB rows are **decision weeks**, where decision Week 4 means the upcoming Tue Sep 29 waiver cutoff, not a completed Week 4 historical capture. API/docs now distinguish those concepts.
+- [x] W1–W3 reconstructed rows and the early W4 row were all fetched from Sleeper's live mutable projection endpoints on Sep 25 UTC. They are authentic Sleeper payloads but are not historical cutoff snapshots and cannot show genuine cutoff-time rank movement.
+- [x] Reproduced that the old coordinate-only key blocked Tuesday's future `exact` Week 4 capture.
+- [x] Preserved the early W4 run and every child. Migration 005 allows one immutable reconstructed row and one immutable exact row at the same decision coordinate, while exact retries remain idempotent and differing exact hash/count/values conflict.
+- [x] Verified the upgrade and exact/reconstructed coexistence in a real dedicated-ref transaction, then rolled back the synthetic exact row. No exact W4 row was fabricated before Tue Sep 29 at 8 PM Pacific.
+- [x] Did not merge, configure production, activate the scheduler, dispatch a workflow, or deploy production.
+
+## ✅ PR #9 exact/reconstructed coexistence correction — migrated; not activated
+
+- [x] Added additive migration `202609250005` replacing the old coordinate-only uniqueness constraint with a provenance-aware evidence key; one reconstructed and one exact row can coexist without changing existing evidence.
+- [x] Recreated the service-role RPC against the new key. Identical exact retries reuse the exact row; differing exact hash, count, or actual child values conflict. Forced RLS, immutability, calendar, and capture-window checks remain intact.
+- [x] GET is deterministic within the requested season: highest decision week first, then exact before reconstructed. API provenance now separates decision week from preceding playing week and exposes same-week/fallback, stored capture kind/timing, and effective exactness.
+- [x] Added focused Node coverage for migration-chain guards, exact preference, exact retry/conflict behavior, fallback/no-cross-season behavior, and 2026 playing Week 3 / decision Week 4 semantics.
+- [x] Reverified dedicated ref `xduqpomhjdlgmtmmkfed`; rehearsed migration 005 and synthetic exact W4 coexistence in rolled-back real PostgreSQL transactions, applied only 005, and confirmed zero exact W4 rows remain. IDs, metadata hashes, child counts, and independent child audit hashes are unchanged.
+- [x] Independent review found no high defect; its real-PostgreSQL verification concern was closed and its digest-trust finding was fixed. No configuration, scheduler activation, workflow dispatch, merge, or production deployment occurred.
+
 ## ✅ PR #9 late integrity findings — corrected; awaiting review
 
 - [x] Persisted immutable `capture_started_at` alongside `fetched_at`; API passes the actual sampled start, GET/types/docs expose it, and exact DB/API rules validate start >= cutoff, finish >= start, and finish <= cutoff + 15 minutes.

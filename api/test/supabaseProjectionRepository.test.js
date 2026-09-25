@@ -24,7 +24,9 @@ test('findLatest selects explicit stored provenance with completed run', async (
     env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_SERVICE_ROLE_KEY: 'secret' }, fetchImpl,
   });
   const result = await repository.findLatest({ season: 2026, decisionWeek: 4 });
+  assert.match(requests[0].url, /season=eq\.2026/);
   assert.match(requests[0].url, /decision_week=lte\.4/);
+  assert.match(requests[0].url, /order=decision_week\.desc%2Cprovenance\.asc%2Ccanonical_cutoff_at\.desc%2Cid\.asc/);
   assert.match(requests[0].url, /capture_started_at/);
   assert.match(requests[0].url, /provenance/);
   assert.equal(result.captureStartedAt, 'started');
@@ -33,7 +35,7 @@ test('findLatest selects explicit stored provenance with completed run', async (
   assert.equal(requests[1].options.headers.Range, '0-999');
 });
 
-test('ingest uses transactional RPC with provenance and returns idempotency result', async () => {
+test('duplicate exact ingest uses transactional RPC and returns the existing exact row', async () => {
   let request;
   const repository = createSupabaseProjectionRepository({
     env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_SERVICE_ROLE_KEY: 'secret' },
@@ -41,33 +43,36 @@ test('ingest uses transactional RPC with provenance and returns idempotency resu
       request = { url, options };
       return { ok: true, json: async () => [{
         snapshot_id: 'id', created: false, row_count: 1, status: 'completed',
-        stored_content_hash: 'a'.repeat(64), stored_provenance: 'reconstructed',
+        stored_content_hash: 'a'.repeat(64), stored_provenance: 'exact',
       }] };
     },
   });
   const result = await repository.ingest({
     source: 'sleeper', season: 2026, decisionWeek: 4, canonicalCutoffAt: 'cutoff', captureStartedAt: 'started', fetchedAt: 'fetched',
-    endpointTemplate: 'endpoint', contentHash: 'b'.repeat(64), provenance: 'reconstructed',
+    endpointTemplate: 'endpoint', contentHash: 'a'.repeat(64), provenance: 'exact',
     rows: [{ projection_week: 4, player_id: 'p', pts_ppr: 1 }],
   });
   const payload = JSON.parse(request.options.body);
   assert.match(request.url, /rpc\/ingest_projection_snapshot$/);
   assert.equal(payload.p_capture_started_at, 'started');
   assert.equal(payload.p_fetched_at, 'fetched');
-  assert.equal(payload.p_provenance, 'reconstructed');
+  assert.equal(payload.p_provenance, 'exact');
   assert.deepEqual(result, {
     snapshotId: 'id', created: false, rowCount: 1, status: 'completed',
-    contentHash: 'a'.repeat(64), provenance: 'reconstructed',
+    contentHash: 'a'.repeat(64), provenance: 'exact',
   });
 });
 
-test('database immutable-coordinate conflict is classified for HTTP 409', async () => {
+test('differing exact content conflict is classified for HTTP 409', async () => {
   const repository = createSupabaseProjectionRepository({
     env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_SERVICE_ROLE_KEY: 'secret' },
     fetchImpl: async () => ({
       ok: false, status: 409,
-      text: async () => JSON.stringify({ code: '23505', message: 'snapshot conflict: canonical coordinate already has different immutable content or provenance' }),
+      text: async () => JSON.stringify({ code: '23505', message: 'snapshot conflict: evidence key already has different immutable content' }),
     }),
   });
-  await assert.rejects(() => repository.ingest({}), (error) => error.code === 'SNAPSHOT_CONFLICT');
+  await assert.rejects(
+    () => repository.ingest({ provenance: 'exact', contentHash: 'b'.repeat(64), rows: [] }),
+    (error) => error.code === 'SNAPSHOT_CONFLICT',
+  );
 });

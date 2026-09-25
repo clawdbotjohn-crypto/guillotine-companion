@@ -159,10 +159,12 @@ V1 canonical cutoff: Tuesday at **8:00 PM `America/Los_Angeles`** before the nor
 
 Every stored run has immutable explicit provenance and both ends of its capture interval. `exact` is accepted only for an authenticated capture whose recorded start is at or after the canonical cutoff and whose recorded finish is no later than 15 minutes after it. Early, late, manual post-hoc, fallback, and historical captures are `reconstructed`; matching a requested decision week does not upgrade provenance. Both provenance kinds must match the immutable DB-owned season/week calendar.
 
+One reconstructed and one exact row may coexist at a canonical decision coordinate; retrieval deterministically prefers exact for that same decision week. Older-week fallback never crosses seasons and is effectively reconstructed even if the stored older capture was exact. API provenance keeps decision week distinct from the preceding playing week (`decisionWeek - 1`), so the waiver after playing Week 3 is decision Week 4.
+
 Every displayed historical baseline is labeled:
 
-- **Exact:** derived from a snapshot captured prospectively before that waiver run.
-- **Reconstructed:** derived later from Sleeper's mutable historical endpoint.
+- **Exact:** same-decision-week evidence captured prospectively in the approved cutoff window.
+- **Reconstructed:** early/post-cutoff evidence from Sleeper's mutable routes, or any older-decision-week fallback.
 
 ## 6. Minimal schema
 
@@ -181,7 +183,7 @@ projection_snapshot_runs (
   error_message text,
   provenance text not null check (provenance in ('exact', 'reconstructed')),
   created_at timestamptz not null default now(),
-  unique (source, season, decision_week, canonical_cutoff_at)
+  unique (source, season, decision_week, canonical_cutoff_at, provenance)
 )
 
 projection_season_calendar (

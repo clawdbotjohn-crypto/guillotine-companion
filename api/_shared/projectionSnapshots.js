@@ -221,6 +221,13 @@ function getHeader(headers = {}, name) {
   return key ? headers[key] : undefined;
 }
 
+function describeCaptureTiming(snapshot) {
+  if (snapshot.provenance === 'exact') return 'exact-at-cutoff';
+  return new Date(snapshot.captureStartedAt).getTime() < new Date(snapshot.canonicalCutoffAt).getTime()
+    ? 'early-reconstruction'
+    : 'post-cutoff-reconstruction';
+}
+
 function createProjectionSnapshotService({ repository, fetchImpl = fetch, schedulerSecret, firstDecisionWeekLocalDate, now = () => new Date() }) {
   return {
     async post(req) {
@@ -253,8 +260,10 @@ function createProjectionSnapshotService({ repository, fetchImpl = fetch, schedu
         const input = parseGetQuery(req.query);
         const snapshot = await repository.findLatest(input);
         if (!snapshot) return jsonResponse(404, { error: 'No completed snapshot is available at or before the requested decision week' });
+        if (snapshot.season !== input.season) throw new Error('Snapshot lookup crossed the requested season boundary');
         const matchesRequestedDecisionWeek = snapshot.decisionWeek === input.decisionWeek;
         const effectiveKind = matchesRequestedDecisionWeek ? snapshot.provenance : 'reconstructed';
+        const effectiveExact = effectiveKind === 'exact';
         return jsonResponse(200, {
           snapshot: {
             id: snapshot.id, source: snapshot.source, season: snapshot.season, decisionWeek: snapshot.decisionWeek,
@@ -263,8 +272,13 @@ function createProjectionSnapshotService({ repository, fetchImpl = fetch, schedu
             rowCount: snapshot.rowCount, contentHash: snapshot.contentHash, provenance: snapshot.provenance,
           },
           provenance: {
-            kind: effectiveKind, exact: effectiveKind === 'exact', captureKind: snapshot.provenance,
-            matchesRequestedDecisionWeek, requestedDecisionWeek: input.decisionWeek, snapshotDecisionWeek: snapshot.decisionWeek,
+            // kind/exact/matchesRequestedDecisionWeek remain for existing consumers.
+            kind: effectiveKind, exact: effectiveExact, captureKind: snapshot.provenance,
+            captureTiming: describeCaptureTiming(snapshot), effectiveKind, effectiveExact,
+            selection: matchesRequestedDecisionWeek ? 'same-decision-week' : 'earlier-decision-week-fallback',
+            matchesRequestedDecisionWeek,
+            requestedDecisionWeek: input.decisionWeek, requestedPlayingWeek: input.decisionWeek - 1,
+            snapshotDecisionWeek: snapshot.decisionWeek, snapshotPlayingWeek: snapshot.decisionWeek - 1,
           },
           rows: snapshot.rows,
         });
@@ -278,6 +292,6 @@ function createProjectionSnapshotService({ repository, fetchImpl = fetch, schedu
 
 module.exports = {
   CAPTURE_TIME_ZONE, ENDPOINT_TEMPLATE, EXACT_CAPTURE_WINDOW_MS, HttpError, canonicalCutoffForLocalDate, canonicalizeRows,
-  compactProjectionPayload, createProjectionSnapshotService, fetchRemainingProjections, hashRows, isAuthorized,
+  compactProjectionPayload, createProjectionSnapshotService, describeCaptureTiming, fetchRemainingProjections, hashRows, isAuthorized,
   isCanonicalCutoff, parseGetQuery, parsePostBody, validateCalendarCoordinate, validateCaptureTiming, zonedParts,
 };

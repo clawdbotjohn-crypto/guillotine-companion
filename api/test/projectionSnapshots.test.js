@@ -223,19 +223,72 @@ test('GET exposes immutable capture start and trusts stored reconstructed proven
   assert.equal(parse(response).snapshot.captureStartedAt, '2026-09-25T05:34:01Z');
   assert.equal(parse(response).snapshot.provenance, 'reconstructed');
   assert.deepEqual(parse(response).provenance, {
-    kind: 'reconstructed', exact: false, captureKind: 'reconstructed', matchesRequestedDecisionWeek: true,
-    requestedDecisionWeek: 4, snapshotDecisionWeek: 4,
+    kind: 'reconstructed', exact: false, captureKind: 'reconstructed',
+    captureTiming: 'early-reconstruction', effectiveKind: 'reconstructed', effectiveExact: false,
+    selection: 'same-decision-week', matchesRequestedDecisionWeek: true,
+    requestedDecisionWeek: 4, requestedPlayingWeek: 3,
+    snapshotDecisionWeek: 4, snapshotPlayingWeek: 3,
   });
 });
 
 test('GET downgrades an older exact capture to reconstructed fallback evidence', async () => {
   const older = {
     id: 'id', source: 'sleeper', season: 2026, decisionWeek: 3, provenance: 'exact',
-    canonicalCutoffAt: 'x', captureStartedAt: 'x', fetchedAt: 'x', endpointTemplate: 'x', rowCount: 0, contentHash: 'x', rows: [],
+    canonicalCutoffAt: '2026-09-23T03:00:00Z', captureStartedAt: '2026-09-23T03:00:01Z',
+    fetchedAt: '2026-09-23T03:01:00Z', endpointTemplate: 'x', rowCount: 0, contentHash: 'x', rows: [],
   };
   const service = createProjectionSnapshotService({ repository: { findLatest: async () => older } });
   const response = await service.get({ query: { season: '2026', decisionWeek: '4' } });
-  assert.equal(parse(response).provenance.kind, 'reconstructed');
-  assert.equal(parse(response).provenance.captureKind, 'exact');
-  assert.equal(parse(response).provenance.matchesRequestedDecisionWeek, false);
+  assert.deepEqual(parse(response).provenance, {
+    kind: 'reconstructed', exact: false, captureKind: 'exact', captureTiming: 'exact-at-cutoff',
+    effectiveKind: 'reconstructed', effectiveExact: false,
+    selection: 'earlier-decision-week-fallback', matchesRequestedDecisionWeek: false,
+    requestedDecisionWeek: 4, requestedPlayingWeek: 3,
+    snapshotDecisionWeek: 3, snapshotPlayingWeek: 2,
+  });
+});
+
+test('GET fails closed if a repository ever returns a snapshot from another season', async () => {
+  const snapshot = {
+    id: 'id', source: 'sleeper', season: 2025, decisionWeek: 18, provenance: 'exact',
+    canonicalCutoffAt: '2025-12-31T04:00:00Z', captureStartedAt: '2025-12-31T04:00:01Z',
+    fetchedAt: '2025-12-31T04:01:00Z', endpointTemplate: 'x', rowCount: 0, contentHash: 'x', rows: [],
+  };
+  const service = createProjectionSnapshotService({ repository: { findLatest: async () => snapshot } });
+  const response = await service.get({ query: { season: '2026', decisionWeek: '4' } });
+  assert.equal(response.status, 502);
+  assert.match(parse(response).error, /season boundary/);
+});
+
+test('2026 playing Week 3 waiver evidence is decision Week 4 and exposes both semantics', async () => {
+  const snapshot = {
+    id: 'w4-early', source: 'sleeper', season: 2026, decisionWeek: 4, provenance: 'reconstructed',
+    canonicalCutoffAt: '2026-09-30T03:00:00Z', captureStartedAt: '2026-09-25T05:34:01Z',
+    fetchedAt: '2026-09-25T05:34:02Z', endpointTemplate: 'x', rowCount: 0, contentHash: 'x', rows: [],
+  };
+  const service = createProjectionSnapshotService({ repository: { findLatest: async () => snapshot } });
+  const response = await service.get({ query: { season: '2026', decisionWeek: '4' } });
+  const provenance = parse(response).provenance;
+  assert.equal(provenance.requestedDecisionWeek, 4);
+  assert.equal(provenance.requestedPlayingWeek, 3);
+  assert.equal(provenance.snapshotDecisionWeek, 4);
+  assert.equal(provenance.snapshotPlayingWeek, 3);
+  assert.equal(provenance.captureTiming, 'early-reconstruction');
+  assert.equal(provenance.selection, 'same-decision-week');
+  assert.equal(provenance.effectiveExact, false);
+});
+
+test('same-week exact capture remains effectively exact', async () => {
+  const snapshot = {
+    id: 'exact-w4', source: 'sleeper', season: 2026, decisionWeek: 4, provenance: 'exact',
+    canonicalCutoffAt: '2026-09-30T03:00:00Z', captureStartedAt: '2026-09-30T03:00:01Z',
+    fetchedAt: '2026-09-30T03:01:00Z', endpointTemplate: 'x', rowCount: 0, contentHash: 'x', rows: [],
+  };
+  const service = createProjectionSnapshotService({ repository: { findLatest: async () => snapshot } });
+  const provenance = parse(await service.get({ query: { season: '2026', decisionWeek: '4' } })).provenance;
+  assert.equal(provenance.captureKind, 'exact');
+  assert.equal(provenance.captureTiming, 'exact-at-cutoff');
+  assert.equal(provenance.selection, 'same-decision-week');
+  assert.equal(provenance.effectiveKind, 'exact');
+  assert.equal(provenance.effectiveExact, true);
 });
