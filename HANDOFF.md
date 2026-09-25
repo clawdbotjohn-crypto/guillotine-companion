@@ -1,79 +1,62 @@
 # Guillotine Companion — Projection Snapshot Backend Handoff
 
-## Scope completed
+## PR #9 correction completed
 
-PR1 implements only the dedicated projection-snapshot backend from `docs/BIDDING-PROFILES-PLAN.md`:
+PR1 now follows the approved capture model:
 
-- Supabase migrations create immutable `projection_snapshot_runs` and `projection_snapshot_values` tables with validation checks, lookup/player indexes, forced RLS, zero anon/authenticated grants or policies, and update/delete rejection triggers.
-- `ingest_projection_snapshot` is a service-role-only, security-invoker RPC. One PostgreSQL transaction claims the unique `(source, season, decision_week, canonical_cutoff_at)` key, inserts all compact rows, verifies the count, and completes—or rolls back everything. Concurrent/retry losers return the committed run.
-- Azure SWA managed Function route `/api/projection-snapshots` supports constant-time bearer-authenticated POST and credential-free GET. POST fetches every remaining Sleeper Week through 18 and hashes canonical compact rows. GET chooses the latest completed decision week at or before the request and labels older fallback evidence `reconstructed`.
-- `.github/workflows/projection-snapshot.yml` invokes POST Tuesdays at 23:00 UTC or by manual dispatch. It never deploys.
-- API contract/failure/idempotency/read-provenance tests run under Node's built-in test runner. Root Vitest excludes the separately tested API tree; CI runs both suites.
+- Canonical cutoff is Tuesday **8:00 PM `America/Los_Angeles`**, validated in API and PostgreSQL by local timezone rather than a fixed UTC hour. Tests prove `2026-09-29 8 PM PDT = 2026-09-30T03:00:00Z` and `2026-11-10 8 PM PST = 2026-11-11T04:00:00Z`.
+- Workflow cron runs at both possible UTC hours and a runtime Pacific-time guard accepts only Tuesday 8:00–8:15 PM. Scheduled requests explicitly use `exact`; manual requests default to `reconstructed`.
+- Every run stores immutable `exact | reconstructed` provenance. API and DB accept `exact` only from the cutoff through 15 minutes afterward; early, late, fallback, and post-hoc evidence remains reconstructed. Same-week equality never upgrades provenance.
+- Idempotent retries reuse an identical run. Different hash, row count, or provenance at the same canonical coordinate now fails as an honest conflict.
+- GET initializes without `PROJECTION_SNAPSHOT_SCHEDULER_SECRET`; POST still requires the bearer secret. Supabase URL/service-role configuration remains backend-only for both operations.
+- Forced RLS, zero direct anon/authenticated grants or policies, service-role-only transactional RPC, immutable triggers, compact values, and content hashing remain intact.
 
-## Dedicated database verification
+## Dedicated database migration and audit
 
-Only linked project ref `xduqpomhjdlgmtmmkfed` was changed. Migrations applied with Supabase CLI:
+Only linked project ref `xduqpomhjdlgmtmmkfed` was changed. Remote migration history is synchronized through:
 
 - `202609250001_projection_snapshots.sql`
 - `202609250002_enforce_canonical_snapshot_cutoff.sql`
+- `202609250003_dst_provenance_and_seed_correction.sql`
 
-Remote metadata after apply:
+Migration 003 has explicit preconditions for the known run. It preserved run ID, fetched time, row count, hash, and all 15,821 values; changed its canonical coordinate from the incorrect fixed-UTC value to Week 4's Pacific-local cutoff `2026-09-30T03:00:00Z`; and classified it `reconstructed`. It was not deleted or relabeled exact.
 
-- tables: 2; both `rls=true`, `force_rls=true`
-- constraints: 19 total after the canonical-cutoff constraint
-- indexes: 5 total (`projection_snapshot_runs_pkey`, `projection_snapshot_runs_cutoff_unique`, `projection_snapshot_runs_lookup_idx`, `projection_snapshot_values_pkey`, `projection_snapshot_values_player_idx`)
-- routines: 2 (`ingest_projection_snapshot`, `reject_projection_snapshot_mutation`), both security invoker
-- trigger events: 4 (UPDATE/DELETE on each table)
-- direct policies: 0
-- anon/authenticated/PUBLIC table grants: 0
-- anon REST table probe: HTTP 401, zero visible rows; anon RPC probe: HTTP 404
+Remote enforcement probes after migration:
 
-## Seed and idempotency proof
+- anon direct table read: HTTP 401 (no SELECT grant)
+- anon RPC probe: HTTP 404 (no executable matching RPC)
+- service-role direct UPDATE: HTTP 400, `projection snapshots are immutable`
+- deliberately early `exact` RPC: HTTP 400 / PostgreSQL check violation, transaction rolled back
+- migration dry-run after apply: remote database up to date
+- real GET through the Function handler with scheduler secret unset: HTTP 200, Week 1 reconstructed run, all 18,695 rows
 
-Local backend script fetched real Sleeper 2026 Weeks 4–18 and called the dedicated database RPC twice for canonical cutoff `2026-09-29T23:00:00Z`:
+## Remote reconstructed evidence
 
-- first call: `created=true`
-- retry: `created=false`
-- snapshot: `7a6cfceb-c1f8-4eb5-b64b-d84db2ac38e8`
-- stored/declared rows: `15821 / 15821`
-- status: `completed`
-- content hash: `ed711697f3b1e00a5fd81b09355b58ba566cccbd88a54d4cf4eb762226b3759d`
+Sleeper currently exposes mutable projection routes for Weeks 1–18. Those routes support useful post-hoc evidence but cannot establish what projections were at the historical cutoff, so all backfills are explicitly reconstructed. Stored metadata and independently counted child values:
 
-`fetched_at` records the actual early prospective fetch; it is not represented as occurring at the future canonical cutoff.
+- Week 1 — ID `1daa2aa0-2487-41fc-a836-32fdad86ae69`; cutoff `2026-09-09T03:00:00Z`; fetched `2026-09-25T07:57:26.248Z`; provenance `reconstructed`; rows/actual values `18,695 / 18,695`; hash `2ea5e90ff24e48bb744b3e84661baa17882705c6ee2775f37ef97cb70fc9050d`
+- Week 2 — ID `168015a7-397d-4c5e-91b7-baba95182d27`; cutoff `2026-09-16T03:00:00Z`; fetched `2026-09-25T07:57:31.224Z`; provenance `reconstructed`; rows/actual values `17,847 / 17,847`; hash `c6613f6cb9a739f18563aa40a7a143c22e99edadc892e17c36fdd10333ae079a`
+- Week 3 (late current week) — ID `24ed736c-93a0-4e69-8e2e-ccbd4b445576`; cutoff `2026-09-23T03:00:00Z`; fetched `2026-09-25T07:57:35.629Z`; provenance `reconstructed`; rows/actual values `16,867 / 16,867`; hash `0aea608679cb52d12b4bc95fb7f3966e33d2f61012e44a364230ad23aa01c1b9`
+- Week 4 early run (audited correction) — ID `7a6cfceb-c1f8-4eb5-b64b-d84db2ac38e8`; cutoff `2026-09-30T03:00:00Z`; fetched `2026-09-25T05:34:01.333Z`; provenance `reconstructed`; rows/actual values `15,821 / 15,821`; hash `ed711697f3b1e00a5fd81b09355b58ba566cccbd88a54d4cf4eb762226b3759d`
 
-## Verification commands
+An immediate Week 3 retry returned the same ID/count/hash with `created: false`, proving the revised RPC's identical-content idempotency. There are no historical exact rows; that gap is truthful and can only be filled prospectively at future approved cutoffs.
 
-All were green after the API test exclusion fix:
+## Verification
 
-```bash
-npm test                          # 18 files / 111 tests
-npm --prefix api test             # 12 tests
-npm run lint                      # 0 warnings / 0 errors
-npm run typecheck                 # passed
-npm run build                     # passed
-node --check api/_shared/projectionSnapshots.js
-node --check api/_shared/supabaseProjectionRepository.js
-git diff --check                  # passed
+Green after the correction:
+
+```text
+npm --prefix api test     20/20
+npm test                  18 files / 111 tests
+npm run lint              0 warnings / 0 errors
+npm run typecheck         passed
+npm run build             passed
+node --check (all changed API scripts) passed
+git diff --check          passed
+practical diff secret scan passed
+supabase db push --dry-run --linked: remote database up to date
 ```
 
-The initial root test attempt discovered that Vitest was collecting Node `node:test` files under `api/`; the root test scripts now exclude `api/**`, while CI has a separate managed-Functions test step.
+## Remaining owner-controlled setup
 
-## Remaining owner-controlled setup (no production changes made)
-
-Before scheduled capture can run:
-
-1. Deploy/merge through the normal approved Azure SWA process.
-2. Add SWA backend settings: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and a random 32+ character `PROJECTION_SNAPSHOT_SCHEDULER_SECRET`.
-3. Add GitHub secrets: `PROJECTION_SNAPSHOT_API_URL` and the matching `PROJECTION_SNAPSHOT_SCHEDULER_SECRET`.
-4. Add GitHub variables: `PROJECTION_SEASON` and `PROJECTION_FIRST_DECISION_WEEK_CUTOFF_AT`.
-5. After deployment, John may manually dispatch once if desired; this worker did not run `workflow_dispatch` or change Azure settings.
-
-Exact setup and local seed syntax are in `docs/PROJECTION-SNAPSHOTS.md`.
-
-## Risks / review focus
-
-- The SWA route is not live until approved deployment and app-setting configuration.
-- The GitHub scheduler intentionally fails on missing season configuration and skips scheduled dates outside Weeks 1–18.
-- GET paginates database values in 1,000-row chunks and verifies the returned count against immutable provenance.
-- Snapshot point values are bounded to `[-1000, 1000]`; only finite numeric JSON values are retained.
-- A canonical cutoff is strictly Tuesday 23:00:00 UTC in both API and database. Supporting another global cutoff requires a deliberate schema/API version change rather than timestamp drift.
+No Azure setting, GitHub secret/variable, workflow dispatch, production schedule, merge, or production deployment was performed. After review/merge, the owner must configure backend settings/secrets documented in `docs/PROJECTION-SNAPSHOTS.md`, set `PROJECTION_FIRST_DECISION_WEEK_LOCAL_DATE` (for 2026: `2026-09-08`), and activate/deploy through the normal approved process. The first genuinely prospective capture inside the live window can then be stored as exact.

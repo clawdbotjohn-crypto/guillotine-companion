@@ -152,7 +152,9 @@ Initial deterministic policy:
 
 V1 uses one documented canonical weekly cutoff. The scheduler stores the actual fetch time and never pretends the data came from a different moment.
 
-V1 canonical cutoff: Tuesday at 23:00 UTC before the normal Wednesday waiver run. The API and database enforce this instant so alternate timestamp spellings cannot create duplicate logical cutoffs. If supported leagues process claims at materially different times, add another explicitly versioned shared global cutoff rather than per-league copies.
+V1 canonical cutoff: Tuesday at **8:00 PM `America/Los_Angeles`** before the normal Wednesday waiver run. This is timezone/DST-aware (03:00 UTC during PDT and 04:00 UTC during PST), never a fixed UTC hour. The scheduler runs at both possible UTC hours and a Pacific-time runtime guard accepts only the first 15 minutes after the cutoff. The API and database enforce the same local instant. If supported leagues process claims at materially different times, add another explicitly versioned shared global cutoff rather than per-league copies.
+
+Every stored run has immutable explicit provenance. `exact` is accepted only for an authenticated capture that starts and finishes from the canonical cutoff through 15 minutes after it. Early, late, manual post-hoc, fallback, and historical captures are `reconstructed`; matching a requested decision week does not upgrade provenance.
 
 Every displayed historical baseline is labeled:
 
@@ -173,6 +175,7 @@ projection_snapshot_runs (
   content_hash text,
   row_count integer not null default 0,
   error_message text,
+  provenance text not null check (provenance in ('exact', 'reconstructed')),
   created_at timestamptz not null default now(),
   unique (source, season, decision_week, canonical_cutoff_at)
 )
@@ -200,7 +203,8 @@ Authenticated ingestion request:
 {
   "season": 2026,
   "decisionWeek": 4,
-  "canonicalCutoffAt": "2026-09-29T23:00:00Z"
+  "canonicalCutoffAt": "2026-09-30T03:00:00Z",
+  "provenance": "exact"
 }
 ```
 
@@ -218,7 +222,7 @@ Returns snapshot metadata plus compact projection rows needed to reproduce ROS v
 - Add authenticated idempotent ingestion endpoint.
 - Add snapshot read endpoint.
 - Add the scheduled GitHub Actions workflow and secret documentation.
-- Seed the first prospective snapshot and verify stored counts/hash.
+- Seed only supported historical/current rows as explicit `reconstructed` evidence; begin `exact` captures prospectively inside the approved window and verify stored counts/hash.
 
 ### PR2 — Evidence and calculation foundation
 

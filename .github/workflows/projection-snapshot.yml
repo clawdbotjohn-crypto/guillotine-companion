@@ -2,7 +2,9 @@ name: Capture projection snapshot
 
 on:
   schedule:
-    - cron: '0 23 * * 2'
+    # GitHub cron is UTC. Run at both possible UTC hours, then accept only
+    # Tuesday 8:00-8:15 PM America/Los_Angeles at runtime (PDT or PST).
+    - cron: '0 3,4 * * 3'
   workflow_dispatch:
     inputs:
       season:
@@ -10,13 +12,21 @@ on:
         required: false
         type: string
       decision_week:
-        description: Decision week 1-18 (required for manual override unless derivable)
-        required: false
+        description: Decision week 1-18 (required for manual capture)
+        required: true
         type: string
       canonical_cutoff_at:
-        description: ISO-8601 cutoff (defaults to latest Tuesday 23:00 UTC)
-        required: false
+        description: Tuesday 8 PM America/Los_Angeles as an offset ISO timestamp
+        required: true
         type: string
+      provenance:
+        description: Manual captures default to reconstructed; exact still requires the live 15-minute window
+        required: true
+        default: reconstructed
+        type: choice
+        options:
+          - reconstructed
+          - exact
 
 permissions:
   contents: read
@@ -31,33 +41,60 @@ jobs:
           INPUT_SEASON: ${{ inputs.season }}
           INPUT_DECISION_WEEK: ${{ inputs.decision_week }}
           INPUT_CUTOFF: ${{ inputs.canonical_cutoff_at }}
+          INPUT_PROVENANCE: ${{ inputs.provenance }}
           CONFIG_SEASON: ${{ vars.PROJECTION_SEASON }}
-          FIRST_CUTOFF: ${{ vars.PROJECTION_FIRST_DECISION_WEEK_CUTOFF_AT }}
+          FIRST_LOCAL_DATE: ${{ vars.PROJECTION_FIRST_DECISION_WEEK_LOCAL_DATE }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
           node <<'NODE'
           const fs = require('node:fs');
+          const out = (line) => fs.appendFileSync(process.env.GITHUB_OUTPUT, `${line}\n`);
           const now = new Date();
           const season = process.env.INPUT_SEASON || process.env.CONFIG_SEASON;
-          const scheduledCutoff = new Date(now);
-          scheduledCutoff.setUTCDate(now.getUTCDate() - ((now.getUTCDay() - 2 + 7) % 7));
-          scheduledCutoff.setUTCHours(23, 0, 0, 0);
-          if (scheduledCutoff > now) scheduledCutoff.setUTCDate(scheduledCutoff.getUTCDate() - 7);
-          const cutoff = process.env.INPUT_CUTOFF || scheduledCutoff.toISOString();
-          const first = new Date(process.env.FIRST_CUTOFF || 'invalid');
-          const decisionWeek = process.env.INPUT_DECISION_WEEK ||
-            (Number.isFinite(first.getTime()) ? String(Math.floor((new Date(cutoff) - first) / 604800000) + 1) : '');
+          let decisionWeek = process.env.INPUT_DECISION_WEEK;
+          let cutoff = process.env.INPUT_CUTOFF;
+          let provenance = process.env.INPUT_PROVENANCE || 'reconstructed';
+
+          if (process.env.EVENT_NAME === 'schedule') {
+            const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+              timeZone: 'America/Los_Angeles', hourCycle: 'h23', weekday: 'short',
+              year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+            }).formatToParts(now).filter((p) => p.type !== 'literal').map((p) => [p.type, p.value]));
+            const inWindow = parts.weekday === 'Tue' && parts.hour === '20' && Number(parts.minute) <= 15;
+            if (!inWindow) {
+              console.log('Skipping duplicate/delayed UTC cron: not in Tuesday 8:00-8:15 PM America/Los_Angeles window');
+              out('capture=false');
+              process.exit(0);
+            }
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(process.env.FIRST_LOCAL_DATE || '')) {
+              throw new Error('Set PROJECTION_FIRST_DECISION_WEEK_LOCAL_DATE (YYYY-MM-DD)');
+            }
+            const localDate = `${parts.year}-${parts.month}-${parts.day}`;
+            const dayNumber = (text) => {
+              const [year, month, day] = text.split('-').map(Number);
+              return Date.UTC(year, month - 1, day) / 86400000;
+            };
+            decisionWeek = String(Math.floor((dayNumber(localDate) - dayNumber(process.env.FIRST_LOCAL_DATE)) / 7) + 1);
+            cutoff = new Date(now.getTime() - Number(parts.minute) * 60000 - Number(parts.second) * 1000 - now.getUTCMilliseconds()).toISOString();
+            provenance = 'exact';
+          }
+
           if (!/^\d{4}$/.test(season || '')) throw new Error('Set PROJECTION_SEASON or provide season');
-          if (!/^\d+$/.test(decisionWeek)) throw new Error('Set PROJECTION_FIRST_DECISION_WEEK_CUTOFF_AT or provide decision_week');
+          if (!/^\d+$/.test(decisionWeek || '')) throw new Error('Provide decision_week');
           if (Number(decisionWeek) < 1 || Number(decisionWeek) > 18) {
             if (process.env.EVENT_NAME === 'schedule') {
-              fs.appendFileSync(process.env.GITHUB_OUTPUT, 'capture=false\n');
+              out('capture=false');
               process.exit(0);
             }
             throw new Error('Decision week is outside 1-18');
           }
           if (!Number.isFinite(new Date(cutoff).getTime())) throw new Error('canonical cutoff is invalid');
-          fs.appendFileSync(process.env.GITHUB_OUTPUT, `capture=true\nseason=${season}\nweek=${decisionWeek}\ncutoff=${new Date(cutoff).toISOString()}\n`);
+          if (!['exact', 'reconstructed'].includes(provenance)) throw new Error('provenance is invalid');
+          out('capture=true');
+          out(`season=${season}`);
+          out(`week=${decisionWeek}`);
+          out(`cutoff=${new Date(cutoff).toISOString()}`);
+          out(`provenance=${provenance}`);
           NODE
 
       - name: Invoke idempotent ingestion endpoint
@@ -68,9 +105,10 @@ jobs:
           SEASON: ${{ steps.coordinates.outputs.season }}
           DECISION_WEEK: ${{ steps.coordinates.outputs.week }}
           CUTOFF: ${{ steps.coordinates.outputs.cutoff }}
+          PROVENANCE: ${{ steps.coordinates.outputs.provenance }}
         run: |
           test -n "$API_URL" && test -n "$SCHEDULER_SECRET"
-          payload=$(node -e 'process.stdout.write(JSON.stringify({season:Number(process.env.SEASON),decisionWeek:Number(process.env.DECISION_WEEK),canonicalCutoffAt:process.env.CUTOFF}))')
+          payload=$(node -e 'process.stdout.write(JSON.stringify({season:Number(process.env.SEASON),decisionWeek:Number(process.env.DECISION_WEEK),canonicalCutoffAt:process.env.CUTOFF,provenance:process.env.PROVENANCE}))')
           curl --fail-with-body --silent --show-error \
             --request POST "$API_URL" \
             --header "Authorization: Bearer $SCHEDULER_SECRET" \

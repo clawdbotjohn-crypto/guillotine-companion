@@ -3,6 +3,9 @@ const crypto = require('node:crypto');
 const SOURCE = 'sleeper';
 const ENDPOINT_TEMPLATE = 'https://api.sleeper.app/v1/projections/nfl/regular/{season}/{week}';
 const MAX_WEEK = 18;
+const CAPTURE_TIME_ZONE = 'America/Los_Angeles';
+const EXACT_CAPTURE_WINDOW_MS = 15 * 60 * 1000;
+const PROVENANCE = new Set(['exact', 'reconstructed']);
 const POINT_FIELDS = [
   ['pts_std', 'pts_std'],
   ['pts_half_ppr', 'pts_half_ppr'],
@@ -50,27 +53,81 @@ function parseIsoTimestamp(value, name) {
   return instant.toISOString();
 }
 
+function zonedParts(instant, timeZone = CAPTURE_TIME_ZONE) {
+  const values = {};
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone, hourCycle: 'h23', weekday: 'short', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  });
+  for (const part of formatter.formatToParts(instant)) {
+    if (part.type !== 'literal') values[part.type] = part.value;
+  }
+  return values;
+}
+
+function isCanonicalCutoff(instant) {
+  const date = instant instanceof Date ? instant : new Date(instant);
+  if (!Number.isFinite(date.getTime()) || date.getUTCMilliseconds() !== 0) return false;
+  const parts = zonedParts(date);
+  return parts.weekday === 'Tue' && parts.hour === '20' && parts.minute === '00' && parts.second === '00';
+}
+
+// Converts an unambiguous local 8 PM date to an instant without assuming a fixed UTC offset.
+function canonicalCutoffForLocalDate(localDate) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(localDate || '');
+  if (!match) throw new Error('local cutoff date must be YYYY-MM-DD');
+  const desired = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 20, 0, 0);
+  let candidate = desired;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const parts = zonedParts(new Date(candidate));
+    const represented = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), Number(parts.hour), Number(parts.minute), Number(parts.second));
+    candidate += desired - represented;
+  }
+  const result = new Date(candidate);
+  if (!isCanonicalCutoff(result)) throw new Error('local cutoff date is not a Tuesday');
+  return result.toISOString();
+}
+
 function parsePostBody(rawBody) {
   let body = rawBody;
   if (typeof body === 'string') {
     try { body = JSON.parse(body); } catch { throw new HttpError(400, 'body must be valid JSON'); }
   }
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw new HttpError(400, 'body must be a JSON object');
-  const allowed = new Set(['season', 'decisionWeek', 'canonicalCutoffAt']);
+  const allowed = new Set(['season', 'decisionWeek', 'canonicalCutoffAt', 'provenance']);
   if (Object.keys(body).some((key) => !allowed.has(key))) throw new HttpError(400, 'body contains unknown fields');
-  if (!Object.hasOwn(body, 'season') || !Object.hasOwn(body, 'decisionWeek') || !Object.hasOwn(body, 'canonicalCutoffAt')) {
-    throw new HttpError(400, 'season, decisionWeek, and canonicalCutoffAt are required');
+  if (!Object.hasOwn(body, 'season') || !Object.hasOwn(body, 'decisionWeek') || !Object.hasOwn(body, 'canonicalCutoffAt') || !Object.hasOwn(body, 'provenance')) {
+    throw new HttpError(400, 'season, decisionWeek, canonicalCutoffAt, and provenance are required');
   }
   const canonicalCutoffAt = parseIsoTimestamp(body.canonicalCutoffAt, 'canonicalCutoffAt');
-  const cutoff = new Date(canonicalCutoffAt);
-  if (cutoff.getUTCDay() !== 2 || cutoff.getUTCHours() !== 23 || cutoff.getUTCMinutes() !== 0 || cutoff.getUTCSeconds() !== 0 || cutoff.getUTCMilliseconds() !== 0) {
-    throw new HttpError(400, 'canonicalCutoffAt must be Tuesday at exactly 23:00:00 UTC');
+  if (!isCanonicalCutoff(new Date(canonicalCutoffAt))) {
+    throw new HttpError(400, 'canonicalCutoffAt must be Tuesday at exactly 8:00 PM America/Los_Angeles');
   }
+  if (!PROVENANCE.has(body.provenance)) throw new HttpError(400, 'provenance must be exact or reconstructed');
   return {
     season: parseInteger(body.season, 'season', 2000, 2100),
     decisionWeek: parseInteger(body.decisionWeek, 'decisionWeek', 1, MAX_WEEK),
     canonicalCutoffAt,
+    provenance: body.provenance,
   };
+}
+
+function validateCaptureTiming({ season, decisionWeek, canonicalCutoffAt, provenance }, capturedAt, firstDecisionWeekLocalDate) {
+  if (provenance !== 'exact') return;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(firstDecisionWeekLocalDate || '')) {
+    throw new HttpError(503, 'exact capture is unavailable until the season calendar is configured');
+  }
+  const [firstYear, firstMonth, firstDay] = firstDecisionWeekLocalDate.split('-').map(Number);
+  if (firstYear !== season) throw new HttpError(409, 'exact capture season does not match the configured season calendar');
+  const expectedDay = Date.UTC(firstYear, firstMonth - 1, firstDay) + (decisionWeek - 1) * 7 * 86400000;
+  const parts = zonedParts(new Date(canonicalCutoffAt));
+  const actualDay = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day));
+  if (actualDay !== expectedDay) throw new HttpError(409, 'exact capture cutoff does not match the configured decision-week calendar');
+  const cutoffMs = new Date(canonicalCutoffAt).getTime();
+  const capturedMs = capturedAt.getTime();
+  if (capturedMs < cutoffMs || capturedMs > cutoffMs + EXACT_CAPTURE_WINDOW_MS) {
+    throw new HttpError(409, 'exact capture is allowed only from the canonical cutoff through 15 minutes after it');
+  }
 }
 
 function parseGetQuery(query = {}) {
@@ -94,9 +151,7 @@ function finitePoint(value) {
 }
 
 function compactProjectionPayload(payload, projectionWeek) {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-    throw new Error(`Sleeper week ${projectionWeek} returned an invalid payload`);
-  }
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error(`Sleeper week ${projectionWeek} returned an invalid payload`);
   const rows = [];
   for (const [rawPlayerId, projection] of Object.entries(payload)) {
     const playerId = rawPlayerId.trim();
@@ -105,12 +160,8 @@ function compactProjectionPayload(payload, projectionWeek) {
     let populated = false;
     for (const [sourceField, targetField] of POINT_FIELDS) {
       const point = finitePoint(projection[sourceField]);
-      if (point !== null) {
-        row[targetField] = point;
-        populated = true;
-      } else {
-        row[targetField] = null;
-      }
+      row[targetField] = point;
+      if (point !== null) populated = true;
     }
     if (populated) rows.push(row);
   }
@@ -149,34 +200,25 @@ function getHeader(headers = {}, name) {
   return key ? headers[key] : undefined;
 }
 
-function createProjectionSnapshotService({ repository, fetchImpl = fetch, schedulerSecret, now = () => new Date() }) {
+function createProjectionSnapshotService({ repository, fetchImpl = fetch, schedulerSecret, firstDecisionWeekLocalDate, now = () => new Date() }) {
   return {
     async post(req) {
-      if (!isAuthorized(getHeader(req.headers, 'authorization'), schedulerSecret)) {
-        return jsonResponse(401, { error: 'Unauthorized' }, { 'WWW-Authenticate': 'Bearer' });
-      }
+      if (!isAuthorized(getHeader(req.headers, 'authorization'), schedulerSecret)) return jsonResponse(401, { error: 'Unauthorized' }, { 'WWW-Authenticate': 'Bearer' });
       try {
         const input = parsePostBody(req.body);
+        const startedAt = now();
+        validateCaptureTiming(input, startedAt, firstDecisionWeekLocalDate);
         const rows = await fetchRemainingProjections({ fetchImpl, ...input });
+        const fetchedAt = now();
+        validateCaptureTiming(input, fetchedAt, firstDecisionWeekLocalDate);
         const contentHash = hashRows(rows);
-        const saved = await repository.ingest({
-          source: SOURCE,
-          endpointTemplate: ENDPOINT_TEMPLATE,
-          fetchedAt: now().toISOString(),
-          contentHash,
-          rows,
-          ...input,
-        });
+        const saved = await repository.ingest({ source: SOURCE, endpointTemplate: ENDPOINT_TEMPLATE, fetchedAt: fetchedAt.toISOString(), contentHash, rows, ...input });
         return jsonResponse(saved.created ? 201 : 200, {
-          snapshotId: saved.snapshotId,
-          status: saved.status,
-          created: saved.created,
-          fetchedWeeks: { from: input.decisionWeek, through: MAX_WEEK },
-          rowCount: saved.rowCount,
-          contentHash: saved.contentHash || contentHash,
+          snapshotId: saved.snapshotId, status: saved.status, created: saved.created, provenance: saved.provenance || input.provenance,
+          fetchedWeeks: { from: input.decisionWeek, through: MAX_WEEK }, rowCount: saved.rowCount, contentHash: saved.contentHash || contentHash,
         });
       } catch (error) {
-        const status = error instanceof HttpError ? error.status : 502;
+        const status = error instanceof HttpError ? error.status : error && error.code === 'SNAPSHOT_CONFLICT' ? 409 : 502;
         return jsonResponse(status, { error: error instanceof Error ? error.message : 'Snapshot ingestion failed' });
       }
     },
@@ -186,23 +228,17 @@ function createProjectionSnapshotService({ repository, fetchImpl = fetch, schedu
         const input = parseGetQuery(req.query);
         const snapshot = await repository.findLatest(input);
         if (!snapshot) return jsonResponse(404, { error: 'No completed snapshot is available at or before the requested decision week' });
+        const matchesRequestedDecisionWeek = snapshot.decisionWeek === input.decisionWeek;
+        const effectiveKind = matchesRequestedDecisionWeek ? snapshot.provenance : 'reconstructed';
         return jsonResponse(200, {
           snapshot: {
-            id: snapshot.id,
-            source: snapshot.source,
-            season: snapshot.season,
-            decisionWeek: snapshot.decisionWeek,
-            canonicalCutoffAt: snapshot.canonicalCutoffAt,
-            fetchedAt: snapshot.fetchedAt,
-            endpointTemplate: snapshot.endpointTemplate,
-            rowCount: snapshot.rowCount,
-            contentHash: snapshot.contentHash,
+            id: snapshot.id, source: snapshot.source, season: snapshot.season, decisionWeek: snapshot.decisionWeek,
+            canonicalCutoffAt: snapshot.canonicalCutoffAt, fetchedAt: snapshot.fetchedAt, endpointTemplate: snapshot.endpointTemplate,
+            rowCount: snapshot.rowCount, contentHash: snapshot.contentHash, provenance: snapshot.provenance,
           },
           provenance: {
-            kind: snapshot.decisionWeek === input.decisionWeek ? 'exact' : 'reconstructed',
-            exact: snapshot.decisionWeek === input.decisionWeek,
-            requestedDecisionWeek: input.decisionWeek,
-            snapshotDecisionWeek: snapshot.decisionWeek,
+            kind: effectiveKind, exact: effectiveKind === 'exact', captureKind: snapshot.provenance,
+            matchesRequestedDecisionWeek, requestedDecisionWeek: input.decisionWeek, snapshotDecisionWeek: snapshot.decisionWeek,
           },
           rows: snapshot.rows,
         });
@@ -215,14 +251,7 @@ function createProjectionSnapshotService({ repository, fetchImpl = fetch, schedu
 }
 
 module.exports = {
-  ENDPOINT_TEMPLATE,
-  HttpError,
-  canonicalizeRows,
-  compactProjectionPayload,
-  createProjectionSnapshotService,
-  fetchRemainingProjections,
-  hashRows,
-  isAuthorized,
-  parseGetQuery,
-  parsePostBody,
+  CAPTURE_TIME_ZONE, ENDPOINT_TEMPLATE, EXACT_CAPTURE_WINDOW_MS, HttpError, canonicalCutoffForLocalDate, canonicalizeRows,
+  compactProjectionPayload, createProjectionSnapshotService, fetchRemainingProjections, hashRows, isAuthorized,
+  isCanonicalCutoff, parseGetQuery, parsePostBody, validateCaptureTiming, zonedParts,
 };
