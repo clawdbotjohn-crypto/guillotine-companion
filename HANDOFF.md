@@ -19,7 +19,7 @@ Only linked project ref `xduqpomhjdlgmtmmkfed` was changed. Remote migration his
 - `202609250002_enforce_canonical_snapshot_cutoff.sql`
 - `202609250003_dst_provenance_and_seed_correction.sql`
 
-Migration 003 has explicit preconditions for the known run. It preserved run ID, fetched time, row count, hash, and all 15,821 values; changed its canonical coordinate from the incorrect fixed-UTC value to Week 4's Pacific-local cutoff `2026-09-30T03:00:00Z`; and classified it `reconstructed`. It was not deleted or relabeled exact.
+Migration 003 has explicit preconditions for the known run. Its audit correction now safely no-ops when that production-only ID is absent, so migrations 001–003 replay on clean, preview, and DR databases; if the ID exists, every audited metadata field must match or the migration raises before mutation. Trigger disable/update/re-enable stays inside that conditional transaction block. On the linked database it preserved run ID, fetched time, row count, hash, and all 15,821 values; changed only its canonical coordinate from the incorrect fixed-UTC value to Week 4's Pacific-local cutoff `2026-09-30T03:00:00Z`; and classified it `reconstructed`. It was not deleted or relabeled exact.
 
 Remote enforcement probes after migration:
 
@@ -46,7 +46,7 @@ An immediate Week 3 retry returned the same ID/count/hash with `created: false`,
 Green after the correction:
 
 ```text
-npm --prefix api test     20/20
+npm --prefix api test     21/21
 npm test                  18 files / 111 tests
 npm run lint              0 warnings / 0 errors
 npm run typecheck         passed

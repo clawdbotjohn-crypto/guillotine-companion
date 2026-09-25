@@ -22,32 +22,45 @@ alter table public.projection_snapshot_runs
       )
     );
 
--- Guard the known correction so this migration cannot silently rewrite an
--- unexpected database. Only the bad canonical coordinate changes.
+-- Guard the known correction so clean, preview, and DR databases without the
+-- production seed replay safely. If the ID is present, every audited metadata
+-- field must match before only the bad canonical coordinate changes.
 do $$
 begin
-  if not exists (
+  if exists (
     select 1
     from public.projection_snapshot_runs
     where id = '7a6cfceb-c1f8-4eb5-b64b-d84db2ac38e8'::uuid
-      and season = 2026
-      and decision_week = 4
-      and canonical_cutoff_at = '2026-09-29T23:00:00Z'::timestamptz
-      and fetched_at = '2026-09-25T05:34:01.333Z'::timestamptz
-      and row_count = 15821
-      and content_hash = 'ed711697f3b1e00a5fd81b09355b58ba566cccbd88a54d4cf4eb762226b3759d'
-      and provenance = 'reconstructed'
   ) then
-    raise exception 'known Week 4 seed does not match audited correction preconditions';
+    if not exists (
+      select 1
+      from public.projection_snapshot_runs
+      where id = '7a6cfceb-c1f8-4eb5-b64b-d84db2ac38e8'::uuid
+        and source = 'sleeper'
+        and season = 2026
+        and decision_week = 4
+        and canonical_cutoff_at = '2026-09-29T23:00:00Z'::timestamptz
+        and fetched_at = '2026-09-25T05:34:01.333Z'::timestamptz
+        and endpoint_template = 'https://api.sleeper.app/v1/projections/nfl/regular/{season}/{week}'
+        and status = 'completed'
+        and error_message is null
+        and row_count = 15821
+        and content_hash = 'ed711697f3b1e00a5fd81b09355b58ba566cccbd88a54d4cf4eb762226b3759d'
+        and provenance = 'reconstructed'
+    ) then
+      raise exception 'known Week 4 seed does not match audited correction preconditions';
+    end if;
+
+    -- These DDL and DML statements share the migration transaction. Any error
+    -- rolls back the trigger change, so immutability cannot remain disabled.
+    alter table public.projection_snapshot_runs disable trigger projection_snapshot_runs_immutable;
+    update public.projection_snapshot_runs
+    set canonical_cutoff_at = '2026-09-30T03:00:00Z'::timestamptz
+    where id = '7a6cfceb-c1f8-4eb5-b64b-d84db2ac38e8'::uuid;
+    alter table public.projection_snapshot_runs enable trigger projection_snapshot_runs_immutable;
   end if;
 end;
 $$;
-
-alter table public.projection_snapshot_runs disable trigger projection_snapshot_runs_immutable;
-update public.projection_snapshot_runs
-set canonical_cutoff_at = '2026-09-30T03:00:00Z'::timestamptz
-where id = '7a6cfceb-c1f8-4eb5-b64b-d84db2ac38e8'::uuid;
-alter table public.projection_snapshot_runs enable trigger projection_snapshot_runs_immutable;
 
 alter table public.projection_snapshot_runs
   add constraint projection_snapshot_runs_canonical_cutoff_check

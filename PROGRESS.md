@@ -4,7 +4,7 @@
 
 - [x] Restored Tuesday **8:00 PM `America/Los_Angeles` DST-aware** cutoff across workflow runtime guard, API, DB constraint, docs, seed tooling, and PDT/PST tests.
 - [x] Added immutable explicit provenance (`exact` / `reconstructed`). GET trusts stored provenance and only downgrades older fallback evidence; same-week equality cannot manufacture exactness.
-- [x] Audited existing Week 4 row (`7a6cfceb-c1f8-4eb5-b64b-d84db2ac38e8`) through migration 003: canonical cutoff corrected to `2026-09-30T03:00:00Z`, preserved fetch/hash/15,821 values, classified reconstructed.
+- [x] Audited existing Week 4 row (`7a6cfceb-c1f8-4eb5-b64b-d84db2ac38e8`) through migration 003: canonical cutoff corrected to `2026-09-30T03:00:00Z`, preserved fetch/hash/15,821 values, classified reconstructed. Reviewer replay fix makes the correction no-op when this production-only ID is absent, while a present row with any audited metadata mismatch still raises before mutation.
 - [x] Seeded Weeks 1–2 and late current Week 3 from Sleeper's currently available mutable routes as explicit **reconstructed** evidence. No historical row is labeled exact.
 - [x] Credential-free GET initializes without `PROJECTION_SNAPSHOT_SCHEDULER_SECRET`; POST alone requires it.
 - [x] Re-ran remote DB guards/counts/migrations, focused API tests, full tests, lint, typecheck, build, diff check, and secret scan. No merge, production setting, scheduler activation, dispatch, or deployment performed.
