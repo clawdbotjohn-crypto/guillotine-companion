@@ -31,7 +31,7 @@ Therefore:
 - Future weeks captured by the system are **exact snapshots** of those same live projection inputs at the approved cutoff.
 - There are currently no historical `exact` rows. Exact evidence begins only with the first successful prospective Tuesday capture.
 
-The database stores one global projection snapshot per canonical cutoff. It does **not** copy projections per league.
+The database stores up to one global projection snapshot per provenance kind at each canonical cutoff. It does **not** copy projections per league.
 
 ## 3. Architecture and responsibility split
 
