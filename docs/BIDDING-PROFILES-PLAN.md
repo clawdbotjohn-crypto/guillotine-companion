@@ -21,12 +21,15 @@ V1 does not infer roster needs, positional weakness, player ownership, eliminati
 
 ## 2. Why persistent storage is required
 
-Sleeper exposes old weekly projection routes, but those payloads are mutable. Past rows can be changed after the waiver window. The app's Sleeper rest-of-season ranking also sums every then-future weekly projection, so reconstructing an old baseline requires all future-week payloads as they existed before that waiver run.
+Sleeper exposes weekly projection routes, but the route's `week` is an NFL matchup week, not a Tuesday snapshot identifier. Sleeper provides no `as-of` parameter, immutable revision ID, or historical-revision contract for those routes. A live request returns Sleeper's current forecast for that matchup week; an old week in the URL does not mean the response is the forecast that existed at an old waiver cutoff.
+
+The app's Sleeper rest-of-season ranking sums every then-future matchup-week payload. Reproducing an old bidding baseline therefore requires preserving all of those live payloads once, at the canonical Tuesday cutoff, as one shared snapshot.
 
 Therefore:
 
-- Existing weeks before snapshot collection are **reconstructed estimates** using currently available Sleeper data.
-- Future weeks captured by the system are **exact snapshots** of the projection inputs used at the cutoff.
+- Existing weeks before snapshot collection are **reconstructed estimates** using whatever current forecasts Sleeper serves when fetched.
+- Future weeks captured by the system are **exact snapshots** of those same live projection inputs at the approved cutoff.
+- There are currently no historical `exact` rows. Exact evidence begins only with the first successful prospective Tuesday capture.
 
 The database stores one global projection snapshot per canonical cutoff. It does **not** copy projections per league.
 
@@ -159,7 +162,9 @@ V1 canonical cutoff: Tuesday at **8:00 PM `America/Los_Angeles`** before the nor
 
 Every stored run has immutable explicit provenance and both ends of its capture interval. `exact` is accepted only for an authenticated capture whose recorded start is at or after the canonical cutoff and whose recorded finish is no later than 15 minutes after it. Early, late, manual post-hoc, fallback, and historical captures are `reconstructed`; matching a requested decision week does not upgrade provenance. Both provenance kinds must match the immutable DB-owned season/week calendar.
 
-One reconstructed and one exact row may coexist at a canonical decision coordinate; retrieval deterministically prefers exact for that same decision week. Older-week fallback never crosses seasons and is effectively reconstructed even if the stored older capture was exact. API provenance keeps decision week distinct from the preceding playing week (`decisionWeek - 1`), so the waiver after playing Week 3 is decision Week 4.
+One reconstructed and one exact row may coexist at a canonical decision coordinate; retrieval deterministically prefers exact for that same decision week. Older-week fallback never crosses seasons and is effectively reconstructed even if the stored older capture was exact. API provenance keeps decision week distinct from the preceding playing week (`decisionWeek - 1`). Sleeper route `week` still means the matchup week being forecast; it is not a Tuesday capture or revision number.
+
+The too-early reconstructed decision-Week-4 seed was deliberately deleted by guarded migration 006, leaving the exact Week 4 coordinate free for the first prospective cutoff capture. The retained historical database evidence is reconstructed Weeks 1–3 only; no exact historical row exists.
 
 Every displayed historical baseline is labeled:
 
