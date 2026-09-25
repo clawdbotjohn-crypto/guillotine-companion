@@ -1,0 +1,78 @@
+name: Capture projection snapshot
+
+on:
+  schedule:
+    - cron: '0 23 * * 2'
+  workflow_dispatch:
+    inputs:
+      season:
+        description: NFL season (defaults to repository variable)
+        required: false
+        type: string
+      decision_week:
+        description: Decision week 1-18 (required for manual override unless derivable)
+        required: false
+        type: string
+      canonical_cutoff_at:
+        description: ISO-8601 cutoff (defaults to latest Tuesday 23:00 UTC)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve and validate snapshot coordinates
+        id: coordinates
+        env:
+          INPUT_SEASON: ${{ inputs.season }}
+          INPUT_DECISION_WEEK: ${{ inputs.decision_week }}
+          INPUT_CUTOFF: ${{ inputs.canonical_cutoff_at }}
+          CONFIG_SEASON: ${{ vars.PROJECTION_SEASON }}
+          FIRST_CUTOFF: ${{ vars.PROJECTION_FIRST_DECISION_WEEK_CUTOFF_AT }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const now = new Date();
+          const season = process.env.INPUT_SEASON || process.env.CONFIG_SEASON;
+          const scheduledCutoff = new Date(now);
+          scheduledCutoff.setUTCDate(now.getUTCDate() - ((now.getUTCDay() - 2 + 7) % 7));
+          scheduledCutoff.setUTCHours(23, 0, 0, 0);
+          if (scheduledCutoff > now) scheduledCutoff.setUTCDate(scheduledCutoff.getUTCDate() - 7);
+          const cutoff = process.env.INPUT_CUTOFF || scheduledCutoff.toISOString();
+          const first = new Date(process.env.FIRST_CUTOFF || 'invalid');
+          const decisionWeek = process.env.INPUT_DECISION_WEEK ||
+            (Number.isFinite(first.getTime()) ? String(Math.floor((new Date(cutoff) - first) / 604800000) + 1) : '');
+          if (!/^\d{4}$/.test(season || '')) throw new Error('Set PROJECTION_SEASON or provide season');
+          if (!/^\d+$/.test(decisionWeek)) throw new Error('Set PROJECTION_FIRST_DECISION_WEEK_CUTOFF_AT or provide decision_week');
+          if (Number(decisionWeek) < 1 || Number(decisionWeek) > 18) {
+            if (process.env.EVENT_NAME === 'schedule') {
+              fs.appendFileSync(process.env.GITHUB_OUTPUT, 'capture=false\n');
+              process.exit(0);
+            }
+            throw new Error('Decision week is outside 1-18');
+          }
+          if (!Number.isFinite(new Date(cutoff).getTime())) throw new Error('canonical cutoff is invalid');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `capture=true\nseason=${season}\nweek=${decisionWeek}\ncutoff=${new Date(cutoff).toISOString()}\n`);
+          NODE
+
+      - name: Invoke idempotent ingestion endpoint
+        if: steps.coordinates.outputs.capture == 'true'
+        env:
+          API_URL: ${{ secrets.PROJECTION_SNAPSHOT_API_URL }}
+          SCHEDULER_SECRET: ${{ secrets.PROJECTION_SNAPSHOT_SCHEDULER_SECRET }}
+          SEASON: ${{ steps.coordinates.outputs.season }}
+          DECISION_WEEK: ${{ steps.coordinates.outputs.week }}
+          CUTOFF: ${{ steps.coordinates.outputs.cutoff }}
+        run: |
+          test -n "$API_URL" && test -n "$SCHEDULER_SECRET"
+          payload=$(node -e 'process.stdout.write(JSON.stringify({season:Number(process.env.SEASON),decisionWeek:Number(process.env.DECISION_WEEK),canonicalCutoffAt:process.env.CUTOFF}))')
+          curl --fail-with-body --silent --show-error \
+            --request POST "$API_URL" \
+            --header "Authorization: Bearer $SCHEDULER_SECRET" \
+            --header 'Content-Type: application/json' \
+            --data "$payload"

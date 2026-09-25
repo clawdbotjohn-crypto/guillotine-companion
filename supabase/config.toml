@@ -1,0 +1,8 @@
+# Local Supabase CLI metadata. The linked production ref is kept in ignored .temp files.
+project_id = "guillotine-bidding-work"
+
+[db]
+major_version = 17
+
+[db.migrations]
+enabled = true

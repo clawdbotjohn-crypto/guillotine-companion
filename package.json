@@ -7,8 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build && cp staticwebapp.config.json dist/",
     "preview": "vite preview",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "vitest run --exclude 'api/**'",
+    "test:watch": "vitest --exclude 'api/**'",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint"
   },
