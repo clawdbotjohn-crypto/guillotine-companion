@@ -1,19 +1,19 @@
 # Guillotine Companion — Progress
 
-## ✅ PR #9 review blockers — corrected; awaiting review
+## ✅ PR #9 late integrity findings — corrected; awaiting review
 
-- [x] Restored Tuesday **8:00 PM `America/Los_Angeles` DST-aware** cutoff across workflow runtime guard, API, DB constraint, docs, seed tooling, and PDT/PST tests.
-- [x] Added immutable explicit provenance (`exact` / `reconstructed`). GET trusts stored provenance and only downgrades older fallback evidence; same-week equality cannot manufacture exactness.
-- [x] Audited existing Week 4 row (`7a6cfceb-c1f8-4eb5-b64b-d84db2ac38e8`) through migration 003: canonical cutoff corrected to `2026-09-30T03:00:00Z`, preserved fetch/hash/15,821 values, classified reconstructed. Reviewer replay fix makes the correction no-op when this production-only ID is absent, while a present row with any audited metadata mismatch still raises before mutation.
-- [x] Seeded Weeks 1–2 and late current Week 3 from Sleeper's currently available mutable routes as explicit **reconstructed** evidence. No historical row is labeled exact.
-- [x] Credential-free GET initializes without `PROJECTION_SNAPSHOT_SCHEDULER_SECRET`; POST alone requires it.
-- [x] Re-ran remote DB guards/counts/migrations, focused API tests, full tests, lint, typecheck, build, diff check, and secret scan. No merge, production setting, scheduler activation, dispatch, or deployment performed.
+- [x] Persisted immutable `capture_started_at` alongside `fetched_at`; API passes the actual sampled start, GET/types/docs expose it, and exact DB/API rules validate start >= cutoff, finish >= start, and finish <= cutoff + 15 minutes.
+- [x] Added sequenced-clock acceptance, early-start rejection, and late-finish rejection tests for both PDT and PST. A direct service-role RPC early-start exact claim is rejected remotely.
+- [x] Added forced-RLS/default-deny immutable `projection_season_calendar`, seeded authoritative 2026 Week 1 local Tuesday `2026-09-08`. DB RPC/trigger derive expected coordinates, and API validates the calendar for exact and reconstructed captures.
+- [x] Applied only reviewed migration 004 to verified dedicated ref `xduqpomhjdlgmtmmkfed`. Existing W1–W4 IDs/times/hashes/counts/children/provenance are preserved; reconstructed rows received the only honest historical start backfill (`capture_started_at = fetched_at`).
+- [x] Re-ran remote early-start/wrong-reconstructed-cutoff/default-deny/immutability/credential-free-GET/idempotency/metadata probes plus API/full tests, lint, typecheck, build, syntax, diff, secret scan, and migration dry-run.
+- [x] Documented the reviewed-migration owner process for adding future immutable season calendar rows. No merge, production setting, scheduler activation, workflow dispatch, or production deployment performed.
 
 ## P0 — Bidding Profiles V1 (John, 2026-09-24)
 
 Architecture: `docs/BIDDING-PROFILES-PLAN.md`
 
-- [ ] **PR1: Dedicated projection-snapshot backend (PR #9 open; correction pushed for review)** — Core immutable forced-RLS tables, explicit immutable provenance, DST-aware cutoff/window guards, transactional/idempotent service-role RPC with honest conflicts, managed Function, Sleeper compaction/hash, tests, and operations docs are complete. Dedicated project `xduqpomhjdlgmtmmkfed` has reconstructed Weeks 1–4 with audited metadata/counts; no historical exact evidence is fabricated. Deployment/app settings, merge, scheduler activation, and production deployment remain owner-controlled.
+- [ ] **PR1: Dedicated projection-snapshot backend (PR #9 open; correction pushed for review)** — Core immutable forced-RLS tables, explicit immutable provenance, DST-aware cutoff/window guards, transactional/idempotent service-role RPC with honest conflicts, managed Function, Sleeper compaction/hash, tests, and operations docs are complete. Dedicated project `xduqpomhjdlgmtmmkfed` has reconstructed Weeks 1–4 with audited metadata/counts and complete conservative historical capture intervals; no historical exact evidence is fabricated. Immutable DB-owned season calendar coordinates and start/finish window guards are enforced. Deployment/app settings, merge, scheduler activation, and production deployment remain owner-controlled.
 - [ ] **PR2: Canonical bid evidence and manager profile math** — Expand Sleeper transaction types; classify completed wins and legitimate same-batch losses; reject invalid/unmatched failures; dedupe contingency/drop-path claims; reconstruct pre-bid FAAB; select each manager's top three canonical bids; calculate capped event ratios, geometric multiplier, budget-constrained state, style, and confidence. Add frozen fixtures and boundary/edge tests.
 - [ ] **PR3: Bidding profiles UI** — Show top-three evidence, historical baseline/provenance, constrained marker, multiplier, style, confidence, predicted willingness, and current-FAAB-capped feasible bid. Browser-test on a real Sleeper guillotine league.
 

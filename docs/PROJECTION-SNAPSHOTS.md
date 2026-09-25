@@ -2,13 +2,15 @@
 
 ## API and provenance
 
-`POST /api/projection-snapshots` requires `Authorization: Bearer <scheduler secret>` and an explicit `provenance` of `exact` or `reconstructed`. The bearer value is compared as SHA-256 digests with a constant-time comparison. The function fetches every Sleeper regular-season weekly projection route from `decisionWeek` through Week 18, compacts finite scoring fields, deterministically sorts and hashes the result, and calls one database RPC.
+`POST /api/projection-snapshots` requires `Authorization: Bearer <scheduler secret>` and an explicit `provenance` of `exact` or `reconstructed`. The bearer value is compared as SHA-256 digests with a constant-time comparison. The function validates the requested season/week/cutoff against the configured season calendar, samples `captureStartedAt`, fetches every Sleeper regular-season weekly projection route from `decisionWeek` through Week 18, samples `fetchedAt`, compacts finite scoring fields, deterministically sorts and hashes the result, and calls one database RPC.
 
-The canonical cutoff is Tuesday **8:00 PM `America/Los_Angeles`**. It is 03:00 UTC during PDT and 04:00 UTC during PST. `exact` is accepted only when the authenticated request starts and finishes from the cutoff through 15 minutes afterward. Early, late, fallback, and post-hoc captures must be `reconstructed`; the database independently enforces the cutoff, provenance, and exact-capture window.
+The canonical cutoff is Tuesday **8:00 PM `America/Los_Angeles`**. It is 03:00 UTC during PDT and 04:00 UTC during PST. Calendar-coordinate validation applies to both provenance kinds. `exact` additionally requires the authenticated capture to start at or after the cutoff and finish no later than 15 minutes afterward. Early, late, fallback, and post-hoc captures must be `reconstructed`.
+
+PostgreSQL does not trust the caller's coordinate. The forced-RLS, default-deny `projection_season_calendar` table owns the authoritative Week 1 local Tuesday for each season. The SECURITY INVOKER RPC derives the expected Pacific cutoff from that date plus `(decision_week - 1) * 7 days`; a table trigger independently protects direct inserts. The RPC requires both `p_capture_started_at` and `p_fetched_at`. Exact rows require start >= cutoff, finish >= start, and finish <= cutoff + 15 minutes. Both timestamps, provenance, coordinates, hash, count, and child values are immutable.
 
 The RPC transaction either inserts the completed run and every value or inserts nothing. The uniqueness key `(source, season, decision_week, canonical_cutoff_at)` makes an identical retry reuse the first run. A retry with different content hash, row count, or provenance receives a conflict instead of silently reusing different evidence.
 
-`GET /api/projection-snapshots?season=2026&decisionWeek=4` requires no browser credential and does not require `PROJECTION_SNAPSHOT_SCHEDULER_SECRET` during initialization. It still uses server-side `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. GET returns stored immutable `snapshot.provenance`; same-week equality never upgrades a reconstructed run. An older fallback is exposed as effective reconstructed evidence even if its original capture was exact.
+`GET /api/projection-snapshots?season=2026&decisionWeek=4` requires no browser credential and does not require `PROJECTION_SNAPSHOT_SCHEDULER_SECRET` during initialization. It still uses server-side `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. GET returns immutable `snapshot.captureStartedAt`, `snapshot.fetchedAt`, and stored provenance. Same-week equality never upgrades a reconstructed run. An older fallback is exposed as effective reconstructed evidence even if its original capture was exact.
 
 ## Required Azure Static Web Apps settings
 
@@ -17,13 +19,25 @@ Configure these only as backend application settings. Do not create `VITE_` vari
 - `SUPABASE_URL` — dedicated project URL for project ref `xduqpomhjdlgmtmmkfed`.
 - `SUPABASE_SERVICE_ROLE_KEY` — dedicated project service-role key.
 - `PROJECTION_SNAPSHOT_SCHEDULER_SECRET` — random secret of at least 32 characters; required only by POST.
-- `PROJECTION_FIRST_DECISION_WEEK_LOCAL_DATE` — authoritative Pacific Tuesday date for Week 1 (for 2026: `2026-09-08`). POST uses it to prevent an in-window caller from attaching `exact` to the wrong season/week coordinate; GET does not require it.
+- `PROJECTION_FIRST_DECISION_WEEK_LOCAL_DATE` — API-side copy of the authoritative Pacific Tuesday date for Week 1 (for 2026: `2026-09-08`). Every POST provenance is checked against it; GET does not require it. PostgreSQL independently checks the DB-owned calendar row.
 
 No app setting is changed by this PR.
 
+## New-season owner process
+
+Before accepting any capture for a new season, the owner must:
+
+1. Confirm the authoritative local Tuesday for decision Week 1.
+2. Add that season/date to `projection_season_calendar` through a reviewed database migration. Do not update a prior row: update/delete are blocked, and the service role has only SELECT access to this table.
+3. Apply that migration only to the verified dedicated project ref.
+4. Set the backend `PROJECTION_FIRST_DECISION_WEEK_LOCAL_DATE` and repository variable of the same name to exactly the same `YYYY-MM-DD` value.
+5. Run PDT/PST calendar tests and a reconstructed wrong-cutoff rejection probe before activating scheduling.
+
+A missing or mismatched season is fail-closed in both the API and database.
+
 ## Scheduled workflow setup
 
-`.github/workflows/projection-snapshot.yml` runs at 03:00 and 04:00 UTC Wednesdays. A DST-aware runtime guard invokes ingestion only when local Pacific time is Tuesday 8:00–8:15 PM, so one run is accepted in PDT or PST and a delayed/duplicate cron is skipped. Scheduled captures request `exact`; the API and database reject an early or late request.
+`.github/workflows/projection-snapshot.yml` runs at 03:00 and 04:00 UTC Wednesdays. A DST-aware runtime guard invokes ingestion only when local Pacific time is Tuesday 8:00–8:15 PM, so one run is accepted in PDT or PST and a delayed/duplicate cron is skipped. Scheduled captures request `exact`; the API and database reject an early start or late finish.
 
 Repository secrets:
 
@@ -35,7 +49,7 @@ Repository variables:
 - `PROJECTION_SEASON` — four-digit season, for example `2026`.
 - `PROJECTION_FIRST_DECISION_WEEK_LOCAL_DATE` — Week 1 Pacific Tuesday date, for example `2026-09-08`. Decision weeks are derived from local calendar dates, not fixed UTC durations across DST.
 
-Manual dispatch requires explicit week/cutoff/provenance and defaults to `reconstructed`. Choosing `exact` cannot bypass the API/database live-window guard. Do not dispatch until the endpoint and settings exist.
+Manual dispatch requires explicit week/cutoff/provenance and defaults to `reconstructed`. Choosing `exact` cannot bypass the API/database calendar or live-window guards. Do not dispatch until the endpoint, calendar row, and settings exist.
 
 ## Reviewed reconstructed seed path
 
@@ -53,4 +67,4 @@ node api/scripts/seed-projection-snapshot.js \
   --provenance reconstructed
 ```
 
-An identical immediate retry returns the same ID/hash/count with `created: false`. If Sleeper's mutable source changed at the same coordinate, the retry fails with an honest conflict; it does not overwrite evidence. Historical data is available only as Sleeper's current mutable projection routes and therefore must never be relabeled exact.
+The seed tool records the actual start and finish and validates the calendar for both provenance kinds. An identical retry returns the same ID/hash/count with `created: false`. If Sleeper's mutable source changed at the same coordinate, the retry fails with an honest conflict; it does not overwrite evidence. Historical data is available only as Sleeper's current mutable projection routes and therefore must never be relabeled exact.

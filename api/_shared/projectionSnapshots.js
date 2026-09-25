@@ -112,21 +112,42 @@ function parsePostBody(rawBody) {
   };
 }
 
-function validateCaptureTiming({ season, decisionWeek, canonicalCutoffAt, provenance }, capturedAt, firstDecisionWeekLocalDate) {
-  if (provenance !== 'exact') return;
+function validateCalendarCoordinate({ season, decisionWeek, canonicalCutoffAt }, firstDecisionWeekLocalDate) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(firstDecisionWeekLocalDate || '')) {
-    throw new HttpError(503, 'exact capture is unavailable until the season calendar is configured');
+    throw new HttpError(503, 'capture is unavailable until the season calendar is configured');
   }
   const [firstYear, firstMonth, firstDay] = firstDecisionWeekLocalDate.split('-').map(Number);
-  if (firstYear !== season) throw new HttpError(409, 'exact capture season does not match the configured season calendar');
-  const expectedDay = Date.UTC(firstYear, firstMonth - 1, firstDay) + (decisionWeek - 1) * 7 * 86400000;
+  const firstLocalDay = new Date(Date.UTC(firstYear, firstMonth - 1, firstDay));
+  if (
+    firstYear !== season
+    || firstLocalDay.getUTCFullYear() !== firstYear
+    || firstLocalDay.getUTCMonth() !== firstMonth - 1
+    || firstLocalDay.getUTCDate() !== firstDay
+    || firstLocalDay.getUTCDay() !== 2
+  ) {
+    throw new HttpError(503, 'the configured season calendar must be a Tuesday in the requested season');
+  }
+  const expectedDay = firstLocalDay.getTime() + (decisionWeek - 1) * 7 * 86400000;
   const parts = zonedParts(new Date(canonicalCutoffAt));
   const actualDay = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day));
-  if (actualDay !== expectedDay) throw new HttpError(409, 'exact capture cutoff does not match the configured decision-week calendar');
+  if (actualDay !== expectedDay) {
+    throw new HttpError(409, 'capture cutoff does not match the configured decision-week calendar');
+  }
+}
+
+function validateCaptureTiming({ canonicalCutoffAt, provenance }, captureStartedAt, captureFinishedAt = captureStartedAt) {
   const cutoffMs = new Date(canonicalCutoffAt).getTime();
-  const capturedMs = capturedAt.getTime();
-  if (capturedMs < cutoffMs || capturedMs > cutoffMs + EXACT_CAPTURE_WINDOW_MS) {
-    throw new HttpError(409, 'exact capture is allowed only from the canonical cutoff through 15 minutes after it');
+  const startedMs = captureStartedAt.getTime();
+  const finishedMs = captureFinishedAt.getTime();
+  if (finishedMs < startedMs) {
+    throw new HttpError(409, 'capture finish cannot precede capture start');
+  }
+  if (provenance !== 'exact') return;
+  if (startedMs < cutoffMs) {
+    throw new HttpError(409, 'exact capture cannot start before the canonical cutoff');
+  }
+  if (finishedMs > cutoffMs + EXACT_CAPTURE_WINDOW_MS) {
+    throw new HttpError(409, 'exact capture must finish within 15 minutes after the canonical cutoff');
   }
 }
 
@@ -206,13 +227,17 @@ function createProjectionSnapshotService({ repository, fetchImpl = fetch, schedu
       if (!isAuthorized(getHeader(req.headers, 'authorization'), schedulerSecret)) return jsonResponse(401, { error: 'Unauthorized' }, { 'WWW-Authenticate': 'Bearer' });
       try {
         const input = parsePostBody(req.body);
+        validateCalendarCoordinate(input, firstDecisionWeekLocalDate);
         const startedAt = now();
-        validateCaptureTiming(input, startedAt, firstDecisionWeekLocalDate);
+        validateCaptureTiming(input, startedAt);
         const rows = await fetchRemainingProjections({ fetchImpl, ...input });
         const fetchedAt = now();
-        validateCaptureTiming(input, fetchedAt, firstDecisionWeekLocalDate);
+        validateCaptureTiming(input, startedAt, fetchedAt);
         const contentHash = hashRows(rows);
-        const saved = await repository.ingest({ source: SOURCE, endpointTemplate: ENDPOINT_TEMPLATE, fetchedAt: fetchedAt.toISOString(), contentHash, rows, ...input });
+        const saved = await repository.ingest({
+          source: SOURCE, endpointTemplate: ENDPOINT_TEMPLATE,
+          captureStartedAt: startedAt.toISOString(), fetchedAt: fetchedAt.toISOString(), contentHash, rows, ...input,
+        });
         return jsonResponse(saved.created ? 201 : 200, {
           snapshotId: saved.snapshotId, status: saved.status, created: saved.created, provenance: saved.provenance || input.provenance,
           fetchedWeeks: { from: input.decisionWeek, through: MAX_WEEK }, rowCount: saved.rowCount, contentHash: saved.contentHash || contentHash,
@@ -233,7 +258,8 @@ function createProjectionSnapshotService({ repository, fetchImpl = fetch, schedu
         return jsonResponse(200, {
           snapshot: {
             id: snapshot.id, source: snapshot.source, season: snapshot.season, decisionWeek: snapshot.decisionWeek,
-            canonicalCutoffAt: snapshot.canonicalCutoffAt, fetchedAt: snapshot.fetchedAt, endpointTemplate: snapshot.endpointTemplate,
+            canonicalCutoffAt: snapshot.canonicalCutoffAt, captureStartedAt: snapshot.captureStartedAt,
+            fetchedAt: snapshot.fetchedAt, endpointTemplate: snapshot.endpointTemplate,
             rowCount: snapshot.rowCount, contentHash: snapshot.contentHash, provenance: snapshot.provenance,
           },
           provenance: {
@@ -253,5 +279,5 @@ function createProjectionSnapshotService({ repository, fetchImpl = fetch, schedu
 module.exports = {
   CAPTURE_TIME_ZONE, ENDPOINT_TEMPLATE, EXACT_CAPTURE_WINDOW_MS, HttpError, canonicalCutoffForLocalDate, canonicalizeRows,
   compactProjectionPayload, createProjectionSnapshotService, fetchRemainingProjections, hashRows, isAuthorized,
-  isCanonicalCutoff, parseGetQuery, parsePostBody, validateCaptureTiming, zonedParts,
+  isCanonicalCutoff, parseGetQuery, parsePostBody, validateCalendarCoordinate, validateCaptureTiming, zonedParts,
 };

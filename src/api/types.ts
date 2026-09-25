@@ -139,3 +139,18 @@ export interface FantasyProsResponse {
   sourceUrl: string;
   fetchedAt: string;
 }
+export type ProjectionSnapshotProvenance = 'exact' | 'reconstructed';
+
+export interface ProjectionSnapshotMetadata {
+  id: string;
+  source: 'sleeper';
+  season: number;
+  decisionWeek: number;
+  canonicalCutoffAt: string;
+  captureStartedAt: string;
+  fetchedAt: string;
+  endpointTemplate: string;
+  rowCount: number;
+  contentHash: string;
+  provenance: ProjectionSnapshotProvenance;
+}

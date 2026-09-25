@@ -38,10 +38,13 @@ A dedicated Supabase project stores:
 
 1. `projection_snapshot_runs`
    - season and decision week;
-   - canonical cutoff and actual fetch time;
+   - canonical cutoff plus immutable capture-start and fetch-finish times;
    - source and endpoint identity;
    - status, row count, content hash, and error/provenance metadata.
-2. `projection_snapshot_values`
+2. `projection_season_calendar`
+   - immutable season-to-decision-Week-1 Pacific local Tuesday mapping;
+   - DB-owned source for deriving every accepted season/week/cutoff coordinate.
+3. `projection_snapshot_values`
    - snapshot ID;
    - projected NFL week;
    - Sleeper player ID;
@@ -154,7 +157,7 @@ V1 uses one documented canonical weekly cutoff. The scheduler stores the actual 
 
 V1 canonical cutoff: Tuesday at **8:00 PM `America/Los_Angeles`** before the normal Wednesday waiver run. This is timezone/DST-aware (03:00 UTC during PDT and 04:00 UTC during PST), never a fixed UTC hour. The scheduler runs at both possible UTC hours and a Pacific-time runtime guard accepts only the first 15 minutes after the cutoff. The API and database enforce the same local instant. If supported leagues process claims at materially different times, add another explicitly versioned shared global cutoff rather than per-league copies.
 
-Every stored run has immutable explicit provenance. `exact` is accepted only for an authenticated capture that starts and finishes from the canonical cutoff through 15 minutes after it. Early, late, manual post-hoc, fallback, and historical captures are `reconstructed`; matching a requested decision week does not upgrade provenance.
+Every stored run has immutable explicit provenance and both ends of its capture interval. `exact` is accepted only for an authenticated capture whose recorded start is at or after the canonical cutoff and whose recorded finish is no later than 15 minutes after it. Early, late, manual post-hoc, fallback, and historical captures are `reconstructed`; matching a requested decision week does not upgrade provenance. Both provenance kinds must match the immutable DB-owned season/week calendar.
 
 Every displayed historical baseline is labeled:
 
@@ -170,6 +173,7 @@ projection_snapshot_runs (
   season integer not null,
   decision_week integer not null,
   canonical_cutoff_at timestamptz not null,
+  capture_started_at timestamptz not null,
   fetched_at timestamptz not null,
   status text not null,
   content_hash text,
@@ -178,6 +182,12 @@ projection_snapshot_runs (
   provenance text not null check (provenance in ('exact', 'reconstructed')),
   created_at timestamptz not null default now(),
   unique (source, season, decision_week, canonical_cutoff_at)
+)
+
+projection_season_calendar (
+  season integer primary key,
+  first_decision_week_local_date date not null,
+  created_at timestamptz not null default now()
 )
 
 projection_snapshot_values (

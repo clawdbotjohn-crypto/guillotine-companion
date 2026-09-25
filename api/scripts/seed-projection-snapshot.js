@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 const {
-  ENDPOINT_TEMPLATE, fetchRemainingProjections, hashRows, parsePostBody, validateCaptureTiming,
+  ENDPOINT_TEMPLATE, fetchRemainingProjections, hashRows, parsePostBody,
+  validateCalendarCoordinate, validateCaptureTiming,
 } = require('../_shared/projectionSnapshots');
 const { createSupabaseProjectionRepository } = require('../_shared/supabaseProjectionRepository');
 
@@ -15,14 +16,15 @@ async function main() {
     season: argument('season'), decisionWeek: argument('decision-week'),
     canonicalCutoffAt: argument('canonical-cutoff'), provenance: argument('provenance'),
   });
+  validateCalendarCoordinate(input, process.env.PROJECTION_FIRST_DECISION_WEEK_LOCAL_DATE);
   const startedAt = new Date();
-  validateCaptureTiming(input, startedAt, process.env.PROJECTION_FIRST_DECISION_WEEK_LOCAL_DATE);
+  validateCaptureTiming(input, startedAt);
   const rows = await fetchRemainingProjections({ fetchImpl: fetch, ...input });
   const fetchedAt = new Date();
-  validateCaptureTiming(input, fetchedAt, process.env.PROJECTION_FIRST_DECISION_WEEK_LOCAL_DATE);
+  validateCaptureTiming(input, startedAt, fetchedAt);
   const contentHash = hashRows(rows);
   const result = await createSupabaseProjectionRepository().ingest({
-    source: 'sleeper', ...input, fetchedAt: fetchedAt.toISOString(), endpointTemplate: ENDPOINT_TEMPLATE, contentHash, rows,
+    source: 'sleeper', ...input, captureStartedAt: startedAt.toISOString(), fetchedAt: fetchedAt.toISOString(), endpointTemplate: ENDPOINT_TEMPLATE, contentHash, rows,
   });
   console.log(JSON.stringify({ ...result, fetchedWeeks: `${input.decisionWeek}-18` }));
 }

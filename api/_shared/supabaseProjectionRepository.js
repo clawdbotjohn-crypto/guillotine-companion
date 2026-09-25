@@ -30,7 +30,8 @@ function createSupabaseProjectionRepository({ env = process.env, fetchImpl = fet
         method: 'POST',
         body: JSON.stringify({
           p_source: snapshot.source, p_season: snapshot.season, p_decision_week: snapshot.decisionWeek,
-          p_canonical_cutoff_at: snapshot.canonicalCutoffAt, p_fetched_at: snapshot.fetchedAt,
+          p_canonical_cutoff_at: snapshot.canonicalCutoffAt, p_capture_started_at: snapshot.captureStartedAt,
+          p_fetched_at: snapshot.fetchedAt,
           p_endpoint_template: snapshot.endpointTemplate, p_content_hash: snapshot.contentHash,
           p_provenance: snapshot.provenance, p_values: snapshot.rows,
         }),
@@ -45,7 +46,7 @@ function createSupabaseProjectionRepository({ env = process.env, fetchImpl = fet
 
     async findLatest({ season, decisionWeek }) {
       const params = new URLSearchParams({
-        select: 'id,source,season,decision_week,canonical_cutoff_at,fetched_at,endpoint_template,row_count,content_hash,status,provenance',
+        select: 'id,source,season,decision_week,canonical_cutoff_at,capture_started_at,fetched_at,endpoint_template,row_count,content_hash,status,provenance',
         season: `eq.${season}`, decision_week: `lte.${decisionWeek}`, status: 'eq.completed',
         order: 'decision_week.desc,canonical_cutoff_at.desc', limit: '1',
       });
@@ -74,7 +75,8 @@ function createSupabaseProjectionRepository({ env = process.env, fetchImpl = fet
       if (rows.length !== run.row_count) throw new Error('Snapshot row count does not match stored provenance');
       return {
         id: run.id, source: run.source, season: run.season, decisionWeek: run.decision_week,
-        canonicalCutoffAt: run.canonical_cutoff_at, fetchedAt: run.fetched_at, endpointTemplate: run.endpoint_template,
+        canonicalCutoffAt: run.canonical_cutoff_at, captureStartedAt: run.capture_started_at,
+        fetchedAt: run.fetched_at, endpointTemplate: run.endpoint_template,
         rowCount: run.row_count, contentHash: run.content_hash, provenance: run.provenance, rows,
       };
     },

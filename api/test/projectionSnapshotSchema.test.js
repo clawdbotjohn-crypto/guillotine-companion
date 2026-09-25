@@ -8,26 +8,50 @@ const migrations = fs.readdirSync(migrationDir)
   .sort()
   .map((name) => fs.readFileSync(path.join(migrationDir, name), 'utf8'))
   .join('\n');
+const integrityMigration = fs.readFileSync(
+  path.join(migrationDir, '202609250004_exact_capture_and_season_calendar.sql'),
+  'utf8',
+);
 const correctionMigration = fs.readFileSync(
   path.join(migrationDir, '202609250003_dst_provenance_and_seed_correction.sql'),
   'utf8',
 );
 
 test('schema keeps both snapshot tables forced-RLS and direct browser roles default-deny', () => {
-  for (const table of ['projection_snapshot_runs', 'projection_snapshot_values']) {
+  for (const table of ['projection_snapshot_runs', 'projection_snapshot_values', 'projection_season_calendar']) {
     assert.match(migrations, new RegExp(`alter table public\\.${table} force row level security`, 'i'));
     assert.match(migrations, new RegExp(`revoke all on table public\\.${table} from public, anon, authenticated`, 'i'));
   }
   assert.doesNotMatch(migrations, /create\s+policy/i);
+  assert.match(integrityMigration, /projection_season_calendar_immutable/);
+  assert.match(integrityMigration, /grant select on table public\.projection_season_calendar to service_role/i);
+  assert.doesNotMatch(integrityMigration, /grant (?:insert|update|delete).*projection_season_calendar/i);
 });
 
-test('schema enforces Pacific cutoff, immutable provenance, exact timing, and service-role-only RPC', () => {
+test('schema persists both capture instants and enforces exact timing in the service-role-only RPC', () => {
   assert.match(migrations, /America\/Los_Angeles/);
   assert.match(migrations, /provenance in \('exact', 'reconstructed'\)/);
-  assert.match(migrations, /fetched_at >= canonical_cutoff_at/);
-  assert.match(migrations, /fetched_at <= canonical_cutoff_at \+ interval '15 minutes'/);
+  assert.match(integrityMigration, /add column capture_started_at timestamptz/);
+  assert.match(integrityMigration, /set capture_started_at = fetched_at[\s\S]*where provenance = 'reconstructed'/);
+  assert.match(integrityMigration, /alter column capture_started_at set not null/);
+  assert.match(integrityMigration, /capture_started_at >= canonical_cutoff_at/);
+  assert.match(integrityMigration, /fetched_at >= capture_started_at/);
+  assert.match(integrityMigration, /fetched_at <= canonical_cutoff_at \+ interval '15 minutes'/);
+  assert.match(integrityMigration, /p_capture_started_at timestamptz/);
   assert.match(migrations, /service_role required/);
   assert.match(migrations, /snapshot conflict: canonical coordinate already has different immutable content or provenance/);
+});
+
+test('database owns immutable 2026 season/week calendar coordinates for both provenance kinds', () => {
+  assert.match(integrityMigration, /create table public\.projection_season_calendar/);
+  assert.match(integrityMigration, /values \(2026, date '2026-09-08'\)/);
+  assert.match(integrityMigration, /first_decision_week_local_date \+ \(\(p_decision_week - 1\) \* 7\)/);
+  assert.match(integrityMigration, /at time zone 'America\/Los_Angeles'/);
+  assert.match(integrityMigration, /canonical cutoff does not match season % decision week % calendar/);
+  assert.match(integrityMigration, /create trigger projection_snapshot_runs_calendar_coordinate[\s\S]*before insert/);
+  const calendarValidation = integrityMigration.indexOf('if p_canonical_cutoff_at is distinct from v_expected_cutoff');
+  const exactValidation = integrityMigration.indexOf("if p_provenance = 'exact'");
+  assert.ok(calendarValidation > -1 && calendarValidation < exactValidation, 'calendar validation must apply before exact-only timing');
 });
 
 test('seed correction no-ops when the audited ID is absent and rejects present metadata mismatches', () => {
