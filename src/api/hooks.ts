@@ -14,12 +14,14 @@ import type {
   WeeklyProjectionMap,
   FantasyCalcResponse,
   FantasyProsResponse,
+  ProjectionSnapshotResponse,
 } from './types';
 import { getReceptionScoring, getFantasyProsScoring, hasSuperflex } from '../logic/rankingSources';
 
 const STALE_30M = 1000 * 60 * 30;
 const STALE_1H = 1000 * 60 * 60;
 const STALE_6H = STALE_1H * 6;
+const STALE_24H = STALE_1H * 24;
 
 export function useLeague(leagueId: string | null) {
   return useQuery<League>({
@@ -209,6 +211,57 @@ export function useWeeklyProjections(
     enabled: enabled && !!season && week != null && week >= 1 && week <= 18,
     staleTime: STALE_30M,
     gcTime: STALE_6H,
+    retry: 1,
+  });
+}
+
+export interface ProjectionSnapshotBatch {
+  snapshots: Map<number, ProjectionSnapshotResponse>;
+  errors: Map<number, Error>;
+}
+
+/** Preserve honest per-coordinate failures so one sparse week cannot erase unrelated evidence. */
+export async function fetchProjectionSnapshotBatch(
+  season: number,
+  decisionWeeks: number[],
+  getSnapshot = api.getProjectionSnapshot,
+): Promise<ProjectionSnapshotBatch> {
+  const weeks = [...new Set(decisionWeeks)].sort((a, b) => a - b);
+  const settled = await Promise.allSettled(weeks.map(async (decisionWeek) => ({
+    decisionWeek,
+    snapshot: await getSnapshot(season, decisionWeek),
+  })));
+  const snapshots = new Map<number, ProjectionSnapshotResponse>();
+  const errors = new Map<number, Error>();
+  settled.forEach((result, index) => {
+    const decisionWeek = weeks[index];
+    if (result.status === 'fulfilled') {
+      snapshots.set(decisionWeek, result.value.snapshot);
+    } else {
+      errors.set(decisionWeek, result.reason instanceof Error
+        ? result.reason
+        : new Error(String(result.reason)));
+    }
+  });
+  if (weeks.length > 0 && snapshots.size === 0) {
+    const first = errors.values().next().value;
+    throw new Error(`All historical projection reads failed${first ? `: ${first.message}` : '.'}`);
+  }
+  return { snapshots, errors };
+}
+
+/** Load only the immutable historical coordinates needed by selected manager evidence. */
+export function useProjectionSnapshots(
+  season: number | null,
+  decisionWeeks: number[],
+  enabled = true,
+) {
+  const weeks = [...new Set(decisionWeeks)].sort((a, b) => a - b);
+  return useQuery<ProjectionSnapshotBatch>({
+    queryKey: ['projection-snapshots', season, weeks.join(',')],
+    queryFn: () => fetchProjectionSnapshotBatch(season!, weeks),
+    enabled: enabled && season != null && weeks.length > 0,
+    staleTime: STALE_24H,
     retry: 1,
   });
 }

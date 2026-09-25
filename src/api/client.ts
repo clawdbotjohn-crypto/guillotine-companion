@@ -12,6 +12,7 @@ import type {
   WeeklyProjectionMap,
   FantasyCalcResponse,
   FantasyProsResponse,
+  ProjectionSnapshotResponse,
 } from './types';
 
 const BASE = 'https://api.sleeper.app/v1';
@@ -63,7 +64,7 @@ async function getLocal<T>(path: string): Promise<T> {
   const res = await fetch(path);
   if (!res.ok) {
     const body = await res.json().catch(() => null) as { error?: string } | null;
-    throw new ApiError(body?.error || `Ranking source error: ${res.statusText}`, res.status);
+    throw new ApiError(body?.error || `Application API error: ${res.statusText}`, res.status);
   }
   return res.json();
 }
@@ -86,6 +87,18 @@ export function getFantasyProsRankings(
   scoring: 'ppr' | 'half' | 'standard',
 ): Promise<FantasyProsResponse> {
   return getLocal(`/api/ecr-rankings?scoring=${scoring}`);
+}
+
+/** Credential-free, server-safe read of immutable shared projection evidence. */
+export function getProjectionSnapshot(
+  season: number,
+  decisionWeek: number,
+): Promise<ProjectionSnapshotResponse> {
+  const params = new URLSearchParams({
+    season: String(season),
+    decisionWeek: String(decisionWeek),
+  });
+  return getLocal(`/api/projection-snapshots?${params}`);
 }
 
 /** Fetch projection weeks with a small concurrency cap so one page load does not fan out 16 requests. */

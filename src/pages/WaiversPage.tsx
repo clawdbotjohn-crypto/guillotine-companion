@@ -3,6 +3,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { AlertTriangle, ShoppingCart, Info, RefreshCw } from 'lucide-react';
 import { Button, Card, Skeleton, PositionBadge } from '../components/ui';
 import { FaabOverBudgetWarning } from '../components/FaabOverBudgetWarning';
+import { ManagerBiddingProfiles } from '../components/ManagerBiddingProfiles';
 import { ContextDisclosure } from '../components/ContextDisclosure';
 import { ByeWeekText } from '../components/ByeWeekText';
 import { useAppStore, usePlayers } from '../store';
@@ -17,6 +18,7 @@ import {
   useFantasyCalcRankings,
   useFantasyProsRankings,
   useWeeklyProjections,
+  useProjectionSnapshots,
 } from '../api';
 import {
   computeEliminations,
@@ -28,6 +30,11 @@ import {
   buildWeeklyProjectionContext,
   getTeamByeWeek,
   RANKING_SOURCES,
+  classifyCanonicalBidEvents,
+  selectTopCanonicalBids,
+  calculateHistoricalBaseline,
+  buildManagerBiddingProfiles,
+  type HistoricalBaselineEvidence,
   type WaiverRankingSource,
 } from '../logic';
 import {
@@ -319,7 +326,8 @@ export function WaiversPage() {
   const { data: rosters } = useRosters(leagueId);
   const playersQuery = usePlayers();
   const { data: matchups, isLoading: matchupsLoading } = useAllMatchups(leagueId, 18);
-  const { data: transactions } = useAllTransactions(leagueId, 18);
+  const transactionsQuery = useAllTransactions(leagueId, 18);
+  const { data: transactions } = transactionsQuery;
   const nflStateQuery = useNflState();
   const [rankingSource, setRankingSource] = useState<WaiverRankingSource>('sleeper');
 
@@ -340,6 +348,66 @@ export function WaiversPage() {
     projectionStartWeek,
     !!league && !!nflStateQuery.data && league.season === nflStateQuery.data.season,
   );
+
+  const canonicalBidEvents = useMemo(() => {
+    if (!transactions || !league) return [];
+    return classifyCanonicalBidEvents(transactions, league.settings?.waiver_budget ?? 1000);
+  }, [transactions, league]);
+  const selectedBidEvents = useMemo(
+    () => selectTopCanonicalBids(canonicalBidEvents),
+    [canonicalBidEvents],
+  );
+  const snapshotDecisionWeeks = useMemo(() => [...new Set(selectedBidEvents
+    .map((event) => event.decisionWeek)
+    .filter((week) => week >= 1 && week <= 18))], [selectedBidEvents]);
+  const snapshotSeason = league && /^\d{4}$/.test(league.season) ? Number(league.season) : null;
+  const snapshotQuery = useProjectionSnapshots(
+    snapshotSeason,
+    snapshotDecisionWeeks,
+    selectedBidEvents.length > 0,
+  );
+  const historicalEvidence = useMemo(() => {
+    const evidence = new Map<string, HistoricalBaselineEvidence>();
+    if (!league || !playersQuery.data) return evidence;
+    const scoring = getProjectionScoring(league.scoring_settings?.rec);
+    for (const event of selectedBidEvents) {
+      const snapshot = snapshotQuery.data?.snapshots.get(event.decisionWeek);
+      const snapshotError = snapshotQuery.data?.errors.get(event.decisionWeek);
+      if (event.decisionWeek < 1 || event.decisionWeek > 18) {
+        evidence.set(event.transactionId, {
+          baseline: null,
+          provenance: null,
+          captureProvenance: null,
+          matchesRequestedDecisionWeek: null,
+          snapshotDecisionWeek: null,
+          unavailableReason: `Decision Week ${event.decisionWeek} is outside the supported NFL projection calendar.`,
+        });
+      } else if (snapshot) {
+        evidence.set(event.transactionId, calculateHistoricalBaseline(
+          event,
+          snapshot,
+          league,
+          scoring,
+          (playerId) => playersQuery.data?.get(playerId)?.position,
+        ));
+      } else if (snapshotError) {
+        evidence.set(event.transactionId, {
+          baseline: null,
+          provenance: null,
+          captureProvenance: null,
+          matchesRequestedDecisionWeek: null,
+          snapshotDecisionWeek: null,
+          unavailableReason: `Decision Week ${event.decisionWeek} snapshot read failed: ${snapshotError.message}`,
+        });
+      }
+    }
+    return evidence;
+  }, [league, playersQuery.data, selectedBidEvents, snapshotQuery.data]);
+  const managerProfiles = useMemo(() => buildManagerBiddingProfiles(
+    rosters?.map((roster) => roster.roster_id) ?? [],
+    selectedBidEvents,
+    historicalEvidence,
+  ), [rosters, selectedBidEvents, historicalEvidence]);
 
   const [strategy, setStrategy] = useState<StrategyKey>(DEFAULT_WAIVER_STRATEGY);
   const [posFilter, setPosFilter] = useState('ALL');
@@ -448,6 +516,16 @@ export function WaiversPage() {
         getPlayerName,
         { ...boardOptions, maxPerPos: Number.POSITIVE_INFINITY },
       ),
+      profileTargetRows: sleeperRosValues
+        ? buildWaiverBoard(
+          computeAvailablePlayers(rosters, sleeperRosValues, elim),
+          sleeperRosValues,
+          ctx,
+          bids,
+          getPlayerName,
+          { ...boardOptions, maxPerPos: Number.POSITIVE_INFINITY },
+        )
+        : [],
     };
   }, [
     waiverContext,
@@ -541,7 +619,15 @@ export function WaiversPage() {
     );
   }
 
-  const { ctx, remainingFaab, ownership, availableRows, allRows, vorpCalibration } = board;
+  const {
+    ctx,
+    remainingFaab,
+    ownership,
+    availableRows,
+    allRows,
+    profileTargetRows,
+    vorpCalibration,
+  } = board;
   const sleeperUnavailableReason = vorpCalibration
     ? undefined
     : projectionWeeksQuery.isLoading || nflStateQuery.isLoading
@@ -637,6 +723,24 @@ export function WaiversPage() {
           )}
         </span>
       </div>
+
+      <ManagerBiddingProfiles
+        profiles={managerProfiles}
+        targetRows={profileTargetRows}
+        rosters={rosters!}
+        users={users!}
+        initialFaab={ctx.budget}
+        hasCanonicalEvidence={selectedBidEvents.length > 0}
+        isLoading={transactionsQuery.isLoading || (selectedBidEvents.length > 0 && snapshotQuery.isLoading)}
+        error={(transactionsQuery.error instanceof Error ? transactionsQuery.error : null)
+          ?? (snapshotQuery.error instanceof Error ? snapshotQuery.error : null)}
+        partialErrorCount={snapshotQuery.data?.errors.size ?? 0}
+        onRetry={() => {
+          void transactionsQuery.refetch();
+          void snapshotQuery.refetch();
+        }}
+        getPlayerName={getPlayerName}
+      />
 
       {/* Board */}
       <div className="space-y-2">
