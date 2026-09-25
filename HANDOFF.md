@@ -5,6 +5,8 @@
 - Branch: `feat/bidding-behavior-profiles`
 - Base: latest `origin/main` after PR #9 merge
 - Worktree: `/home/john/guillotine-bidding-fe-work`
+- PR: <https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/10>
+- Preview: <https://nice-moss-07ec56310-10.centralus.7.azurestaticapps.net> (home and public snapshot GET both verified HTTP 200)
 - Production/deploy: not touched
 - Merge: not performed
 

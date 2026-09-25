@@ -1,6 +1,9 @@
 # Guillotine Companion — Progress
 
-## ✅ Bidding-behavior profiles + bid predictions FE PR (2026-09-25)
+## ✅ Bidding-behavior profiles + bid predictions FE PR #10 (2026-09-25)
+
+- PR: <https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/10>
+- Preview: <https://nice-moss-07ec56310-10.centralus.7.azurestaticapps.net>
 
 - [x] Passed the hard backend gate before branching: PR #9 is merged to `main`; production credential-free GET returns explicit effective provenance; dedicated DB contains reconstructed decision Weeks 1–3 only and no Week 4 row.
 - [x] Added versioned, strongly typed `bidding-profile-v1` modeling: completed wins plus proved same-batch losses; invalid/unmatched failure rejection; manager/player/batch contingency collapse; transaction-ledger pre-submission FAAB; deterministic top three; capped event ratios; geometric multiplier; style thresholds `<0.85`, `0.85–1.15`, `>1.15`; evidence-aware confidence; and willingness vs current-FAAB-capped prediction.
