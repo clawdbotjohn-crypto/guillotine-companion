@@ -51,7 +51,7 @@ Migrations 004 and 005 preserved all IDs, cutoffs, fetched times, hashes, counts
 
 No historical row is exact. Independent ordered child-value audit hashes were identical before and after migration 005 for all four IDs; counts remain `18,695 / 17,847 / 16,867 / 15,821`.
 
-A separate clean local replay was unavailable because this host has neither Docker nor local PostgreSQL server binaries. Static migration-chain guards passed, and the upgrade path was exercised against real PostgreSQL inside a rolled-back transaction before apply. The independent reviewer reported no high-severity defect; its migration-verification concern was closed by that transaction, and its digest-trust finding was fixed by comparing stored child values in the RPC.
+This host has neither Docker nor local PostgreSQL server binaries, so the full five-migration chain was clean-replayed instead in an isolated schema on the dedicated real PostgreSQL ref inside one transaction. It produced all three expected tables, the provenance-aware unique key, and only the current 10-argument RPC; rollback removed the replay schema. Static migration-chain guards also passed, and the live-schema upgrade path was separately exercised in a rolled-back transaction before apply. The independent reviewer reported no high-severity defect; its migration-verification concern was closed by these real-PostgreSQL rehearsals, and its digest-trust finding was fixed by comparing stored child values in the RPC.
 
 ## Verification
 
