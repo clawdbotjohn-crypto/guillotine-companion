@@ -1,6 +1,6 @@
 // TanStack Query hooks for Sleeper API
 
-import { useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import * as api from './client';
 import type {
   League,
@@ -14,12 +14,21 @@ import type {
   WeeklyProjectionMap,
   FantasyCalcResponse,
   FantasyProsResponse,
+  ProjectionSnapshotResponse,
 } from './types';
 import { getReceptionScoring, getFantasyProsScoring, hasSuperflex } from '../logic/rankingSources';
 
+const STALE_5M = 1000 * 60 * 5;
 const STALE_30M = 1000 * 60 * 30;
 const STALE_1H = 1000 * 60 * 60;
 const STALE_6H = STALE_1H * 6;
+const STALE_24H = STALE_1H * 24;
+
+export const CURRENT_ROSTER_QUERY_FRESHNESS = {
+  staleTime: 0,
+  refetchOnMount: 'always' as const,
+  refetchOnWindowFocus: true,
+};
 
 export function useLeague(leagueId: string | null) {
   return useQuery<League>({
@@ -44,7 +53,9 @@ export function useRosters(leagueId: string | null) {
     queryKey: ['rosters', leagueId],
     queryFn: () => api.getLeagueRosters(leagueId!),
     enabled: !!leagueId,
-    staleTime: STALE_1H,
+    // Processed waivers change current ownership immediately. Do not reuse an hour-old roster
+    // snapshot just because Hub or Teams mounted this query first.
+    ...CURRENT_ROSTER_QUERY_FRESHNESS,
   });
 }
 
@@ -57,12 +68,12 @@ export function useMatchups(leagueId: string | null, week: number) {
   });
 }
 
-export function useAllMatchups(leagueId: string | null, maxWeek: number) {
+export function useAllMatchups(leagueId: string | null, maxWeek: number | null) {
   return useQuery<Map<number, Matchup[]>>({
     queryKey: ['all-matchups', leagueId, maxWeek],
     queryFn: async () => {
       const map = new Map<number, Matchup[]>();
-      for (let w = 1; w <= maxWeek; w++) {
+      for (let w = 1; w <= (maxWeek ?? 0); w++) {
         const m = await api.getMatchups(leagueId!, w);
         if (m && m.length > 0 && m.some((x) => x.points != null && x.points > 0)) {
           map.set(w, m);
@@ -72,7 +83,7 @@ export function useAllMatchups(leagueId: string | null, maxWeek: number) {
       }
       return map;
     },
-    enabled: !!leagueId && maxWeek > 0,
+    enabled: !!leagueId && maxWeek != null,
     staleTime: STALE_1H,
   });
 }
@@ -211,4 +222,93 @@ export function useWeeklyProjections(
     gcTime: STALE_6H,
     retry: 1,
   });
+}
+
+export interface ProjectionSnapshotBatch {
+  snapshots: Map<number, ProjectionSnapshotResponse>;
+  errors: Map<number, Error>;
+}
+
+/** Preserve honest per-coordinate failures so one sparse week cannot erase unrelated evidence. */
+export async function fetchProjectionSnapshotBatch(
+  season: number,
+  decisionWeeks: number[],
+  getSnapshot = api.getProjectionSnapshot,
+): Promise<ProjectionSnapshotBatch> {
+  const weeks = [...new Set(decisionWeeks)].sort((a, b) => a - b);
+  const settled = await Promise.allSettled(weeks.map(async (decisionWeek) => ({
+    decisionWeek,
+    snapshot: await getSnapshot(season, decisionWeek),
+  })));
+  const snapshots = new Map<number, ProjectionSnapshotResponse>();
+  const errors = new Map<number, Error>();
+  settled.forEach((result, index) => {
+    const decisionWeek = weeks[index];
+    if (result.status === 'fulfilled') {
+      snapshots.set(decisionWeek, result.value.snapshot);
+    } else {
+      errors.set(decisionWeek, result.reason instanceof Error
+        ? result.reason
+        : new Error(String(result.reason)));
+    }
+  });
+  if (weeks.length > 0 && snapshots.size === 0) {
+    const first = errors.values().next().value;
+    throw new Error(`All historical projection reads failed${first ? `: ${first.message}` : '.'}`);
+  }
+  return { snapshots, errors };
+}
+
+/**
+ * Load immutable historical coordinates as independent per-week queries so cache keys are
+ * coordinate-scoped (`season + decisionWeek`) and partial failures stay isolated.
+ */
+export function useProjectionSnapshots(
+  season: number | null,
+  decisionWeeks: number[],
+  enabled = true,
+) {
+  const weeks = [...new Set(decisionWeeks)].sort((a, b) => a - b);
+  const isEnabled = enabled && season != null && weeks.length > 0;
+
+  const queries = useQueries({
+    queries: weeks.map((decisionWeek) => ({
+      queryKey: ['projection-snapshot', season, decisionWeek],
+      queryFn: () => api.getProjectionSnapshot(season!, decisionWeek),
+      enabled: isEnabled,
+      retry: 1,
+      gcTime: STALE_24H,
+      staleTime: (query: { state: { data?: ProjectionSnapshotResponse } }) => {
+        const payload = query.state.data;
+        if (!payload) return STALE_30M;
+        const exactSameWeek = payload.provenance.effectiveExact
+          && payload.provenance.matchesRequestedDecisionWeek;
+        return exactSameWeek ? STALE_24H : STALE_5M;
+      },
+    })),
+  });
+
+  const snapshots = new Map<number, ProjectionSnapshotResponse>();
+  const errors = new Map<number, Error>();
+  let firstError: Error | null = null;
+
+  queries.forEach((query, index) => {
+    const decisionWeek = weeks[index];
+    if (query.data) snapshots.set(decisionWeek, query.data);
+    if (query.error instanceof Error) {
+      errors.set(decisionWeek, query.error);
+      if (!firstError) firstError = query.error;
+    }
+  });
+
+  const allFailed = weeks.length > 0 && snapshots.size === 0 && errors.size === weeks.length;
+
+  return {
+    data: isEnabled ? { snapshots, errors } : undefined,
+    error: allFailed ? firstError : null,
+    isLoading: isEnabled && queries.some((query) => query.isLoading),
+    refetch: async () => {
+      await Promise.all(queries.map((query) => query.refetch()));
+    },
+  };
 }

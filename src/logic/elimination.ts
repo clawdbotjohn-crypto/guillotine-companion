@@ -1,6 +1,6 @@
 // Elimination detection engine for guillotine leagues
 
-import type { Matchup, Roster, SleeperUser } from '../api/types';
+import type { League, Matchup, NflState, Roster, SleeperUser } from '../api/types';
 
 export interface WeekResult {
   week: number;
@@ -83,6 +83,33 @@ function detectElimRate(weekMatchups: Map<number, Matchup[]>): number | null {
   // If most diffs are 2, it's 2-per-week
   const twos = diffs.filter((d) => d === 2).length;
   return twos > diffs.length / 2 ? 2 : 1;
+}
+
+/**
+ * Matchup weeks that are safe to feed to elimination math. Sleeper exposes partial scores as
+ * soon as Thursday games begin. The league's `settings.last_scored_leg` is the authoritative
+ * completed boundary; NFL `display_week` can already equal the in-progress leg. Historical
+ * leagues can consume their full stored schedule.
+ */
+export function getCompletedLeagueWeek(
+  league: Pick<League, 'season' | 'settings'> | undefined,
+  nflState: Pick<NflState, 'season' | 'week'> | undefined,
+): number | null {
+  if (!league || !nflState) return null;
+  if (league.season !== nflState.season) return 18;
+  const lastScoredLeg = Number(league.settings.last_scored_leg);
+  if (Number.isFinite(lastScoredLeg) && lastScoredLeg >= 0) return lastScoredLeg;
+  // Defensive fallback for unusual league payloads that omit last_scored_leg.
+  return Math.max(0, nflState.week - 1);
+}
+
+/** One canonical survivor set for Hub, Teams, Waivers, projections, and buyer tiers. */
+export function getActiveRosterIds(result: EliminationResult): Set<number> {
+  return new Set(
+    [...result.teams.values()]
+      .filter((team) => team.eliminatedWeek == null)
+      .map((team) => team.rosterId),
+  );
 }
 
 export function computeEliminations(

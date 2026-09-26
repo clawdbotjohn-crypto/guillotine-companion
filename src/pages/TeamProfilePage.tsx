@@ -10,8 +10,9 @@ import {
   useAllTransactions,
   useDraftPicks,
   useLeagueHistory,
+  useNflState,
 } from '../api';
-import { computeEliminations, computeHistoricalRanks, extractBids } from '../logic';
+import { computeEliminations, computeHistoricalRanks, extractBids, getCompletedLeagueWeek } from '../logic';
 import { Card, StatCard, StatusBadge, Skeleton, PositionBadge } from '../components/ui';
 import { SeasonPicker } from '../components/SeasonPicker';
 import { useSwitchSeason } from '../hooks/useSwitchSeason';
@@ -35,7 +36,9 @@ export function TeamProfilePage() {
   const { data: users } = useLeagueUsers(leagueId);
   const { data: rosters } = useRosters(leagueId);
   const { isLoading: playersLoading } = usePlayers();
-  const { data: matchups, isLoading: matchupsLoading } = useAllMatchups(leagueId, 18);
+  const nflStateQuery = useNflState();
+  const completedWeek = getCompletedLeagueWeek(league, nflStateQuery.data);
+  const { data: matchups, isLoading: matchupsLoading } = useAllMatchups(leagueId, completedWeek);
   const { data: transactions } = useAllTransactions(leagueId, 18);
   const { data: leagueHistory, isLoading: historyLoading } = useLeagueHistory(rootLeagueId);
   const handleSwitchSeason = useSwitchSeason();

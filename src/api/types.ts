@@ -45,6 +45,12 @@ export interface Matchup {
   players_points: Record<string, number> | null;
 }
 
+export interface WaiverBudgetTransfer {
+  sender: number;
+  receiver: number;
+  amount: number;
+}
+
 export interface Transaction {
   type: string;
   status: string;
@@ -52,7 +58,19 @@ export interface Transaction {
   roster_ids: number[];
   adds: Record<string, number> | null;
   drops: Record<string, number> | null;
-  settings: { waiver_bid?: number } | null;
+  settings: {
+    waiver_bid?: number;
+    priority?: number;
+    seq?: number;
+    [key: string]: unknown;
+  } | null;
+  metadata?: {
+    notes?: string;
+    [key: string]: unknown;
+  } | null;
+  waiver_budget?: WaiverBudgetTransfer[] | null;
+  creator?: string;
+  status_updated?: number;
   leg: number;
   created: number;
 }
@@ -153,4 +171,33 @@ export interface ProjectionSnapshotMetadata {
   rowCount: number;
   contentHash: string;
   provenance: ProjectionSnapshotProvenance;
+}
+
+export interface ProjectionSnapshotRow {
+  projectionWeek: number;
+  playerId: string;
+  ptsStd: number | null;
+  ptsHalfPpr: number | null;
+  ptsPpr: number | null;
+}
+
+export interface ProjectionSnapshotEffectiveProvenance {
+  kind: ProjectionSnapshotProvenance;
+  exact: boolean;
+  captureKind: ProjectionSnapshotProvenance;
+  captureTiming: 'exact-at-cutoff' | 'early-reconstruction' | 'post-cutoff-reconstruction';
+  effectiveKind: ProjectionSnapshotProvenance;
+  effectiveExact: boolean;
+  selection: 'same-decision-week' | 'earlier-decision-week-fallback';
+  matchesRequestedDecisionWeek: boolean;
+  requestedDecisionWeek: number;
+  requestedPlayingWeek: number;
+  snapshotDecisionWeek: number;
+  snapshotPlayingWeek: number;
+}
+
+export interface ProjectionSnapshotResponse {
+  snapshot: ProjectionSnapshotMetadata;
+  provenance: ProjectionSnapshotEffectiveProvenance;
+  rows: ProjectionSnapshotRow[];
 }

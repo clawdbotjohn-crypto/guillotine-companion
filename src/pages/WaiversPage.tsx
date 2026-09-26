@@ -1,10 +1,12 @@
 // Waivers page — recommended bids per strategy, weekly context, and predicted winning bid.
 import { useMemo, useState, type ReactNode } from 'react';
-import { AlertTriangle, ShoppingCart, Info, RefreshCw } from 'lucide-react';
-import { Button, Card, Skeleton, PositionBadge } from '../components/ui';
+import { AlertTriangle, ChevronDown, ShoppingCart, Info, RefreshCw } from 'lucide-react';
+import { Button, Card, Skeleton } from '../components/ui';
 import { FaabOverBudgetWarning } from '../components/FaabOverBudgetWarning';
+import { WaiverManagerPredictions } from '../components/ManagerBiddingProfiles';
+import { buildManagerDetailData, type ManagerDetailData } from '../logic/managerDetails';
+import { buildManagerPredictions, isEligibleBuyerPrediction, orderManagerPredictions, type ManagerPredictionDisplay } from '../logic/managerPredictionDisplay';
 import { ContextDisclosure } from '../components/ContextDisclosure';
-import { ByeWeekText } from '../components/ByeWeekText';
 import { useAppStore, usePlayers } from '../store';
 import {
   useLeague,
@@ -20,6 +22,8 @@ import {
 } from '../api';
 import {
   computeEliminations,
+  getActiveRosterIds,
+  getCompletedLeagueWeek,
   extractBids,
   getProjectionScoring,
   getRestOfSeasonStartWeek,
@@ -28,6 +32,9 @@ import {
   buildWeeklyProjectionContext,
   getTeamByeWeek,
   RANKING_SOURCES,
+  buildWeeklyScoredPlayers,
+  projectAllTeams,
+  computeProjectedLineupGroupRanks,
   type WaiverRankingSource,
 } from '../logic';
 import {
@@ -38,13 +45,15 @@ import {
   computeAvailablePlayers,
   computeRosteredPlayerOwners,
   getReplacementTeamBounds,
+  getWeeksAsStarterBid,
   normalizeReplacementTeamTarget,
   sortWaiverRowsByStrategy,
   type RosteredPlayerOwner,
   type StrategyKey,
   type WaiverPlayerRow,
 } from '../logic/waivers';
-import { getPlayerName } from '../store/players';
+import { getPlayerName, getPlayerPosition } from '../store/players';
+import { useBiddingProfiles } from '../hooks/useBiddingProfiles';
 import {
   DEFAULT_WAIVER_STRATEGY,
   getWaiverStrategyExplanation,
@@ -175,99 +184,112 @@ export function VorpControls({
   );
 }
 
-export function PredictedWinningBidFooter({
-  strategy,
-  row,
-}: {
-  strategy: StrategyKey;
-  row: Pick<WaiverPlayerRow, 'predictedWinningBid'>;
-}) {
-  if (strategy === 'aggressive') return null;
-  return (
-    <div className="text-[9px] text-[#6b6e99]">
-      Predicted bid <span className="font-['Space_Mono'] text-[#f59e0b] tabular-nums">${row.predictedWinningBid}</span>
-    </div>
-  );
-}
-
 export function WaiverPlayerCard({
   row,
   strategy,
   remainingFaab,
-  source,
   nflTeam,
-  weeklyText,
+  weeklyPoints,
+  isUpcomingBye,
   byeWeek,
   currentWeek,
-  injuryStatus,
   owner,
   selectedRosterId,
+  managerPredictions = [],
+  managerDetails = new Map(),
+  showManagerPredictions = false,
+  getPlayerName: resolvePlayerName = getPlayerName,
 }: {
   row: WaiverPlayerRow;
   strategy: StrategyKey;
   remainingFaab: number | null;
-  source: (typeof RANKING_SOURCES)[number];
   nflTeam?: string | null;
-  weeklyText: string;
+  weeklyPoints?: number | null;
+  weeklyRank?: number | null;
+  isUpcomingBye?: boolean;
   byeWeek: number | null;
   currentWeek: number;
   injuryStatus?: string | null;
   owner?: RosteredPlayerOwner;
   selectedRosterId?: number | null;
+  managerPredictions?: ManagerPredictionDisplay[];
+  managerDetails?: ReadonlyMap<number, ManagerDetailData>;
+  showManagerPredictions?: boolean;
+  getPlayerName?: (playerId: string) => string;
 }) {
+  const [isOpen, setIsOpen] = useState(false);
   const suggestion = row.suggestions.find((item) => item.strategy === strategy);
   if (!suggestion) return null;
-  const sourceMetric = source.key === 'sleeper'
-    ? `${source.shortLabel}: ${row.rosPoints.toFixed(1)} rest-of-season points (${row.projectedPointsPerWeek.toFixed(1)} per week)`
-    : source.key === 'fantasypros' && row.sourceRank != null
-      ? `${source.shortLabel}: overall rank ${row.sourceRank}`
-      : `${source.shortLabel}: value ${row.sourceValue.toFixed(1)}`;
-  const rankText = `${row.position} #${row.posRank}`;
   const isOwnedBySelectedTeam = owner != null && owner.rosterId === selectedRosterId;
+  const hasPositiveValue = suggestion.value != null && suggestion.value > 0;
+  const hasManagerPredictions = !owner && hasPositiveValue && showManagerPredictions && managerPredictions.length > 0;
+  const orderedManagerPredictions = orderManagerPredictions(managerPredictions);
+  const highestManagerPrediction = hasManagerPredictions
+    ? orderedManagerPredictions.find(isEligibleBuyerPrediction)?.predictedBid ?? null
+    : null;
+  const canExpand = hasManagerPredictions;
+  const nextWeek = currentWeek + 1;
+  const projectionLabel = isUpcomingBye
+    ? `W${nextWeek} bye`
+    : weeklyPoints != null
+      ? `W${nextWeek} ${weeklyPoints.toFixed(1)} pts`
+      : `W${nextWeek} no projection`;
+  const byeLabel = byeWeek == null ? 'Bye unavailable' : `Bye W${byeWeek}`;
 
   return (
-    <Card
-      hover={false}
-      className={`p-2.5 ${isOwnedBySelectedTeam ? 'border-[#10b981] border-l-4 border-l-[#10b981]' : ''}`}
-    >
+    <Card hover={false} className={`${isOwnedBySelectedTeam ? 'border-[#10b981] border-l-4 border-l-[#10b981]' : ''}`}>
       <article
-        aria-disabled={owner ? 'true' : undefined}
         aria-label={`${row.name}, ${owner ? `rostered by ${owner.ownerName}` : 'available'}${isOwnedBySelectedTeam ? ', owned by your selected team' : ''}`}
+        aria-disabled={owner ? 'true' : undefined}
         data-owner-highlight={isOwnedBySelectedTeam ? 'selected-team' : 'neutral'}
       >
-        {isOwnedBySelectedTeam && <span className="sr-only">Owned by your selected team.</span>}
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex min-w-0 items-start gap-2">
-            <PositionBadge position={row.position} className="shrink-0 px-2 py-1 text-sm" />
-            <div className="min-w-0">
+        <button
+          type="button"
+          aria-expanded={canExpand ? isOpen : undefined}
+          aria-controls={canExpand ? `player-bids-${row.playerId}` : undefined}
+          disabled={!canExpand}
+          onClick={() => canExpand && setIsOpen((open) => !open)}
+          className={`block w-full rounded-xl p-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#6366f1] ${canExpand ? 'cursor-pointer' : 'cursor-default'}`}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-center gap-1.5">
                 <span className="truncate text-sm font-semibold text-[#f0f0ff]">{row.name}</span>
-                {injuryStatus ? <span className="shrink-0 rounded bg-[rgba(245,158,11,0.15)] px-1.5 text-[9px] font-semibold uppercase text-[#f59e0b]">{injuryStatus}</span> : null}
-                {owner ? <span className="shrink-0 rounded bg-[rgba(100,116,139,0.18)] px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-[#94a3b8]">Rostered</span> : null}
+                {owner && <span className="shrink-0 rounded bg-[rgba(100,116,139,0.18)] px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-[#94a3b8]">Rostered</span>}
               </div>
-              <div className="mt-0.5 flex items-center gap-1 text-[10px] font-['Space_Mono'] text-[#6b6e99]">
-                <ContextDisclosure label={`Show ${rankText} rest-of-season ranking details`} trigger={<span className="underline decoration-dotted underline-offset-2">{rankText}</span>}>
-                  {sourceMetric}. League-wide positional rank {rankText}.
-                </ContextDisclosure>
-                <span aria-hidden="true">•</span><span>{nflTeam ?? 'Team unavailable'}</span>
-                <span aria-hidden="true">•</span><ByeWeekText byeWeek={byeWeek} currentWeek={currentWeek} />
+              <p className="mt-0.5 truncate text-[10px] font-['Space_Mono'] text-[#8b8ec7]">
+                {row.position} #{row.posRank}{nflTeam ? ` · ${nflTeam}` : ''}
+              </p>
+              <p className="mt-0.5 truncate text-[10px] text-[#6b6e99]">{projectionLabel} · {byeLabel}</p>
+              {owner && <p className="mt-0.5 truncate text-[9px] text-[#6b6e99]">{owner.ownerName}</p>}
+            </div>
+
+            <div className="w-[8.75rem] shrink-0 rounded-lg bg-[#0c0f22] px-2.5 py-2 text-right" data-testid="compact-bid-summary">
+              <div className="flex items-baseline justify-end gap-1.5 whitespace-nowrap" data-testid="suggested-bid-row">
+                <span className="text-[9px] text-[#6b6e99]">{owner ? 'Current value' : 'Suggested bid'}</span>
+                <span className="inline-flex items-center justify-end gap-1 font-['Space_Mono'] text-base font-bold tabular-nums text-[#10b981]">
+                  {!owner && remainingFaab != null && suggestion.value != null && suggestion.value > remainingFaab && <FaabOverBudgetWarning />}
+                  <span>{suggestion.value == null ? 'Unavailable' : `$${suggestion.value}`}</span>
+                </span>
               </div>
-              {owner ? <div className="text-[9px] text-[#6b6e99]">Owner: {owner.ownerName}</div> : null}
+              {highestManagerPrediction != null && (
+                <p className="mt-1 text-[9px] font-semibold text-[#fbbf24]">
+                  Predicted bid <span className="font-['Space_Mono'] tabular-nums">${highestManagerPrediction}</span>
+                </p>
+              )}
+            </div>
+            {canExpand && <ChevronDown size={14} className={`mt-3 shrink-0 text-[#6b6e99] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />}
+          </div>
+        </button>
+
+        {canExpand && isOpen && (
+          <div id={`player-bids-${row.playerId}`} className="animate-in fade-in slide-in-from-top-1 duration-200">
+            <div className="border-t border-[#1a1e3a] px-2.5 pb-2.5 pt-2">
+              <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#8b8eb8]">Bid Predictions</h3>
+              <WaiverManagerPredictions predictions={orderedManagerPredictions} detailsByRosterId={managerDetails} getPlayerName={resolvePlayerName} />
             </div>
           </div>
-          <div className="shrink-0 text-right">
-            <div className="flex items-center justify-end gap-1 font-['Space_Mono'] text-base font-bold tabular-nums text-[#10b981]">
-              {!owner && remainingFaab != null && suggestion.value != null && suggestion.value > remainingFaab ? <FaabOverBudgetWarning /> : null}
-              <span>{suggestion.value == null ? 'Unavailable' : `$${suggestion.value}`}</span>
-            </div>
-            <div className="text-[9px] font-['Space_Mono'] text-[#6b6e99]">{suggestion.pctOfBudget == null ? 'Sleeper ROS required' : `${suggestion.pctOfBudget.toFixed(0)}%`}</div>
-            <PredictedWinningBidFooter strategy={strategy} row={row} />
-          </div>
-        </div>
-        <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[10px] leading-4 text-[#8b8ec7]">
-          <span>{weeklyText}</span>
-          {strategy === 'weeks-starter' ? <span>{row.starterWeeks}/{row.possibleStarterWeeks} starter wks</span> : null}
-        </div>
+        )}
       </article>
     </Card>
   );
@@ -318,9 +340,11 @@ export function WaiversPage() {
   const { data: users } = useLeagueUsers(leagueId);
   const { data: rosters } = useRosters(leagueId);
   const playersQuery = usePlayers();
-  const { data: matchups, isLoading: matchupsLoading } = useAllMatchups(leagueId, 18);
-  const { data: transactions } = useAllTransactions(leagueId, 18);
   const nflStateQuery = useNflState();
+  const completedWeek = getCompletedLeagueWeek(league, nflStateQuery.data);
+  const { data: matchups, isLoading: matchupsLoading } = useAllMatchups(leagueId, completedWeek);
+  const transactionsQuery = useAllTransactions(leagueId, 18);
+  const { data: transactions } = transactionsQuery;
   const [rankingSource, setRankingSource] = useState<WaiverRankingSource>('sleeper');
 
   const projectionStartWeek = useMemo(() => {
@@ -340,6 +364,13 @@ export function WaiversPage() {
     projectionStartWeek,
     !!league && !!nflStateQuery.data && league.season === nflStateQuery.data.season,
   );
+
+  const biddingProfiles = useBiddingProfiles({
+    leagueId,
+    league,
+    rosters,
+    players: playersQuery.data,
+  });
 
   const [strategy, setStrategy] = useState<StrategyKey>(DEFAULT_WAIVER_STRATEGY);
   const [posFilter, setPosFilter] = useState('ALL');
@@ -448,6 +479,7 @@ export function WaiversPage() {
         getPlayerName,
         { ...boardOptions, maxPerPos: Number.POSITIVE_INFINITY },
       ),
+
     };
   }, [
     waiverContext,
@@ -541,7 +573,14 @@ export function WaiversPage() {
     );
   }
 
-  const { ctx, remainingFaab, ownership, availableRows, allRows, vorpCalibration } = board;
+  const {
+    ctx,
+    remainingFaab,
+    ownership,
+    availableRows,
+    allRows,
+    vorpCalibration,
+  } = board;
   const sleeperUnavailableReason = vorpCalibration
     ? undefined
     : projectionWeeksQuery.isLoading || nflStateQuery.isLoading
@@ -567,6 +606,32 @@ export function WaiversPage() {
       (playerId) => playersQuery.data?.get(playerId)?.position,
     )
     : new Map();
+  const weeklyScoredPlayers = weeklyProjectionQuery.data && league
+    ? buildWeeklyScoredPlayers(
+      weeklyProjectionQuery.data,
+      getProjectionScoring(league.scoring_settings?.rec),
+      getPlayerPosition,
+    )
+    : null;
+  const projectedTeams = projectAllTeams(rosters!, weeklyScoredPlayers, league, waiverContext!.elim);
+  const projectedPositionRanks = computeProjectedLineupGroupRanks(
+    projectedTeams,
+    weeklyScoredPlayers,
+    league,
+  ).byRosterId;
+  const activeRosterIds = getActiveRosterIds(waiverContext!.elim);
+  const playerValues = new Map(allRows.map((row) => [row.playerId, row.sourceValue]));
+  const playerPositionRanks = new Map(allRows.map((row) => [row.playerId, row.posRank]));
+  const managerDetails = buildManagerDetailData({
+    profiles: biddingProfiles.profiles,
+    rosters: rosters!,
+    players: playersQuery.data!,
+    season: league?.season,
+    currentWeek: nflStateQuery.data?.week ?? null,
+    playerValues,
+    positionRanks: playerPositionRanks,
+    projectedPositionRanks,
+  });
 
   return (
     <div className="px-6 py-6 pb-24 max-w-lg mx-auto">
@@ -638,6 +703,8 @@ export function WaiversPage() {
         </span>
       </div>
 
+
+
       {/* Board */}
       <div className="space-y-2">
         {filtered.length === 0 && (
@@ -655,25 +722,42 @@ export function WaiversPage() {
           const weekly = weeklyContext.get(row.playerId);
           const byeWeek = getTeamByeWeek(league!.season, player?.team);
           const isUpcomingBye = byeWeek != null && projectionStartWeek != null && byeWeek === projectionStartWeek;
-          const weeklyText = isUpcomingBye
-            ? 'Next week: Bye'
-            : weekly
-              ? `Next week: ${weekly.points.toFixed(1)} pts · ${row.position}${weekly.positionRank}`
-              : 'Next week: No projection';
+          const positionRanks = new Map<number, { rank: number; outOf: number }>();
+          for (const [managerRosterId, ranks] of projectedPositionRanks) {
+            const rank = ranks.find((item) => item.group === row.position);
+            if (rank) positionRanks.set(managerRosterId, { rank: rank.rank, outOf: rank.outOf });
+          }
+          const weeksAsStarterBaseline = getWeeksAsStarterBid(row);
+          const predictions = biddingProfiles.hasHistory && !biddingProfiles.error
+            && weeksAsStarterBaseline != null
+            ? buildManagerPredictions({
+              profiles: biddingProfiles.profiles,
+              baseline: weeksAsStarterBaseline,
+              rosters: rosters!,
+              users: users!,
+              initialFaab: ctx.budget,
+              activeRosterIds,
+              positionRanks,
+            })
+            : [];
           return (
             <WaiverPlayerCard
               key={row.playerId}
               row={row}
               strategy={strategy}
               remainingFaab={remainingFaab}
-              source={sourceInfo}
               nflTeam={player?.team}
-              weeklyText={weeklyText}
+              weeklyPoints={weekly?.points}
+              weeklyRank={weekly?.positionRank}
+              isUpcomingBye={isUpcomingBye}
               byeWeek={byeWeek}
               currentWeek={ctx.currentWeek}
               injuryStatus={player?.injury_status}
               owner={ownership.get(row.playerId)}
               selectedRosterId={rosterId}
+              managerPredictions={predictions}
+              managerDetails={managerDetails}
+              showManagerPredictions={predictions.length > 0}
             />
           );
         })}

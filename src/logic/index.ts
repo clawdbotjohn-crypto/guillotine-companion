@@ -1,5 +1,7 @@
 export {
   computeEliminations,
+  getCompletedLeagueWeek,
+  getActiveRosterIds,
   extractBids,
   isGuillotineLeague,
   type WeekResult,
@@ -55,12 +57,43 @@ export {
 } from './analytics';
 
 export {
+  rankQuartile,
+  faabQuartile,
+  faabQuartileLabel,
+  type QuartileBand,
+  type FaabQuartileBand,
+} from './rankingQuartiles';
+
+export {
   resolvePlayerAcquisition,
   buildHubRosterRows,
   buildUpcomingByeWarnings,
+  getHubByeWindowWeek,
   type AcquisitionKind,
   type PlayerAcquisition,
   type HubRosterRow,
   type HubByeWarning,
   type BuildHubRosterRowsOptions,
 } from './hubRoster';
+
+export {
+  BIDDING_PROFILE_MODEL_V1,
+  classifyCanonicalBidEvents,
+  selectTopCanonicalBids,
+  styleForMultiplier,
+  evaluateBidEvidence,
+  buildManagerBiddingProfiles,
+  predictManagerBid,
+  buildSnapshotRosProjections,
+  buildHistoricalSetupContext,
+  calculateHistoricalBaseline,
+  type BidOutcome,
+  type FaabReconstruction,
+  type ManagerBidStyle,
+  type ManagerBidConfidence,
+  type CanonicalBidEvent,
+  type HistoricalBaselineEvidence,
+  type ManagerBidEvidence,
+  type ManagerBiddingProfile,
+  type ManagerBidPrediction,
+} from './biddingProfiles';

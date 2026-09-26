@@ -19,12 +19,14 @@ import {
   buildHubRosterRows,
   buildUpcomingByeWarnings,
   computeEliminations,
+  getCompletedLeagueWeek,
   computeProjectedLineupGroupRanks,
   computeAllRosterHistoricalRanks,
   extractBids,
   formatProjectedCurrentRank,
   getProjectionScoring,
   getRestOfSeasonStartWeek,
+  getHubByeWindowWeek,
   projectAllTeams,
   type TeamProjection,
 } from '../logic';
@@ -80,11 +82,12 @@ export function HubPage() {
   const { data: users } = useLeagueUsers(leagueId);
   const { data: rosters } = useRosters(leagueId);
   const { data: players, isLoading: playersLoading } = usePlayers();
-  const { data: matchups, isLoading: matchupsLoading } = useAllMatchups(leagueId, 18);
+  const nflStateQuery = useNflState();
+  const completedWeek = getCompletedLeagueWeek(league, nflStateQuery.data);
+  const { data: matchups, isLoading: matchupsLoading } = useAllMatchups(leagueId, completedWeek);
   const { data: transactions } = useAllTransactions(leagueId, 18);
   const { data: draftPicks } = useDraftPicks(league?.draft_id ?? null);
   const { data: leagueHistory, isLoading: historyLoading } = useLeagueHistory(rootLeagueId);
-  const nflStateQuery = useNflState();
   const projectionWeek = league && nflStateQuery.data && league.season === nflStateQuery.data.season
     ? getRestOfSeasonStartWeek(nflStateQuery.data)
     : null;
@@ -188,7 +191,10 @@ export function HubPage() {
       })
     : [];
   const rosterIsOptimized = (myProjection?.starters.length ?? 0) > 0;
-  const byeWarnings = buildUpcomingByeWarnings(rosterRows, projectionWeek);
+  const byeWindowWeek = league && nflStateQuery.data?.season === league.season
+    ? getHubByeWindowWeek(nflStateQuery.data)
+    : null;
+  const byeWarnings = buildUpcomingByeWarnings(rosterRows, byeWindowWeek);
   const totalBudget = league?.settings?.waiver_budget ?? 1000;
   const budgetUsed = myRoster?.settings?.waiver_budget_used ?? 0;
   const budgetRemaining = totalBudget - budgetUsed;
