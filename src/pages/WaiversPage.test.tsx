@@ -162,7 +162,9 @@ describe('waiver controls', () => {
     expect(screen.getByText((_text, element) => element?.textContent === 'Predicted bid $40')).toBeTruthy();
     expect(screen.queryByText('$61')).toBeNull();
     expect(screen.queryByText('Hidden Manager')).toBeNull();
-    expect(screen.getByRole('button', { name: /Test Runner/ }).getAttribute('aria-expanded')).toBe('false');
+    const positiveCard = screen.getByRole('button', { name: /Test Runner/ });
+    expect(positiveCard.getAttribute('aria-expanded')).toBe('false');
+    expect(positiveCard.hasAttribute('disabled')).toBe(false);
 
     const zeroRow: WaiverPlayerRow = {
       ...waiverRow,
@@ -177,6 +179,7 @@ describe('waiver controls', () => {
     />);
     const zeroCard = screen.getByRole('button', { name: /Test Runner/ });
     expect(zeroCard.getAttribute('aria-expanded')).toBeNull();
+    expect(zeroCard.hasAttribute('disabled')).toBe(true);
     expect(screen.queryByText(/Predicted bid/)).toBeNull();
     fireEvent.click(zeroCard);
     expect(screen.queryByText('Bid Predictions')).toBeNull();

@@ -246,6 +246,7 @@ export function WaiverPlayerCard({
           type="button"
           aria-expanded={canExpand ? isOpen : undefined}
           aria-controls={canExpand ? `player-bids-${row.playerId}` : undefined}
+          disabled={!canExpand}
           onClick={() => canExpand && setIsOpen((open) => !open)}
           className={`block w-full rounded-xl p-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#6366f1] ${canExpand ? 'cursor-pointer' : 'cursor-default'}`}
         >
