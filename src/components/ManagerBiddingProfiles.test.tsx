@@ -280,6 +280,41 @@ describe('manager bid presentation', () => {
     ]);
   });
 
+  it('applies eliminated-team visibility to Bid Profiles without changing active FAAB tiers and closes hidden details', () => {
+    const props = {
+      profiles: [profile(1, 1.5), profile(2, 0.84), profile(3, null)],
+      rosters,
+      users,
+      initialFaab: 1000,
+      activeRosterIds: new Set([1, 2]),
+      isLoading: false,
+      error: null,
+      onRetry: vi.fn(),
+      getPlayerName: () => 'History Player',
+    };
+    const { rerender } = render(<TeamBidProfiles {...props} showEliminatedTeams={false} />);
+
+    expect(screen.getAllByRole('button', { name: /open bid profile/i }).map((node) => node.getAttribute('aria-label'))).toEqual([
+      'Open bid profile for Aggressive Alice',
+      'Open bid profile for Careful Chris',
+    ]);
+    expect(screen.queryByRole('button', { name: /open bid profile for Zero Zoe/i })).toBeNull();
+    expect(screen.getByText('$800').closest('[data-faab-quartile]')?.getAttribute('data-faab-quartile')).toBe('top');
+
+    rerender(<TeamBidProfiles {...props} showEliminatedTeams />);
+    expect(screen.getAllByRole('button', { name: /open bid profile/i }).map((node) => node.getAttribute('aria-label'))).toEqual([
+      'Open bid profile for Aggressive Alice',
+      'Open bid profile for Careful Chris',
+      'Open bid profile for Zero Zoe',
+    ]);
+    fireEvent.click(screen.getByRole('button', { name: /open bid profile for Zero Zoe/i }));
+    expect(screen.getByRole('dialog', { name: 'Zero Zoe' })).toBeTruthy();
+
+    rerender(<TeamBidProfiles {...props} showEliminatedTeams={false} />);
+    expect(screen.queryByRole('dialog', { name: 'Zero Zoe' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /open bid profile for Zero Zoe/i })).toBeNull();
+  });
+
   it('stacks Remaining FAAB beneath Predicted, omits the expanded-row style badge, and colors likelihood status', () => {
     render(<ManagerPredictionRow
       prediction={prediction({ currentFaab: 100, predictedBid: 63, likelihood: 'Likely' })}

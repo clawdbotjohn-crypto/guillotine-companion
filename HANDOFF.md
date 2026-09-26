@@ -1,3 +1,24 @@
+# Handoff — PR #11 owner preview fix: eliminated-team filtering (2026-09-26)
+
+John found that the shared `Show eliminated teams` checkbox filtered the Teams tab but not Bid Profiles. Root cause: `TeamsPage` passed the active roster set into `TeamBidProfiles` only for FAAB quartile calculation; it never passed the visibility preference, and the component always mapped every profile.
+
+Fix:
+- `TeamsPage` now passes the shared persisted `showEliminatedTeams` state to Bid Profiles.
+- Bid Profiles defaults to active managers only and adds eliminated managers when checked, preserving multiplier-descending order.
+- Active-manager-only FAAB quartiles remain unchanged when eliminated cards are visible.
+- Turning the checkbox off closes an open eliminated-manager modal.
+- Empty active-profile state is explicit.
+
+Verification:
+- Focused Teams/Bid Profiles: 25/25 passed.
+- Full frontend: 24 files / 162 tests passed.
+- API: 36/36 passed.
+- Lint, typecheck, production build, and `git diff --check`: passed.
+
+Pending at handoff creation: commit/push and updated Azure preview deployment. No merge or production deployment.
+
+---
+
 # HANDOFF — Max VORP PR #11
 
 _Last updated: 2026-09-26 04:13 PDT_

@@ -1,5 +1,11 @@
 # Guillotine Companion — Progress
 
+## 🚨 PR #11 owner preview fix — eliminated-team visibility in Bid Profiles (John, 2026-09-26)
+
+- [x] The shared `Show eliminated teams` checkbox on Teams must filter both the Teams tab and the Bid Profiles tab. Default unchecked: Bid Profiles lists active managers only. Checked: eliminated managers are added without changing multiplier-descending ordering or active-manager FAAB quartile calculations.
+- [x] If an eliminated manager’s profile modal is open when the checkbox is turned off, close it rather than leave hidden content open. Preserve the persisted checkbox preference and Teams behavior.
+- [x] Add component/integration regressions for both tabs and run full verification; push to the existing Max VORP PR and update its hosted preview. No merge or production deploy.
+
 ## 🚀 PR #11 — Max VORP default strategy + bidding-style baseline (John, 2026-09-26; IMPLEMENT NOW)
 
 **Product decision:** Add **Max VORP** and make it the default and first strategy option. Max VORP also replaces Weeks as Starter as the default baseline used to calculate manager bidding-style ratios. The separate real-bid strategy-accuracy analysis is not part of this PR and does not gate the decision.
