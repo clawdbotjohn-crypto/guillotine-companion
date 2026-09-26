@@ -2,7 +2,7 @@
 
 ## Status
 
-Owner round-2 implementation is complete on `feat/bidding-behavior-profiles`. Do not merge or deploy from this worktree. The only missing item at the time this note was written is the final CI-hosted preview verification after push; append its URL/evidence below.
+Owner round-2 implementation and hosted QA are complete on `feat/bidding-behavior-profiles`. Do not merge or deploy from this worktree.
 
 ## Implemented
 
@@ -59,15 +59,18 @@ Owner round-2 implementation is complete on `feat/bidding-behavior-profiles`. Do
 - `git diff --check`: passed.
 - Changed-file secret scan: no findings.
 - Direct live Sleeper verification: 32 current rosters; `last_scored_leg=2`; Zay and Jeremiyah owned by roster 15; Lamar currently unowned.
-- Local Chromium/CDP desktop smoke: 28 active, 4 eliminated, compact cards 87px high without manager summaries, zero horizontal overflow.
+- Exact PR preview desktop: 28 active / 4 eliminated; compact cards were 131px with all three manager summaries (87px before profile data hydrated); no horizontal overflow.
+- Exact PR preview at 390px: no horizontal overflow; modal was 340×743 inside an 844px viewport, body scroll locked, close control focused, and modal content scrollable.
+- Hosted Waivers and Teams both opened the same modal with Upcoming byes → Team needs → Bidding History; history used the 2-column metric grid and displayed explicit Won/Lost labels.
+- Hosted console: no runtime errors. Chromium reported only the pre-existing manifest touch-icon size warning.
 
-## PR / preview (append after push)
+## PR / preview
 
 - PR: <https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/10>
-- Commit: pending
-- Mergeability/checks: pending push
-- Exact Azure preview: pending deployment lookup
-- Hosted desktop + 390px browser QA: pending deployment
+- Implementation commit: `e13b9e11635b1a6f04f545b744657d054aee582a`
+- Mergeability/checks at implementation push: MERGEABLE; CI and Azure Build and Deploy passed.
+- Exact Azure preview: <https://nice-moss-07ec56310-10.centralus.7.azurestaticapps.net>
+- Hosted desktop + 390px browser QA: passed; evidence above.
 
 ## Guardrails
 
