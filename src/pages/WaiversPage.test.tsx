@@ -97,7 +97,7 @@ describe('waiver controls', () => {
     expect(screen.queryByText(/starter wks/)).toBeNull();
   });
 
-  it('shows one yellow highest manager prediction with no username/divider, then expands all tiers', () => {
+  it('excludes a higher Unlikely bid and matches the collapsed amount to the first eligible expanded row', () => {
     const predictions: ManagerPredictionDisplay[] = Array.from({ length: 12 }, (_, index) => ({
       rosterId: index + 1,
       managerName: `Manager ${index + 1}`,
@@ -122,24 +122,79 @@ describe('waiver controls', () => {
     />);
     const toggle = screen.getByRole('button', { name: /Test Runner/ });
     const summary = screen.getByTestId('compact-bid-summary');
-    expect(within(summary).getByText((_text, element) => element?.textContent === 'Predicted bid $100')).toBeTruthy();
+    expect(within(summary).getByText((_text, element) => element?.textContent === 'Predicted bid $96')).toBeTruthy();
+    expect(within(summary).queryByText((_text, element) => element?.textContent === 'Predicted bid $100')).toBeNull();
     expect(within(summary).queryByText(/Manager \d+/)).toBeNull();
     expect(within(summary).queryByText('$61')).toBeNull();
     expect(summary.innerHTML).not.toContain('border-t');
     const suggestedBidRow = within(summary).getByTestId('suggested-bid-row');
-    expect(suggestedBidRow.className).toContain('flex');
+    expect(suggestedBidRow.className).toMatch(/items-baseline.*justify-end.*gap-1\.5/);
+    expect(suggestedBidRow.className).not.toContain('justify-between');
     expect(suggestedBidRow.textContent).toBe('Suggested bid$42');
     expect(within(suggestedBidRow).getByText('Suggested bid').compareDocumentPosition(within(suggestedBidRow).getByText('$42')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByTestId('expanded-manager-list')).toBeNull();
     fireEvent.click(toggle);
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByText('Bid Predictions')).toBeTruthy();
-    expect(screen.getByTestId('expanded-manager-list').children).toHaveLength(12);
+    const expanded = screen.getByTestId('expanded-manager-list');
+    expect(expanded.children).toHaveLength(12);
+    const firstExpanded = expanded.firstElementChild as HTMLElement;
+    expect(within(firstExpanded).getByText('Manager 5')).toBeTruthy();
+    expect(within(firstExpanded).getByText('$96')).toBeTruthy();
     expect(screen.getByText('Manager 1').closest('button')?.className).toContain('opacity-55');
     expect(screen.getAllByText(/Likely bidder|Possible bidder|Unlikely bidder/)).toHaveLength(12);
     fireEvent.click(screen.getByRole('button', { name: /open details for Manager 5/i }));
     expect(screen.getByRole('dialog', { name: 'Manager 5' })).toBeTruthy();
     expect(screen.getAllByText('Bidding History')).toHaveLength(1);
+  });
+
+  it('orders tied FAAB-capped eligible predictions deterministically ahead of Unlikely rows', () => {
+    const makePrediction = (
+      rosterId: number,
+      managerName: string,
+      predictedBid: number,
+      likelihood: ManagerPredictionDisplay['likelihood'],
+      cappedByFaab = false,
+    ): ManagerPredictionDisplay => ({
+      rosterId,
+      managerName,
+      predictedBid,
+      currentFaab: cappedByFaab ? predictedBid : 200,
+      cappedByFaab,
+      likelihood,
+      profile: {
+        managerRosterId: rosterId,
+        managerMultiplier: 1.5,
+        style: 'aggressive',
+        confidence: 'low',
+        usableEvidenceCount: 1,
+        evidence: [],
+      },
+    });
+    render(<WaiverPlayerCard
+      {...cardProps}
+      strategy="weeks-starter"
+      managerPredictions={[
+        makePrediction(1, 'Global Max Unlikely', 120, 'Unlikely'),
+        makePrediction(2, 'Possible Cap', 80, 'Possible', true),
+        makePrediction(3, 'Likely Cap', 80, 'Likely', true),
+        makePrediction(4, 'Possible Lower', 70, 'Possible'),
+      ]}
+      showManagerPredictions
+    />);
+
+    const summary = screen.getByTestId('compact-bid-summary');
+    expect(within(summary).getByText((_text, element) => element?.textContent === 'Predicted bid $80')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Test Runner/ }));
+    const expanded = screen.getByTestId('expanded-manager-list');
+    expect(Array.from(expanded.children).map((row) => row.textContent)).toEqual([
+      expect.stringContaining('Likely Cap'),
+      expect.stringContaining('Possible Cap'),
+      expect.stringContaining('Possible Lower'),
+      expect.stringContaining('Global Max Unlikely'),
+    ]);
+    expect(within(within(expanded.firstElementChild as HTMLElement).getByTestId('predicted-label-value')).getByText('$80', { exact: false })).toBeTruthy();
+    expect(screen.getAllByText(/capped by remaining FAAB/)).toHaveLength(2);
   });
 
   it('has no prediction or expansion when manager history is unavailable', () => {

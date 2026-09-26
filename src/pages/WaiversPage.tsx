@@ -5,7 +5,7 @@ import { Button, Card, Skeleton } from '../components/ui';
 import { FaabOverBudgetWarning } from '../components/FaabOverBudgetWarning';
 import { WaiverManagerPredictions } from '../components/ManagerBiddingProfiles';
 import { buildManagerDetailData, type ManagerDetailData } from '../logic/managerDetails';
-import { buildManagerPredictions, type ManagerPredictionDisplay } from '../logic/managerPredictionDisplay';
+import { buildManagerPredictions, isEligibleBuyerPrediction, orderManagerPredictions, type ManagerPredictionDisplay } from '../logic/managerPredictionDisplay';
 import { ContextDisclosure } from '../components/ContextDisclosure';
 import { useAppStore, usePlayers } from '../store';
 import {
@@ -223,8 +223,9 @@ export function WaiverPlayerCard({
   const isOwnedBySelectedTeam = owner != null && owner.rosterId === selectedRosterId;
   const hasPositiveValue = suggestion.value != null && suggestion.value > 0;
   const hasManagerPredictions = !owner && hasPositiveValue && showManagerPredictions && managerPredictions.length > 0;
+  const orderedManagerPredictions = orderManagerPredictions(managerPredictions);
   const highestManagerPrediction = hasManagerPredictions
-    ? Math.max(...managerPredictions.map((prediction) => prediction.predictedBid))
+    ? orderedManagerPredictions.find(isEligibleBuyerPrediction)?.predictedBid ?? null
     : null;
   const canExpand = hasManagerPredictions;
   const nextWeek = currentWeek + 1;
@@ -264,9 +265,9 @@ export function WaiverPlayerCard({
             </div>
 
             <div className="w-[8.75rem] shrink-0 rounded-lg bg-[#0c0f22] px-2.5 py-2 text-right" data-testid="compact-bid-summary">
-              <div className="flex items-center justify-between gap-2" data-testid="suggested-bid-row">
+              <div className="flex items-baseline justify-end gap-1.5 whitespace-nowrap" data-testid="suggested-bid-row">
                 <span className="text-[9px] text-[#6b6e99]">{owner ? 'Current value' : 'Suggested bid'}</span>
-                <span className="flex items-center justify-end gap-1 font-['Space_Mono'] text-base font-bold tabular-nums text-[#10b981]">
+                <span className="inline-flex items-center justify-end gap-1 font-['Space_Mono'] text-base font-bold tabular-nums text-[#10b981]">
                   {!owner && remainingFaab != null && suggestion.value != null && suggestion.value > remainingFaab && <FaabOverBudgetWarning />}
                   <span>{suggestion.value == null ? 'Unavailable' : `$${suggestion.value}`}</span>
                 </span>
@@ -285,7 +286,7 @@ export function WaiverPlayerCard({
           <div id={`player-bids-${row.playerId}`} className="animate-in fade-in slide-in-from-top-1 duration-200">
             <div className="border-t border-[#1a1e3a] px-2.5 pb-2.5 pt-2">
               <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#8b8eb8]">Bid Predictions</h3>
-              <WaiverManagerPredictions predictions={managerPredictions} detailsByRosterId={managerDetails} getPlayerName={resolvePlayerName} />
+              <WaiverManagerPredictions predictions={orderedManagerPredictions} detailsByRosterId={managerDetails} getPlayerName={resolvePlayerName} />
             </div>
           </div>
         )}

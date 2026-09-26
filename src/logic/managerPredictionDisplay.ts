@@ -33,6 +33,30 @@ export function buyerLikelihood(rank: number | null, outOf: number | null): Buye
   return 'Possible';
 }
 
+const likelihoodOrder: Record<BuyerLikelihood, number> = { Likely: 0, Possible: 1, Unlikely: 2 };
+
+export function isEligibleBuyerPrediction(prediction: Pick<ManagerPredictionDisplay, 'likelihood'>): boolean {
+  return prediction.likelihood === 'Likely' || prediction.likelihood === 'Possible';
+}
+
+/**
+ * Keep every eligible buyer ahead of Unlikely buyers, then put the largest
+ * feasible (FAAB-capped) eligible prediction first. This makes the first
+ * expanded eligible row the same value summarized on the collapsed card.
+ */
+export function orderManagerPredictions(
+  predictions: readonly ManagerPredictionDisplay[],
+): ManagerPredictionDisplay[] {
+  return [...predictions].sort((a, b) => {
+    const byEligibility = Number(isEligibleBuyerPrediction(b)) - Number(isEligibleBuyerPrediction(a));
+    return byEligibility
+      || b.predictedBid - a.predictedBid
+      || likelihoodOrder[a.likelihood] - likelihoodOrder[b.likelihood]
+      || a.managerName.localeCompare(b.managerName)
+      || a.rosterId - b.rosterId;
+  });
+}
+
 export function buildManagerPredictions({
   profiles,
   baseline,
@@ -50,7 +74,7 @@ export function buildManagerPredictions({
   activeRosterIds: ReadonlySet<number>;
   positionRanks: ReadonlyMap<number, { rank: number; outOf: number }>;
 }): ManagerPredictionDisplay[] {
-  return profiles.flatMap((profile) => {
+  const predictions = profiles.flatMap((profile) => {
     if (!activeRosterIds.has(profile.managerRosterId)) return [];
     const faab = currentFaab(profile.managerRosterId, rosters, initialFaab);
     const prediction = predictManagerBid(profile, baseline, faab);
@@ -65,11 +89,6 @@ export function buildManagerPredictions({
       likelihood: buyerLikelihood(positionRank?.rank ?? null, positionRank?.outOf ?? null),
       profile,
     }];
-  }).sort((a, b) => {
-    const tierOrder: Record<BuyerLikelihood, number> = { Likely: 0, Possible: 1, Unlikely: 2 };
-    return tierOrder[a.likelihood] - tierOrder[b.likelihood]
-      || b.predictedBid - a.predictedBid
-      || a.managerName.localeCompare(b.managerName)
-      || a.rosterId - b.rosterId;
   });
+  return orderManagerPredictions(predictions);
 }

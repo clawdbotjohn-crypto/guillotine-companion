@@ -139,7 +139,8 @@ describe('manager bid presentation', () => {
     let faab = screen.getByText('$800').closest<HTMLElement>('[data-faab-quartile]')!;
     expect(faab.getAttribute('data-faab-quartile')).toBe('top');
     expect(faab.className).toContain('text-[#34d399]');
-    expect(within(faab).getByText('Top FAAB quartile')).toBeTruthy();
+    expect(within(faab).queryByText('Top FAAB quartile')).toBeNull();
+    expect(screen.getByRole('group', { name: 'Remaining FAAB $800, Top FAAB quartile' })).toBe(faab);
 
     rerender(<ManagerDetailsModal
       profile={profile(3, null)} manager="Zero Zoe" currentFaabAmount={0}
@@ -149,7 +150,8 @@ describe('manager bid presentation', () => {
     faab = screen.getByText('$0').closest<HTMLElement>('[data-faab-quartile]')!;
     expect(faab.getAttribute('data-faab-quartile')).toBe('bottom');
     expect(faab.className).toContain('text-[#fb7185]');
-    expect(within(faab).getByText('Bottom FAAB quartile')).toBeTruthy();
+    expect(within(faab).queryByText('Bottom FAAB quartile')).toBeNull();
+    expect(screen.getByRole('group', { name: 'Remaining FAAB $0, Bottom FAAB quartile' })).toBe(faab);
     expect(screen.queryByText('Learning')).toBeNull();
     expect(screen.queryByText('Not enough history')).toBeNull();
   });
@@ -213,6 +215,33 @@ describe('manager bid presentation', () => {
     expect(screen.queryByLabelText(/WR neutral, rank 4 of 8/)).toBeNull();
   });
 
+  it('groups popup strengths before weaknesses, de-duplicates positions, and hides neutral needs', () => {
+    render(<ManagerDetailsModal
+      profile={profile(1, 1.5)} manager="Aggressive Alice" currentFaabAmount={100}
+      activeFaabAmounts={[800, 100, 0]}
+      details={{
+        upcomingByes: [],
+        teamNeeds: [
+          { position: 'RB', rank: 8, outOf: 8, tier: 'weak' },
+          { position: 'QB', rank: 1, outOf: 8, tier: 'strong' },
+          { position: 'WR', rank: 7, outOf: 8, tier: 'weak' },
+          { position: 'TE', rank: 2, outOf: 8, tier: 'strong' },
+          { position: 'qb', rank: 8, outOf: 8, tier: 'weak' },
+          { position: 'K', rank: 4, outOf: 8, tier: 'neutral' },
+        ],
+      }}
+      getPlayerName={() => 'Player'} onClose={vi.fn()}
+    />);
+
+    const chips = Array.from(screen.getByRole('dialog').querySelectorAll<HTMLElement>('[data-team-need-tier]'));
+    expect(chips.map((chip) => `${chip.textContent}:${chip.dataset.teamNeedTier}`)).toEqual([
+      'QB:strong', 'TE:strong', 'RB:weak', 'WR:weak',
+    ]);
+    expect(screen.queryByLabelText(/qb need/i)).toBeNull();
+    expect(screen.queryByLabelText(/K neutral/i)).toBeNull();
+    expect(new Set(chips.map((chip) => chip.textContent?.toUpperCase())).size).toBe(chips.length);
+  });
+
   it('sorts Teams profiles by multiplier descending with deterministic name and roster ties', () => {
     const tieRosters = [
       ...rosters,
@@ -253,9 +282,17 @@ describe('manager bid presentation', () => {
     />);
 
     const row = screen.getByRole('button', { name: /open details for Aggressive Alice/i });
+    const heading = within(row).getByTestId('prediction-manager-heading');
+    expect(heading.className).toContain('flex');
+    expect(heading.textContent).toBe('Aggressive AliceAggressive');
+    expect(within(heading).getByText('Aggressive').compareDocumentPosition(within(heading).getByText('Aggressive Alice')) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     const predictionSide = within(row).getByTestId('prediction-side');
-    expect(within(predictionSide).getByText('Predicted')).toBeTruthy();
-    expect(within(predictionSide).getByText('Remaining FAAB')).toBeTruthy();
+    const predictedGroup = within(predictionSide).getByTestId('predicted-label-value');
+    const faabGroup = within(predictionSide).getByTestId('remaining-faab-label-value');
+    expect(predictedGroup.className).toMatch(/inline-flex.*gap-1\.5/);
+    expect(faabGroup.className).toMatch(/inline-flex.*gap-1\.5/);
+    expect(predictedGroup.textContent).toBe('Predicted$63');
+    expect(faabGroup.textContent).toContain('Remaining FAAB$100');
     expect(predictionSide.textContent?.indexOf('Predicted')).toBeLessThan(predictionSide.textContent?.indexOf('Remaining FAAB') ?? -1);
     expect(within(row).queryByText('1.50x')).toBeNull();
     expect(within(row).getByText('Likely bidder').className).toContain('text-[#34d399]');

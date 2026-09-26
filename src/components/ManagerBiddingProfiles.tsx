@@ -4,7 +4,7 @@ import { ArrowDown, ArrowUp, Minus, X } from 'lucide-react';
 import type { Roster, SleeperUser } from '../api';
 import type { ManagerBiddingProfile, ManagerBidEvidence, ManagerBidStyle } from '../logic';
 import type { ManagerDetailData, ManagerTeamNeed } from '../logic/managerDetails';
-import { currentFaab, managerName, type ManagerPredictionDisplay } from '../logic/managerPredictionDisplay';
+import { currentFaab, managerName, orderManagerPredictions, type ManagerPredictionDisplay } from '../logic/managerPredictionDisplay';
 import { faabQuartile, faabQuartileLabel, type FaabQuartileBand } from '../logic/rankingQuartiles';
 import { Button, Card, Skeleton } from './ui';
 
@@ -110,8 +110,19 @@ function needClasses(tier: ManagerTeamNeed['tier']) {
   return 'border-[rgba(245,158,11,0.4)] bg-[rgba(245,158,11,0.08)] text-[#fbbf24]';
 }
 
+function popupTeamNeeds(rows: ManagerDetailData['teamNeeds']): ManagerDetailData['teamNeeds'] {
+  const seenPositions = new Set<string>();
+  return [...rows.filter((row) => row.tier === 'strong'), ...rows.filter((row) => row.tier === 'weak')]
+    .filter((row) => {
+      const positionKey = row.position.trim().toUpperCase();
+      if (seenPositions.has(positionKey)) return false;
+      seenPositions.add(positionKey);
+      return true;
+    });
+}
+
 function TeamNeeds({ rows }: { rows: ManagerDetailData['teamNeeds'] }) {
-  const visibleRows = rows.filter((row) => row.tier !== 'neutral');
+  const visibleRows = popupTeamNeeds(rows);
   return (
     <section aria-labelledby="manager-team-needs">
       <h3 id="manager-team-needs" className="mb-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-[#8b8eb8]">Team needs</h3>
@@ -127,6 +138,7 @@ function TeamNeeds({ rows }: { rows: ManagerDetailData['teamNeeds'] }) {
               <span
                 key={row.position}
                 aria-label={`${row.position} ${semantic}, rank ${row.rank} of ${row.outOf}`}
+                data-team-need-tier={row.tier}
                 className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${needClasses(row.tier)}`}
               >
                 {row.tier === 'weak' ? <ArrowDown size={12} /> : row.tier === 'strong' ? <ArrowUp size={12} /> : <Minus size={12} />}
@@ -166,10 +178,14 @@ function RemainingFaab({ amount, activeAmounts, prominent = false }: {
   const band = faabQuartile(amount, activeAmounts);
   const label = faabQuartileLabel(band);
   return (
-    <div className={`rounded-xl border ${prominent ? 'px-4 py-3' : 'px-2.5 py-2'} ${faabClasses(band)}`} data-faab-quartile={band}>
+    <div
+      role="group"
+      aria-label={`Remaining FAAB $${amount}, ${label}`}
+      className={`rounded-xl border ${prominent ? 'px-4 py-3' : 'px-2.5 py-2'} ${faabClasses(band)}`}
+      data-faab-quartile={band}
+    >
       <p className="text-[9px] font-semibold uppercase tracking-[0.12em]">Remaining FAAB</p>
       <p className={`${prominent ? 'text-2xl' : 'text-sm'} mt-0.5 font-['Space_Mono'] font-bold tabular-nums`}>${amount}</p>
-      <p className="mt-0.5 text-[9px] font-medium">{label}</p>
     </div>
   );
 }
@@ -295,24 +311,30 @@ export function ManagerPredictionRow({
         aria-label={`Open details for ${prediction.managerName}`}
         className={`w-full rounded-xl bg-[#0d1022] p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6366f1] ${prediction.likelihood === 'Unlikely' ? 'opacity-55' : ''}`}
       >
-        <span className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3">
-          <span className="min-w-0">
-            <span className="block truncate text-xs font-semibold text-[#f0f0ff]">{prediction.managerName}</span>
-            <span className="mt-1.5 inline-flex"><ManagerStyleBadge profile={prediction.profile} presentation="prediction-row" /></span>
-            <span className={`mt-2 block text-[10px] font-semibold ${likelihoodTextClass(prediction.likelihood)}`}>{prediction.likelihood} bidder</span>
+        <span className="block">
+          <span className="flex min-w-0 items-center justify-between gap-2" data-testid="prediction-manager-heading">
+            <span className="min-w-0 truncate text-xs font-semibold text-[#f0f0ff]">{prediction.managerName}</span>
+            <span className="shrink-0"><ManagerStyleBadge profile={prediction.profile} presentation="prediction-row" /></span>
           </span>
-          <span className="flex min-w-[6.5rem] flex-col items-end text-right" data-testid="prediction-side">
-            <span className="block text-[9px] uppercase tracking-wide text-[#6b6e99]">Predicted</span>
-            <span className={`mt-0.5 block font-['Space_Mono'] text-sm font-bold tabular-nums ${prediction.cappedByFaab ? 'text-[#f87171]' : 'text-[#fbbf24]'}`}>
-              ${prediction.predictedBid}
-              {prediction.cappedByFaab && <span className="sr-only"> capped by remaining FAAB</span>}
-            </span>
-            <span className="mt-2 block text-[9px] uppercase tracking-wide text-[#6b6e99]">Remaining FAAB</span>
-            <span
-              className={`mt-0.5 block font-['Space_Mono'] text-xs font-semibold tabular-nums ${faabTextClass(faabQuartile(prediction.currentFaab, faabAmounts))}`}
-              data-faab-quartile={faabQuartile(prediction.currentFaab, faabAmounts)}
-            >
-              ${prediction.currentFaab}<span className="sr-only">, {faabQuartileLabel(faabQuartile(prediction.currentFaab, faabAmounts))}</span>
+          <span className="mt-2 flex items-start justify-between gap-3">
+            <span className={`shrink-0 text-[10px] font-semibold ${likelihoodTextClass(prediction.likelihood)}`}>{prediction.likelihood} bidder</span>
+            <span className="flex min-w-0 flex-col items-end gap-1.5 text-right" data-testid="prediction-side">
+              <span className="inline-flex items-baseline gap-1.5 whitespace-nowrap" data-testid="predicted-label-value">
+                <span className="text-[9px] uppercase tracking-wide text-[#6b6e99]">Predicted</span>
+                <span className={`font-['Space_Mono'] text-sm font-bold tabular-nums ${prediction.cappedByFaab ? 'text-[#f87171]' : 'text-[#fbbf24]'}`}>
+                  ${prediction.predictedBid}
+                  {prediction.cappedByFaab && <span className="sr-only"> capped by remaining FAAB</span>}
+                </span>
+              </span>
+              <span className="inline-flex items-baseline gap-1.5 whitespace-nowrap" data-testid="remaining-faab-label-value">
+                <span className="text-[9px] uppercase tracking-wide text-[#6b6e99]">Remaining FAAB</span>
+                <span
+                  className={`font-['Space_Mono'] text-xs font-semibold tabular-nums ${faabTextClass(faabQuartile(prediction.currentFaab, faabAmounts))}`}
+                  data-faab-quartile={faabQuartile(prediction.currentFaab, faabAmounts)}
+                >
+                  ${prediction.currentFaab}<span className="sr-only">, {faabQuartileLabel(faabQuartile(prediction.currentFaab, faabAmounts))}</span>
+                </span>
+              </span>
             </span>
           </span>
         </span>
@@ -341,10 +363,11 @@ export function WaiverManagerPredictions({
   detailsByRosterId?: ReadonlyMap<number, ManagerDetailData>;
   getPlayerName: (playerId: string) => string;
 }) {
-  const activeFaabAmounts = predictions.map((prediction) => prediction.currentFaab);
+  const orderedPredictions = orderManagerPredictions(predictions);
+  const activeFaabAmounts = orderedPredictions.map((prediction) => prediction.currentFaab);
   return (
     <div className="space-y-2" data-testid="expanded-manager-list">
-      {predictions.map((prediction) => (
+      {orderedPredictions.map((prediction) => (
         <ManagerPredictionRow
           key={prediction.rosterId}
           prediction={prediction}
