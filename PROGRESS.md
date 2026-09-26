@@ -1,5 +1,30 @@
 # Guillotine Companion — Progress
 
+## 🚨 PR #10 owner correction round 3.1 — post-completion preview fixes (John, 2026-09-26; IMPLEMENT NOW)
+
+**Status:** ✅ Completed and verified on the exact hosted PR preview at desktop and 390px. John reviewed the completed hosted preview and confirmed every item below is still valid. This section supersedes conflicting presentation details in prior completed sections. Keep Max VORP, replacement-level valuation, player bid history, and own-team border out of this correction.
+
+**Failure protocol:** The previous run claimed 16/16 round-3 acceptance despite these visible mismatches. Before changing code, identify why each survived prior tests/hosted QA (ambiguous requirement, wrong surface asserted, stale/incorrect selector, or shared-helper logic not matching rendered data). Add regression tests that fail on the current implementation. Do not accept DOM presence alone when the requirement is ordering or layout.
+
+- [x] **Teams → Bid Profiles ordering:** restore strict most-aggressive-to-least-aggressive ordering by manager multiplier. Use deterministic tie-breaking. FAAB quartile/color must not change card order. Verify the first/last real SeaMex cards and a deterministic fixture.
+- [x] **Team Needs presentation differs by surface while categorization stays shared:**
+  - Manager popup: show only top-quartile strengths and bottom-quartile weaknesses. Render no neutral/middle positions at all.
+  - Hub: continue showing every position; neutral/middle positions remain visible in yellow.
+  - Both must use the same shared quartile classification helper, with only the rendering/filter differing.
+- [x] **Collapsed Teams FAAB color:** apply the exact same shared FAAB quartile text color and accessible tier semantics used by popup Remaining FAAB to collapsed `Current FAAB`.
+- [x] **Waivers compact suggested-bid layout:** the text **Suggested bid** must be horizontally to the **left** of its amount, not beneath it. Preserve compact height and the separate yellow manager-derived Predicted bid behavior. Verify actual geometry/order at desktop and 390px, not only text presence.
+- [x] **Expanded Waivers Bid Predictions card layout:**
+  - On this one space-constrained surface only, omit the numeric multiplier from the aggression/style badge. Keep the multiplier everywhere else it currently belongs, including Teams Bid Profiles and manager popup/history tags. Implement via an explicit presentation option rather than altering shared model data.
+  - Color bidder-likelihood text: **Likely bidder green**, **Possible bidder yellow**, **Unlikely bidder red**. Retain accessible text and existing buyer-tier math/order.
+  - Place **Remaining FAAB beneath the Predicted bid amount** (John corrected “next to” to “beneath”). Do not put Remaining FAAB beneath the manager name/style column. Add structural/geometry coverage.
+- [x] **Hub bye horizon regression:** the live Hub still renders one extra bye week compared with the manager popup. Trace the actual rendered data path and week-coordinate interpretation; then make Hub and popup show the same intended window of current scoring week + next two weeks. Add a boundary regression proving the first excluded week does not render on Hub. Do not merely assert both call the same helper.
+- [x] Re-run focused tests, full frontend/API suites, lint, typecheck, production build, diff/secret checks, commit/push, green CI/preview deployment, and hosted real SeaMex QA at desktop + 390px.
+- [x] Final `HANDOFF.md` must include a correction-by-correction evidence trace with before/after rendered observations, exact file/test, real ordering, popup-vs-Hub needs behavior, FAAB classes, Suggested-bid geometry, expanded-card column placement, and exact bye weeks included/excluded. No item is done until John’s visible complaint is absent on the exact hosted preview.
+
+## 🔮 Future polish — identify John’s team card
+
+- [ ] In Teams/Bid Profiles, give John’s own team the same green-border identity treatment used for John’s rostered players on Waivers. Reuse one ownership/current-user visual token and verify it remains accessible. John explicitly said this does not need to be in PR #10 round 3.1.
+
 ## 🚨 PR #10 owner review round 3 — modal/Teams terminology and visual consistency (John, 2026-09-26; IMPLEMENT NOW)
 
 **Status: John authorized implementation. The attached mobile screenshot is the reference for the current problems. PR #10 scope is only this round-3 section; explicitly exclude all Future PR/Analysis sections below.**

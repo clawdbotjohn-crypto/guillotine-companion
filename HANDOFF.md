@@ -1,3 +1,51 @@
+# Handoff — PR #10 owner correction round 3.1 complete (2026-09-26)
+
+## Scope and state
+
+Implemented every checkbox in the top `PR #10 owner correction round 3.1` section and verified the rendered fixes on the exact Azure PR environment with real **2026 SeaMex Guillotine** data. All explicitly out-of-scope items remain untouched.
+
+- Implementation commit: `a3a6eeb` (`fix(ui): apply owner correction pass 3.1`)
+- Branch: `feat/bidding-behavior-profiles`
+- PR: <https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/10>
+- Exact preview: <https://nice-moss-07ec56310-10.centralus.7.azurestaticapps.net>
+- Hosted dataset: SeaMex Guillotine 2026; roster 19 / Houston0ilers for popup↔Hub bye comparison
+- PR checks at implementation commit: `build` PASS; `Build and Deploy` PASS; Azure environment `Ready`
+- Merge/deploy: PR remains open; **not merged; no production deployment or workflow dispatch performed**
+- Blockers: none
+
+## Why the prior QA missed these / prevention / mitigation
+
+- **Ordering:** the previous Teams test encoded alphabetical ordering instead of the product requirement, and coincidental fixture names did not challenge multiplier order. Prevention: assert the rendered card sequence with names deliberately opposed to multipliers plus deterministic ties. Mitigation: sort descending on raw multiplier, then manager name and roster ID; FAAB is not a sort input.
+- **Popup needs vs Hub:** prior tests treated shared classification as shared presentation and explicitly expected a neutral popup chip. Prevention: test each surface’s distinct rendering contract. Mitigation: retain shared `rankQuartile`, filter neutral only in popup, leave every Hub position visible.
+- **Collapsed FAAB:** the earlier component assertion checked class tokens/screen-reader text but hosted QA did not inspect computed color/semantics on collapsed cards. Prevention: pair deterministic quartile coverage with computed hosted observations. Mitigation: collapsed values now carry explicit tier data, shared green/yellow/red token, stronger value emphasis, and an accessible tier label.
+- **Suggested-bid layout:** earlier coverage checked words and divider absence, not geometry or sibling order, so a vertical stack passed. Prevention: assert a single flex row and label-before-value structure, then measure coordinates at both widths. Mitigation: label and amount now share the same horizontal row while manager-derived Predicted bid remains a separate yellow line.
+- **Expanded predictions:** prior tests expected the multiplier, checked likelihood text presence without color, and validated global text order rather than column ancestry/vertical geometry. Prevention: assert the explicit badge presentation, computed status colors, and a dedicated prediction-side container with FAAB below Predicted. Mitigation: added the `prediction-row` badge variant and rebuilt the row into manager and stacked prediction columns.
+- **Hub byes:** the helper boundary test manually supplied a week and never exercised the Hub caller, which passed projection week (`display_week + 1`) rather than scoring week. Prevention: regression starts with a Sleeper `NflState`, verifies `week`, and proves the first excluded week is absent. Mitigation: Hub now uses `getHubByeWindowWeek(nflState)` while projection fetching keeps its independent coordinate.
+
+## Correction-by-correction evidence
+
+1. **Multiplier ordering** — `ManagerBiddingProfiles.tsx`; focused test “sorts Teams profiles by multiplier descending with deterministic name and roster ties.” Hosted desktop + 390px: 32 cards monotonically descend from **MikeZertuche89 5.08x** to historical-less **z88**; no horizontal overflow. Current FAAB values vary independently of order.
+2. **Surface-specific Team Needs** — `ManagerBiddingProfiles.tsx` and existing `HubPositionRankings.tsx`, both backed by `rankQuartile`; focused popup test now rejects WR neutral and Hub test retains neutral yellow. Hosted Houston0ilers popup showed only QB 27/28, RB 7/28, WR 26/28, TE 5/28, DEF 26/28—no neutral chips. Hub showed all QB/RB/WR/TE/Flex/K/DEF; neutral Flex 9/28 and K 12/28 were yellow (`rgb(245,158,11)`).
+3. **Collapsed Current FAAB** — `ManagerBiddingProfiles.tsx`; focused component coverage asserts exact top/middle/bottom classes and non-color labels. Hosted cards exposed bottom `$165/$265` red, middle `$433` yellow, top `$500` green, with `data-faab-quartile` and accessible `Bottom/Middle/Top FAAB quartile` labels; popup Remaining FAAB used the matching tier treatment.
+4. **Suggested bid left of amount** — `WaiversPage.tsx`; focused structural test requires one flex row and label-before-amount DOM order. Hosted Seth McGowan desktop geometry: label x=702, amount x=802.4, shared row y=439; mobile: label x=199, amount x=299.4, same row. Compact summary stayed 57.5px high at 390px; separate yellow `Predicted bid $30` remained.
+5. **Expanded Bid Predictions** — `ManagerBiddingProfiles.tsx`; focused tests cover explicit `prediction-row` badge variant, status colors, prediction-side ancestry/order, and shared modal fallback. Hosted rows contained **zero multipliers**, while Teams cards and the opened Poncho87Ro modal retained `2.64x`. Likely/Possible/Unlikely computed green/yellow/red (`rgb(52,211,153)`, `rgb(251,191,36)`, `rgb(251,113,133)`). On each row Remaining FAAB was in the right prediction container and below Predicted (first row label y=586 vs Predicted y=542.5), with zero overflow at desktop and 390px.
+6. **Exact bye horizon** — `hubRoster.ts`, `HubPage.tsx`, `logic/index.ts`; focused state-coordinate test includes week 5, includes week 7, and excludes week 8 for a current week of 5. Hosted current scoring week was 3 while projection display was Week 4: Houston0ilers popup and Hub both showed only Jonathon Brooks **W5**. Hub full roster visibly contained W6 and W7 players, but neither appeared as a warning, proving W6 is the first excluded boundary for the actual current-week-3 window.
+7. **Responsive/console QA** — desktop 1280×900 and mobile 390×844 both had document overflow delta 0 on Teams, popup, Waivers expanded cards, and Hub. Browser console error log was empty.
+
+## Verification
+
+- New focused regression selection: **4 files / 32 tests passed**
+- Full frontend suite: **23 files / 154 tests passed**
+- Managed Functions API: **2 files / 36 tests passed**
+- `npm run lint`: PASS, 0 warnings/errors
+- `npm run typecheck`: PASS
+- `npm run build`: PASS
+- `git diff --check`: PASS
+- Changed-file secret scan: PASS, no matches
+- GitHub CI/deploy and Azure PR environment: PASS / Ready
+
+---
+
 # Handoff — PR #10 owner review round 3 complete (2026-09-26)
 
 ## Scope and state
