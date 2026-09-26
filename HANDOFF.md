@@ -31,11 +31,15 @@ Owner review revision implemented and verified on `feat/bidding-behavior-profile
 - Full frontend suite: 135/135 passing across 22 files.
 - API suite: 36/36 passing.
 - Lint: 0 warnings/errors. TypeScript and production build: passing. `git diff --check`: clean. Changed-file secret scan: clean.
-- Local SeaMex browser QA: compact labels verified; native keyboard Enter expansion verified; Teams Bid Profiles placement verified; 0 px horizontal overflow at desktop and 384 px mobile; no console errors. Local Vite does not host the Azure Functions snapshot endpoint, so live profile-data QA will be completed on the hosted PR preview after deployment.
+- SeaMex browser QA completed on the hosted Azure PR preview at 1440 px desktop and 390 px mobile: compact cards show exactly three live manager predictions; native keyboard Enter expands to 10; Show more revealed the remaining 15 (25 active-manager rows total); Teams > Bid Profiles loaded live profiles in descending aggressiveness (2.71×, 1.44×, 1.35× at the top); simplified nested history rendered Suggested/Actual/FAAB/Ratio; 0 px horizontal overflow; no console errors.
 
 ## PR / Preview
 
-_To be filled with final commit SHA, checks, mergeability, exact Azure preview URL, and hosted-preview QA after push._
+- Implementation commit: `bb24b514277db94c6a041dca871a14464e364760`.
+- PR: https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/10
+- Exact preview: https://nice-moss-07ec56310-10.centralus.7.azurestaticapps.net
+- At implementation head: CI `build` passed; Azure `Build and Deploy` passed; PR was `MERGEABLE` / `CLEAN`.
+- This documentation-only follow-up commit does not change runtime code; final head check status is reported by the scheduler summary.
 
 ## Safety
 
