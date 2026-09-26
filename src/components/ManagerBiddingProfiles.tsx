@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ArrowDown, ArrowUp, Minus, X } from 'lucide-react';
 import type { Roster, SleeperUser } from '../api';
 import type { ManagerBiddingProfile, ManagerBidEvidence, ManagerBidStyle } from '../logic';
@@ -214,7 +215,7 @@ export function ManagerDetailsModal({
     };
   }, [onClose]);
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center overflow-hidden bg-black/70 px-3 [padding-top:max(0.75rem,env(safe-area-inset-top))] [padding-bottom:calc(env(safe-area-inset-bottom)+4.75rem)] sm:[padding-bottom:max(0.75rem,env(safe-area-inset-bottom))]"
       onMouseDown={(event) => event.target === event.currentTarget && onClose()}
@@ -253,7 +254,8 @@ export function ManagerDetailsModal({
           </section>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

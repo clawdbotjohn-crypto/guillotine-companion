@@ -105,6 +105,7 @@ describe('manager bid presentation', () => {
     fireEvent.click(trigger);
     const dialog = screen.getByRole('dialog', { name: 'Aggressive Alice' });
     const backdrop = screen.getByTestId('manager-modal-backdrop');
+    expect(backdrop.parentElement).toBe(document.body);
     expect(backdrop.className).toContain('items-center');
     expect(backdrop.className).toContain('safe-area-inset-top');
     expect(backdrop.className).toContain('safe-area-inset-bottom');
