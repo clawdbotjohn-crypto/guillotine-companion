@@ -1,3 +1,40 @@
+# Handoff — PR #10 owner correction round 3.2 complete (2026-09-26)
+
+## Scope and state
+
+Completed every checkbox in the top round-3.2 section and verified the final screenshot-backed layout and prediction consistency on the exact Azure PR environment with real **2026 SeaMex Guillotine** data.
+
+- Implementation commit: `3460721c5a22ed2e0d6c3023f2f5bb0cb63a7044` (`fix: align mobile manager predictions`)
+- Branch: `feat/bidding-behavior-profiles`
+- PR: <https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/10> — OPEN, MERGEABLE/CLEAN
+- Exact preview: <https://nice-moss-07ec56310-10.centralus.7.azurestaticapps.net>
+- GitHub checks on implementation commit: `build` SUCCESS (run `36234980426`); `Build and Deploy` SUCCESS (run `36234980361`); Azure PR environment `Ready`
+- Merge/deploy: **not merged; no production deploy or workflow dispatch performed**
+- Blockers: none
+
+## Correction trace and hosted evidence
+
+1. **Compact expanded metrics and badge row** — `src/components/ManagerBiddingProfiles.tsx` now renders the manager name and style badge in one top-row flex container, then a right-side column of two compact inline label/value groups. The multiplier remains suppressed only through the explicit `prediction-row` presentation. Structural coverage in `ManagerBiddingProfiles.test.tsx` asserts same-row badge ancestry, no multiplier, inline metric groups, and 6px gap classes. Before, both amounts sat below their labels and the badge occupied the lower-left name column; hosted 390×844 after: badge/name center-line delta **0px**, `Predicted`→`$30` gap **6px**, `Remaining FAAB`→`$165` gap **6px**, first row **100.5px** high, no overlap/overflow. Desktop 1280×900 measured the same 6px/6px/0px geometry.
+2. **Collapsed Suggested bid spacing** — `src/pages/WaiversPage.tsx` replaces the full-width `justify-between` row with one baseline-aligned adjacent group. `WaiversPage.test.tsx` rejects `justify-between` and requires the compact gap. Before screenshot: label/amount were visually separated across the rail; hosted after: `Suggested bid`→`$6` gap **6px** at both 390px and desktop, while the compact summary stayed **57.5px** high and yellow `Predicted bid $30` remained separate.
+3. **Eligible prediction consistency and order** — `src/logic/managerPredictionDisplay.ts` adds one deterministic ordering contract: all Likely/Possible buyers precede Unlikely, feasible FAAB-capped prediction descends first, then likelihood/name/roster tie-breakers. `WaiverPlayerCard` derives its collapsed value from the first eligible row and never from market `predictedWinningBid`; `WaiverManagerPredictions` applies the same order at the rendering boundary. `WaiversPage.test.tsx` proves global Unlikely `$100` cannot beat eligible `$96`, and a global Unlikely `$120` cannot beat tied FAAB-capped eligible `$80`; the tied Likely row precedes Possible. Hosted Seth: collapsed **`Predicted bid $30`** exactly equals first expanded eligible **MikeZertuche89 `$30`**; the screenshot’s earlier first-row `$16` mismatch is gone.
+4. **Popup Team Needs** — `src/components/ManagerBiddingProfiles.tsx` groups strengths first and weaknesses second, omits neutral only in the popup, and de-duplicates normalized positions with strength priority. Focused coverage supplies scrambled, conflicting duplicate, and neutral rows and requires `QB, TE` strengths followed by `RB, WR` weaknesses with no duplicate. Hosted 390px popup rendered **QB, DEF** strengths then **K** weakness: **3/3 unique positions**, **0 overlap pairs**. Hub all-position behavior is untouched.
+5. **Popup FAAB copy** — the popup FAAB block keeps visible `Remaining FAAB` and amount/color but moves quartile meaning to its accessible group label. Tests require no visible Top/Bottom copy and the exact accessible name. Hosted 390px popup showed visible **`Remaining FAAB $165`** in bottom-quartile red `rgb(251, 113, 133)`, accessible name `Remaining FAAB $165, Bottom FAAB quartile`, and **zero visible quartile-copy elements**.
+6. **Responsive/runtime QA** — exact hosted preview, real SeaMex 2026, desktop 1280×900 and mobile 390×844: document/card/dialog horizontal overflow deltas all **0px**; popup dialog **366px** wide at x=12..378; no Team Needs overlap; browser console **0 errors**.
+
+## Verification
+
+- Focused: `npm test -- --run src/components/ManagerBiddingProfiles.test.tsx src/pages/WaiversPage.test.tsx src/logic/__tests__/managerDetails.test.ts` — **3 files / 35 tests passed**
+- Full frontend: `npm test` — **23 files / 154 tests passed**
+- Managed Functions API: `cd api && npm test` — **2 files / 36 tests passed**
+- `npm run lint` — PASS, 0 warnings/errors
+- `npm run typecheck` — PASS
+- `npm run build` — PASS
+- `git diff --check` — PASS
+- Changed-added-line secret-pattern scan — PASS, no matches (`gitleaks` unavailable)
+- GitHub/Azure — both required checks SUCCESS; exact PR environment Ready
+
+---
+
 # Handoff — PR #10 owner correction round 3.1 complete (2026-09-26)
 
 ## Scope and state

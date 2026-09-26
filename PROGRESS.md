@@ -1,19 +1,18 @@
 # Guillotine Companion — Progress
 
-## 🚨 PR #10 owner correction round 3.2 — final mobile alignment + prediction consistency (John, 2026-09-26; IMPLEMENT NOW)
+## ✅ PR #10 owner correction round 3.2 — final mobile alignment + prediction consistency (John, 2026-09-26; COMPLETE)
 
-**Status:** John reviewed the completed round-3.1 hosted preview and considers it overall solid. Apply these final screenshot-backed corrections without altering bid formulas, future strategy work, or production. Screenshot references: `db9546cb-380e-47eb-ab95-929c66adb11e.jpg` and annotated `885d0b52-b895-45f9-bdd7-1443badcc25e.jpg`.
+**Status:** Completed on implementation commit `3460721c5a22ed2e0d6c3023f2f5bb0cb63a7044` and verified on the exact Azure PR environment with real SeaMex data at desktop and 390px. Screenshot references: `db9546cb-380e-47eb-ab95-929c66adb11e.jpg` and annotated `885d0b52-b895-45f9-bdd7-1443badcc25e.jpg`. PR remains open; no merge, production deploy, or workflow dispatch.
 
-- [ ] **Expanded Bid Predictions mobile alignment:**
-  - Render `Predicted` immediately next to its dollar amount as one compact label/value group, not stacked with a large vertical gap.
-  - Render `Remaining FAAB` immediately next to its dollar amount as one compact label/value group, not stacked with a large vertical gap. The FAAB group remains beneath the Predicted group in the right-side prediction column.
-  - Move the aggression/style badge to the **right of the manager/team name** on the same top row. Keep multiplier omitted only on this surface.
-  - Preserve Likely/Possible/Unlikely text and colors, FAAB color, click target, modal behavior, and compact 390px fit without overlap. Add structural and real geometry assertions.
-- [ ] **Collapsed Waivers Suggested bid spacing:** keep `Suggested bid` left of `$amount`, but place them as one compact adjacent group; the screenshot’s current wide gap is too large. Preserve the separate yellow Predicted bid line and compact card height.
-- [ ] **Collapsed/expanded predicted-bid consistency:** collapsed yellow Predicted bid must be the maximum manager prediction among eligible **Likely or Possible buyers only**, explicitly excluding Unlikely buyers. Expanded predictions must order eligible buyers so the first Likely/Possible row carrying the maximum eligible prediction matches the collapsed amount. Add regressions where an Unlikely manager has the global maximum and must not drive the collapsed value, plus ties/capped values. Never use overall market `predictedWinningBid`.
-- [ ] **Popup Team Needs grouping:** render all strength positions first, followed by all weakness positions. Ensure categories do not visually overlap or duplicate a position; preserve neutral omission in popup and all-position rendering on Hub. Add ordering/no-duplicate tests and inspect 390px wrapping.
-- [ ] **Popup FAAB copy:** remove visible `Top FAAB quartile` / `Bottom FAAB quartile` / middle-quartile text. Keep `Remaining FAAB $N` and its shared color. Preserve non-visible accessible meaning via an aria-label/screen-reader description if useful, but no quartile implementation copy should appear visually.
-- [ ] Run focused regressions, full frontend/API tests, lint, typecheck, build, diff/secret checks; commit/push; wait for green CI + exact preview; browser-verify real SeaMex desktop and 390px against both screenshots; update HANDOFF with exact before/after geometry and collapsed-versus-first-eligible values. No merge/deploy.
+- [x] **Expanded Bid Predictions mobile alignment:**
+  - `Predicted` + `$N` and `Remaining FAAB` + `$N` are separate compact inline groups with a measured 6px label/value gap; FAAB remains beneath Predicted.
+  - Style badge is on the manager-name top row with 0px center-line delta; multiplier remains omitted only on this surface.
+  - Likelihood/FAAB colors, row click/modal, and complete eligible/Unlikely rendering remain intact. At 390px the first row is 100.5px high with zero card/page overflow.
+- [x] **Collapsed Waivers Suggested bid spacing:** label and amount are one adjacent inline group with a measured 6px gap at 390px and desktop; separate yellow Predicted bid and 57.5px compact summary height remain.
+- [x] **Collapsed/expanded predicted-bid consistency:** collapsed uses only Likely/Possible manager predictions, ordered by feasible capped bid descending; Unlikely never drives it and market `predictedWinningBid` is not used. Tests cover a higher Unlikely global max and tied FAAB-capped eligible bids. Hosted Seth collapsed `$30` exactly matched first expanded eligible MikeZertuche89 `$30`.
+- [x] **Popup Team Needs grouping:** strengths render before weaknesses, case-insensitive duplicate positions are removed with strength priority, neutral remains hidden only here. Hosted 390px popup rendered `QB, DEF` strengths then `K` weakness, with 3/3 unique positions and zero overlap pairs.
+- [x] **Popup FAAB copy:** only `Remaining FAAB` and `$N` are visible; quartile remains in the group aria-label and shared color semantics. Hosted popup showed `$165` red with accessible `Bottom FAAB quartile` and no visible quartile copy.
+- [x] Focused regressions (**3 files / 35 tests**), full frontend (**23 files / 154 tests**) and API (**2 files / 36 tests**) suites, lint, typecheck, build, diff check, and changed-line secret scan passed. GitHub `build` and `Build and Deploy` passed; exact preview is <https://nice-moss-07ec56310-10.centralus.7.azurestaticapps.net>. Desktop 1280×900 and mobile 390×844 had 6px compact gaps, exact `$30` value match, zero horizontal overflow, and zero console errors. No blockers; no merge/deploy.
 
 ## 🚨 PR #10 owner correction round 3.1 — post-completion preview fixes (John, 2026-09-26; IMPLEMENT NOW)
 
