@@ -20,10 +20,11 @@
 - Production build: passed.
 - `git diff --check`: clean.
 - Secret pattern scan: clean.
-- Real SeaMex desktop/mobile Azure preview QA: pending final hosted build verification after push.
+- Real SeaMex Azure preview QA passed at desktop (1440×1000) and mobile (390×844): no horizontal overflow, collapsed previews show only likely/possible buyers, expanded tiers are ordered Likely → Possible → Unlikely, unlikely rows have reduced opacity, and capped `$165` displays red with visible `FAAB cap` plus the accessible `capped by available FAAB` label.
+- Live numeric spot-check: Zay Flowers uses `$105` Weeks-as-Starter × `2.06` = `$216`; it does not multiply the standalone `$171` predicted-winning-bid value.
+- Exact preview: https://nice-moss-07ec56310-10.centralus.7.azurestaticapps.net
+- PR #10 head `994b393`: CI passed, Azure Build and Deploy passed, and GitHub reports MERGEABLE.
 
 ## Remaining
 
-1. Commit/push the correction to `feat/bidding-behavior-profiles`.
-2. Resolve the exact PR preview URL, wait for CI/deployment, and run authenticated SeaMex desktop/mobile QA.
-3. Record final preview/check/mergeability status here if another session needs to continue.
+- None for this follow-up. Do not merge or deploy production; PR #10 is ready for review.
