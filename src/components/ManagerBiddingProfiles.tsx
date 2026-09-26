@@ -305,13 +305,14 @@ export function ManagerPredictionRow({
         aria-label={`Open details for ${prediction.managerName}`}
         className={`w-full rounded-xl bg-[#0d1022] p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6366f1] ${prediction.likelihood === 'Unlikely' ? 'opacity-55' : ''}`}
       >
-        <span className="block">
-          <span className="block min-w-0" data-testid="prediction-manager-heading">
-            <span className="block min-w-0 truncate text-xs font-semibold text-[#f0f0ff]">{prediction.managerName}</span>
+        <span className="flex items-start justify-between gap-3" data-testid="prediction-row-layout">
+          <span className="min-w-0" data-testid="prediction-manager-side">
+            <span className="block min-w-0" data-testid="prediction-manager-heading">
+              <span className="block min-w-0 truncate text-xs font-semibold text-[#f0f0ff]">{prediction.managerName}</span>
+            </span>
+            <span className={`mt-2 block text-[10px] font-semibold ${likelihoodTextClass(prediction.likelihood)}`}>{prediction.likelihood} bidder</span>
           </span>
-          <span className="mt-2 flex items-start justify-between gap-3">
-            <span className={`shrink-0 text-[10px] font-semibold ${likelihoodTextClass(prediction.likelihood)}`}>{prediction.likelihood} bidder</span>
-            <span className="flex min-w-0 flex-col items-end gap-1.5 text-right" data-testid="prediction-side">
+          <span className="flex min-w-0 flex-col items-end gap-1.5 text-right" data-testid="prediction-side">
               <span className="inline-flex items-baseline gap-1.5 whitespace-nowrap" data-testid="predicted-label-value">
                 <span className="text-[9px] uppercase tracking-wide text-[#6b6e99]">Predicted</span>
                 <span className={`font-['Space_Mono'] text-sm font-bold tabular-nums ${prediction.cappedByFaab ? 'text-[#f87171]' : 'text-[#fbbf24]'}`}>
@@ -328,7 +329,6 @@ export function ManagerPredictionRow({
                   ${prediction.currentFaab}<span className="sr-only">, {faabQuartileLabel(faabQuartile(prediction.currentFaab, faabAmounts))}</span>
                 </span>
               </span>
-            </span>
           </span>
         </span>
       </button>

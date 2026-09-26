@@ -287,7 +287,13 @@ describe('manager bid presentation', () => {
     expect(heading.className).toContain('block');
     expect(heading.textContent).toBe('Aggressive Alice');
     expect(within(row).queryByText('Aggressive')).toBeNull();
+    const layout = within(row).getByTestId('prediction-row-layout');
+    const managerSide = within(row).getByTestId('prediction-manager-side');
     const predictionSide = within(row).getByTestId('prediction-side');
+    expect(layout.className).toMatch(/flex.*items-start/);
+    expect(layout.className).not.toContain('mt-2');
+    expect(managerSide.parentElement).toBe(layout);
+    expect(predictionSide.parentElement).toBe(layout);
     const predictedGroup = within(predictionSide).getByTestId('predicted-label-value');
     const faabGroup = within(predictionSide).getByTestId('remaining-faab-label-value');
     expect(predictedGroup.className).toMatch(/inline-flex.*gap-1\.5/);

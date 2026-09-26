@@ -1,3 +1,13 @@
+# Handoff — PR #10 owner correction round 3.4 (2026-09-26)
+
+John’s hosted 390px screenshot showed an empty top gap in expanded Bid Predictions after the style badge was removed. Root cause: manager name rendered in a separate first row while the prediction column remained in a second row beside only the likelihood label.
+
+Fix: `ManagerPredictionRow` now uses one top-aligned flex row. The left column contains manager name + likelihood; the right column starts at the same top edge and contains Predicted + Remaining FAAB. Added a structural regression proving both columns are direct siblings of the top-aligned container and no stale top margin remains.
+
+Verification before push: focused 11/11; full frontend 24 files / 156 tests; lint, typecheck, production build, and `git diff --check` passed. Pending commit/push, green preview, and John’s visual verification. No merge or production deploy.
+
+---
+
 # Handoff — PR #10 owner correction round 3.3 (2026-09-26)
 
 John reviewed the completed 3.2 mobile preview and requested two final micro-corrections. Implemented directly on `feat/bidding-behavior-profiles`:

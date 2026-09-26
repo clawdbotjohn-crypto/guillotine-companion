@@ -1,5 +1,10 @@
 # Guillotine Companion — Progress
 
+## 🚨 PR #10 owner correction round 3.4 — remove expanded-row top gap (John, 2026-09-26)
+
+- [x] In expanded Waivers Bid Predictions, align the right-side `Predicted`/`Remaining FAAB` column to the top of the row beside the manager name. Removing the style badge left an awkward empty top gap because the prediction column still started on the second row. Keep likelihood below the manager name and Remaining FAAB below Predicted. Screenshot: `de4b8536-5be4-4368-a1ea-0c27b40f4233.jpg`.
+- [ ] Run verification, commit/push, await green preview, and let John verify. No merge or production deploy.
+
 ## 🚨 PR #10 owner correction round 3.3 — final badge removal + bye empty state (John, 2026-09-26)
 
 - [x] Remove the aggression/style badge entirely from expanded Waivers Bid Predictions rows. It does not fit beside the team name on mobile. Preserve style+multiplier badges on Teams cards and in the manager popup.
