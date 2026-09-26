@@ -216,7 +216,7 @@ export function ManagerDetailsModal({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center overflow-hidden bg-black/70 px-3 [padding-top:max(0.75rem,env(safe-area-inset-top))] [padding-bottom:max(0.75rem,env(safe-area-inset-bottom))]"
+      className="fixed inset-0 z-[60] flex items-center justify-center overflow-hidden bg-black/70 px-3 [padding-top:max(0.75rem,env(safe-area-inset-top))] [padding-bottom:calc(env(safe-area-inset-bottom)+4.75rem)] sm:[padding-bottom:max(0.75rem,env(safe-area-inset-bottom))]"
       onMouseDown={(event) => event.target === event.currentTarget && onClose()}
       data-testid="manager-modal-backdrop"
     >
@@ -225,7 +225,7 @@ export function ManagerDetailsModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={`manager-dialog-${profile.managerRosterId}`}
-        className="flex h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1.5rem)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-[#4a4f8c] bg-[#15183f] shadow-2xl sm:h-auto sm:max-h-[90vh]"
+        className="flex h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-5.5rem)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-[#4a4f8c] bg-[#15183f] shadow-2xl sm:h-auto sm:max-h-[90vh]"
         data-testid="manager-details-modal"
       >
         <header className="flex shrink-0 items-start justify-between gap-4 border-b border-[#2d3262] px-4 py-4 sm:px-5">

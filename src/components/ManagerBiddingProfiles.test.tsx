@@ -108,7 +108,9 @@ describe('manager bid presentation', () => {
     expect(backdrop.className).toContain('items-center');
     expect(backdrop.className).toContain('safe-area-inset-top');
     expect(backdrop.className).toContain('safe-area-inset-bottom');
+    expect(backdrop.className).toContain('4.75rem');
     expect(dialog.className).toContain('100dvh');
+    expect(dialog.className).toContain('5.5rem');
     const close = screen.getByRole('button', { name: /close manager details/i });
     expect(document.activeElement).toBe(close);
     expect(document.body.style.overflow).toBe('hidden');
