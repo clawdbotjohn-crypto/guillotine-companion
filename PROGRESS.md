@@ -31,6 +31,18 @@
 - **Baseline:** one frozen `BIDDING_BASELINE` descriptor (`max-vorp-v1`) drives historical profile ratios and current predictions. Derived evidence/profiles record strategy/version; source evidence remains immutable. Predictions multiply exactly once and retain FAAB caps/order/likelihood behavior.
 - **Docs:** `docs/MAX-VORP.md` documents formula, data flow, migration, baseline, caching, and analysis.
 
+
+### Verification result (2026-09-26)
+
+- Local: frontend 24 files / 161 tests; API 2 files / 36 tests; typecheck, lint, production build, diff check, and changed-file secret scan all passed.
+- PR #11: https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/11 — mergeable/CLEAN; CI `build` and Azure `Build and Deploy` successful.
+- Exact preview: https://nice-moss-07ec56310-11.centralus.7.azurestaticapps.net
+- Hosted real SeaMex: Max VORP first/default; explicit Weeks-as-Starter persisted across reload, then Max VORP restored/persisted; 1440×1000 and 390×844 had no horizontal overflow or console errors.
+- Values: Jahmyr Gibbs $227 (elite), Devin Singletary $2 (fringe), Drew Lock $0 (replacement).
+- Profiles: real manager list/history rendered; Houston0ilers Standard 0.95x with $84/$90, $66/$65, and Week 1 $59/$48 evidence. No unrostered SeaMex player currently has positive Max VORP, so current manager prediction cannot naturally render in hosted data; direct regression coverage verifies baseline × multiplier exactly once and FAAB caps.
+- Commit: `7c32a1fa0d6972108aa291ec8fe64ddaf173a4b4` plus final documentation evidence commit.
+- Safety: no merge, no production deploy, no workflow dispatch.
+
 ### Explicitly separate follow-ups
 - Real-bid model-accuracy/outlier analysis remains a separate future effort.
 - Fixing positive values for too many replacement-level players in non-VORP Weekly/Safe/Aggressive strategies remains a later post-Max-VORP PR.
