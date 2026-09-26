@@ -17,8 +17,7 @@ function styleClasses(style: ManagerBidStyle) {
   return 'border-[#34385f] bg-[#151831] text-[#8b8eb8]';
 }
 
-function styleLabel(style: ManagerBidStyle) {
-  if (style === 'insufficient') return 'Not enough history';
+function styleLabel(style: Exclude<ManagerBidStyle, 'insufficient'>) {
   return `${style[0].toUpperCase()}${style.slice(1)}`;
 }
 
@@ -31,6 +30,7 @@ function ratioText(value: number | null) {
 }
 
 export function ManagerStyleBadge({ profile }: { profile: ManagerBiddingProfile }) {
+  if (profile.style === 'insufficient') return null;
   const multiplier = profile.managerMultiplier;
   return (
     <span className={`inline-flex items-center rounded-full border px-2 py-1 text-[9px] font-bold uppercase tracking-wide ${styleClasses(profile.style)}`}>
@@ -388,6 +388,7 @@ export function TeamBidProfiles({
         {ordered.map((profile) => {
           const name = managerName(profile.managerRosterId, rosters, users);
           const faab = currentFaab(profile.managerRosterId, rosters, initialFaab);
+          const faabBand = faabQuartile(faab, activeFaabAmounts);
           const highBid = highestBid(profile);
           return (
             <button
@@ -404,7 +405,12 @@ export function TeamBidProfiles({
                 </span>
                 <span className="shrink-0 text-right">
                   <ManagerStyleBadge profile={profile} />
-                  <span className="mt-1.5 block text-[10px] text-[#8b8eb8]">Current FAAB <span className="font-['Space_Mono'] tabular-nums">${faab}</span></span>
+                  <span className="mt-1.5 block text-[10px] text-[#8b8eb8]">
+                    Current FAAB{' '}
+                    <span className={`font-['Space_Mono'] tabular-nums ${faabTextClass(faabBand)}`} data-faab-quartile={faabBand}>
+                      ${faab}<span className="sr-only">, {faabQuartileLabel(faabBand)}</span>
+                    </span>
+                  </span>
                 </span>
               </span>
             </button>

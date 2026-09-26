@@ -151,7 +151,7 @@ describe('manager bid presentation', () => {
     expect(faab.className).toContain('text-[#fb7185]');
     expect(within(faab).getByText('Bottom FAAB quartile')).toBeTruthy();
     expect(screen.queryByText('Learning')).toBeNull();
-    expect(screen.getByText('Not enough history')).toBeTruthy();
+    expect(screen.queryByText('Not enough history')).toBeNull();
   });
 
   it('restores Teams composition with highest bid left, combined style/multiplier, and current FAAB', () => {
@@ -172,8 +172,15 @@ describe('manager bid presentation', () => {
     ]);
     const alice = cards[0];
     expect(alice.textContent).toMatch(/Aggressive Alice.*Highest bid: \$150.*Aggressive.*1\.50x.*Current FAAB \$100/);
+    const chrisFaab = cards[1].querySelector<HTMLElement>('[data-faab-quartile="top"]')!;
+    expect(chrisFaab.className).toContain('text-[#34d399]');
+    expect(chrisFaab.textContent).toContain('Top FAAB quartile');
     const zoe = cards[2];
-    expect(zoe.textContent).toMatch(/Highest bid: —.*Not enough history.*Current FAAB \$0/);
+    const zoeFaab = zoe.querySelector<HTMLElement>('[data-faab-quartile="bottom"]')!;
+    expect(zoeFaab.className).toContain('text-[#fb7185]');
+    expect(zoeFaab.textContent).toContain('Bottom FAAB quartile');
+    expect(zoe.textContent).toMatch(/Highest bid: —.*Current FAAB \$0/);
+    expect(zoe.textContent).not.toMatch(/Learning|Not enough history/);
     expect(screen.queryByText(/canonical|Learning|bids$/i)).toBeNull();
     fireEvent.click(alice);
     expect(screen.getByRole('dialog', { name: 'Aggressive Alice' })).toBeTruthy();
