@@ -32,6 +32,9 @@ import {
   type TeamProjection,
 } from '../logic';
 import { Card, Skeleton, StatusBadge } from '../components/ui';
+import { TeamBidProfiles } from '../components/ManagerBiddingProfiles';
+import { useBiddingProfiles } from '../hooks/useBiddingProfiles';
+import { getPlayerName } from '../store/players';
 import { SeasonPicker } from '../components/SeasonPicker';
 import { useSwitchSeason } from '../hooks/useSwitchSeason';
 import { ChevronRight, ShieldCheck, ShieldAlert, Shield, TriangleAlert } from 'lucide-react';
@@ -123,7 +126,7 @@ export function TeamsPage() {
   const { data: league } = useLeague(leagueId);
   const { data: users } = useLeagueUsers(leagueId);
   const { data: rosters } = useRosters(leagueId);
-  const { isLoading: playersLoading } = usePlayers();
+  const { data: players, isLoading: playersLoading } = usePlayers();
   const { data: matchups, isLoading: matchupsLoading } = useAllMatchups(leagueId, 18);
   const { data: leagueHistory, isLoading: historyLoading } = useLeagueHistory(rootLeagueId);
   const nflStateQuery = useNflState();
@@ -136,7 +139,9 @@ export function TeamsPage() {
     projectionWeek != null,
   );
   const handleSwitchSeason = useSwitchSeason();
+  const biddingProfiles = useBiddingProfiles({ leagueId, league, rosters, players });
 
+  const [view, setView] = useState<'teams' | 'profiles'>('teams');
   const [orderBy, setOrderBy] = useState<TeamOrder>('projected');
   const [expanded, setExpanded] = useState<number | null>(null);
 
@@ -215,6 +220,23 @@ export function TeamsPage() {
 
       <EliminatedTeamsVisibilityToggle eliminatedCount={eliminatedCount} />
 
+      <div className="mb-4 grid grid-cols-2 rounded-lg bg-[#0a0d1a] p-1" aria-label="Teams sections">
+        <button type="button" onClick={() => setView('teams')} className={`min-h-10 rounded-md text-[11px] font-semibold uppercase tracking-wider ${view === 'teams' ? 'bg-[#252957] text-white' : 'text-[#6b6e99]'}`}>Teams</button>
+        <button type="button" onClick={() => setView('profiles')} className={`min-h-10 rounded-md text-[11px] font-semibold uppercase tracking-wider ${view === 'profiles' ? 'bg-[#252957] text-white' : 'text-[#6b6e99]'}`}>Bid Profiles</button>
+      </div>
+
+      {view === 'profiles' ? (
+        <TeamBidProfiles
+          profiles={biddingProfiles.profiles}
+          rosters={rosters!}
+          users={users!}
+          initialFaab={league?.settings?.waiver_budget ?? 1000}
+          isLoading={biddingProfiles.isLoading}
+          error={biddingProfiles.error}
+          onRetry={biddingProfiles.retry}
+          getPlayerName={getPlayerName}
+        />
+      ) : (<>
       {/* Order toggle */}
       {hasScores && (
         <div className="flex gap-1 bg-[#0a0d1a] rounded-lg p-1 mb-2 w-fit">
@@ -307,6 +329,7 @@ export function TeamsPage() {
           );
         })}
       </div>
+      </>)}
     </div>
   );
 }

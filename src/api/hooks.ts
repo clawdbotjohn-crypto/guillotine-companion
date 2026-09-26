@@ -1,6 +1,6 @@
 // TanStack Query hooks for Sleeper API
 
-import { useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import * as api from './client';
 import type {
   League,
@@ -18,6 +18,7 @@ import type {
 } from './types';
 import { getReceptionScoring, getFantasyProsScoring, hasSuperflex } from '../logic/rankingSources';
 
+const STALE_5M = 1000 * 60 * 5;
 const STALE_30M = 1000 * 60 * 30;
 const STALE_1H = 1000 * 60 * 60;
 const STALE_6H = STALE_1H * 6;
@@ -250,18 +251,56 @@ export async function fetchProjectionSnapshotBatch(
   return { snapshots, errors };
 }
 
-/** Load only the immutable historical coordinates needed by selected manager evidence. */
+/**
+ * Load immutable historical coordinates as independent per-week queries so cache keys are
+ * coordinate-scoped (`season + decisionWeek`) and partial failures stay isolated.
+ */
 export function useProjectionSnapshots(
   season: number | null,
   decisionWeeks: number[],
   enabled = true,
 ) {
   const weeks = [...new Set(decisionWeeks)].sort((a, b) => a - b);
-  return useQuery<ProjectionSnapshotBatch>({
-    queryKey: ['projection-snapshots', season, weeks.join(',')],
-    queryFn: () => fetchProjectionSnapshotBatch(season!, weeks),
-    enabled: enabled && season != null && weeks.length > 0,
-    staleTime: STALE_24H,
-    retry: 1,
+  const isEnabled = enabled && season != null && weeks.length > 0;
+
+  const queries = useQueries({
+    queries: weeks.map((decisionWeek) => ({
+      queryKey: ['projection-snapshot', season, decisionWeek],
+      queryFn: () => api.getProjectionSnapshot(season!, decisionWeek),
+      enabled: isEnabled,
+      retry: 1,
+      gcTime: STALE_24H,
+      staleTime: (query: { state: { data?: ProjectionSnapshotResponse } }) => {
+        const payload = query.state.data;
+        if (!payload) return STALE_30M;
+        const exactSameWeek = payload.provenance.effectiveExact
+          && payload.provenance.matchesRequestedDecisionWeek;
+        return exactSameWeek ? STALE_24H : STALE_5M;
+      },
+    })),
   });
+
+  const snapshots = new Map<number, ProjectionSnapshotResponse>();
+  const errors = new Map<number, Error>();
+  let firstError: Error | null = null;
+
+  queries.forEach((query, index) => {
+    const decisionWeek = weeks[index];
+    if (query.data) snapshots.set(decisionWeek, query.data);
+    if (query.error instanceof Error) {
+      errors.set(decisionWeek, query.error);
+      if (!firstError) firstError = query.error;
+    }
+  });
+
+  const allFailed = weeks.length > 0 && snapshots.size === 0 && errors.size === weeks.length;
+
+  return {
+    data: isEnabled ? { snapshots, errors } : undefined,
+    error: allFailed ? firstError : null,
+    isLoading: isEnabled && queries.some((query) => query.isLoading),
+    refetch: async () => {
+      await Promise.all(queries.map((query) => query.refetch()));
+    },
+  };
 }

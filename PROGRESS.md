@@ -1,5 +1,36 @@
 # Guillotine Companion — Progress
 
+## 🚨 PR #10 owner review — redesign bidding predictions inside player cards (John, 2026-09-25; feedback continuing)
+
+**Status: implemented and verified on the PR #10 branch; awaiting owner review.**
+
+- [x] Remove the standalone **Manager bid profiles** section from Waivers.
+- [x] Put manager bid predictions directly on each waiver player card instead.
+- [x] Compact the collapsed player-card layout to make room:
+  - Hide `14/14 starter weeks` until the card is expanded.
+  - Remove the duplicate `• WR4` text before starter weeks (John had already requested its removal).
+  - Shorten projection copy where possible, e.g. `18.8 proj.`.
+  - Remove the right-side `21%`; useful, but lower priority than predicted bids.
+- [x] Collapsed player card, right side: show the **top 3 highest predicted manager bids**, each with owner/username. For each visible prediction show only username, predicted bid, multiplier, and category; also consider remaining FAAB because it is decision-useful. Do **not** show confidence labels.
+- [x] Clicking a player expands that same card. Expanded card should show the top 10 predicted bids, with a **Show more…** control when additional managers exist.
+- [x] Expanded manager rows should retain the useful Manager-profile evidence but remove implementation language such as `reconstructed` and confidence labels.
+- [x] Simplify confusing `Raw`, `Willingness`, and `Feasible` columns. Candidate user-facing fields are **FAAB available** and **Predicted bid**. Before revising copy, explain to John exactly what all three current values mean.
+- [x] Simplify each historical evidence row from six numbers to: **Suggested** value (the historical weekly baseline used by the multiplier), **Actual bid**, **Pre-bid FAAB**, and **Ratio**.
+- [x] Replace the confusing `Transaction Wk 1 · decision Wk 2` display with one user-facing label for the week that just finished: **`Wk 1`** in this example. Keep the decision-week mapping internal.
+- [x] Rename **Evidence** to **Bidding History**.
+- [x] Remove visible `Model bidding-profile-v1` copy and the duplicate FAAB footer; these are implementation details, and current FAAB belongs in the manager prediction fields.
+- [x] Add a Teams **Bid Profiles** sub-tab: list managers from most to least aggressive, show current FAAB, multiplier and category, and expand a manager to show the same simplified Bidding History/behavior details used on Waivers.
+- [x] Week 1/no manager behavior: retain the existing overall **Predicted winning bid** rather than fabricating manager-specific predictions.
+- [x] Add a simple buyer-need signal per manager/player using active-team position strength thirds: top third/strong at the target player's position = **Unlikely buyer**; middle third = **Possible buyer**; bottom third/weak = **Likely buyer**. Treat this as a visible heuristic, not a hidden multiplier in the numeric bid prediction. Reuse existing position-strength logic where possible and handle ties/small leagues honestly.
+- [x] Preserve the overall Waivers page structure: same player list, now with top-three manager predictions in collapsed cards and additional manager/team bidding details only after expansion.
+- [x] Add focused responsive/browser tests for collapsed density, expansion, top-3/top-10 ordering, Show more behavior, Week-1 fallback, need tiers, Teams Bid Profiles ordering/expansion, and truthful missing-data states.
+
+### Implementation completion — 2026-09-25 19:40 PDT
+
+Implemented the owner revision in the existing PR branch. Waiver cards now show the top three active-manager, FAAB-capped predictions while collapsed and top ten plus Show more when expanded. The full-card toggle is a native button with keyboard support. Player metadata uses the requested Position/Value and Week/Rank labels. Teams now has aggressiveness-sorted Bid Profiles with current FAAB and simplified expandable history/behavior. Buyer likelihood uses active-team positional-strength thirds only and never feeds bid math. Week 1/no canonical history leaves only the overall predicted winning bid. Existing canonical history, snapshot provenance, deduplication, FAAB reconstruction, geometric multiplier, and backend security logic remain intact.
+
+Verification completed: focused owner-requirement tests, full frontend suite, API suite, lint, TypeScript/build, production build, diff check, changed-file secret scan, and desktop/mobile SeaMex browser QA. Final counts, hosted-preview evidence, commit, and PR status are recorded in `HANDOFF.md`.
+
 ## ✅ Bidding-behavior profiles + bid predictions FE PR #10 (2026-09-25)
 
 - PR: <https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/10>

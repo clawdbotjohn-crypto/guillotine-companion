@@ -3,8 +3,8 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_SHOW_ROSTERED_PLAYERS, PredictedWinningBidFooter, RankingSourceSelector, ReplacementTeamSelector, RosteredPlayersToggle, WaiverPlayerCard, VorpControls, VorpSourceNotice } from './WaiversPage';
 import { DEFAULT_WAIVER_STRATEGY, getWaiverStrategyExplanation, WAIVER_STRATEGIES, WAIVER_STRATEGY_EXPLANATIONS } from '../logic/waiverDisplay';
-import { RANKING_SOURCES } from '../logic/rankingSources';
 import type { WaiverPlayerRow } from '../logic/waivers';
+import type { ManagerPredictionDisplay } from '../logic/managerPredictionDisplay';
 
 const waiverRow: WaiverPlayerRow = {
   playerId: 'player-1', name: 'Test Runner', position: 'RB', rosPoints: 180,
@@ -18,7 +18,7 @@ const waiverRow: WaiverPlayerRow = {
   ], predictedWinningBid: 61,
 };
 
-const cardProps = { row: waiverRow, remainingFaab: 100, source: RANKING_SOURCES[0], nflTeam: 'SEA', weeklyText: 'Next week: 13.4 pts · RB16', byeWeek: 8, currentWeek: 6 };
+const cardProps = { row: waiverRow, remainingFaab: 100, nflTeam: 'SEA', weeklyPoints: 13.4, weeklyRank: 16, byeWeek: 8, currentWeek: 6 };
 
 describe('waiver controls', () => {
   it('uses a compact accessible source selector with source help behind a disclosure', () => {
@@ -52,17 +52,15 @@ describe('waiver controls', () => {
     render(<WaiverPlayerCard {...cardProps} strategy="weeks-starter" injuryStatus="Questionable" owner={{ rosterId: 9, ownerName: 'Rain City Axes' }} />);
     const card = screen.getByRole('article', { name: /rostered by Rain City Axes/i });
     expect(within(card).getByText('Questionable')).toBeTruthy();
-    const rank = within(card).getByRole('button', { name: /Show RB #17 rest-of-season ranking details/ });
-    expect(rank).toBeTruthy();
-    expect(within(card).getByText('SEA')).toBeTruthy();
-    expect(within(card).getByText('Bye Wk 8')).toBeTruthy();
+    expect(within(card).getByText(/RB #17.*Value 180\.0/)).toBeTruthy();
+    expect(within(card).getByText(/Week 7 13\.4.*Rank 16.*SEA.*Bye Week 8/)).toBeTruthy();
     expect(within(card).getByText('$42')).toBeTruthy();
-    expect(within(card).getByText('8%')).toBeTruthy();
-    expect(card.textContent).not.toContain('8% · Weeks-as-Starter');
-    expect(within(card).getByText(/8\/14 starter wks/)).toBeTruthy();
-    expect(within(card).getByText(/Predicted bid/)).toBeTruthy();
-    fireEvent.click(rank);
-    expect(within(card).getByText(/180.0 rest-of-season points/)).toBeTruthy();
+    expect(within(card).getByText((_text, element) => element?.textContent === 'Predicted bid $61')).toBeTruthy();
+    expect(within(card).queryByText(/starter weeks/i)).toBeNull();
+    const toggle = within(card).getByRole('button', { name: /Test Runner/ });
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(within(card).getByText('Starts 8 of 14 remaining weeks')).toBeTruthy();
   });
 
   it('highlights only players owned by the selected team while all rostered rows remain disabled', () => {
@@ -92,6 +90,50 @@ describe('waiver controls', () => {
     rerender(<WaiverPlayerCard {...cardProps} strategy="aggressive" remainingFaab={40} />);
     expect(screen.queryByText(/Predicted bid/)).toBeNull();
     expect(screen.queryByText(/starter wks/)).toBeNull();
+  });
+
+  it('expands by keyboard, shows ten manager bids, and reveals the remainder on demand', () => {
+    const predictions: ManagerPredictionDisplay[] = Array.from({ length: 12 }, (_, index) => ({
+      rosterId: index + 1,
+      managerName: `Manager ${index + 1}`,
+      predictedBid: 100 - index,
+      currentFaab: 200,
+      likelihood: index < 4 ? 'Unlikely' : index < 8 ? 'Possible' : 'Likely',
+      profile: {
+        managerRosterId: index + 1,
+        managerMultiplier: 1,
+        style: 'standard',
+        confidence: 'low',
+        usableEvidenceCount: 1,
+        evidence: [],
+      },
+    }));
+    render(<WaiverPlayerCard
+      {...cardProps}
+      strategy="weeks-starter"
+      managerPredictions={predictions}
+      showManagerPredictions
+    />);
+    const toggle = screen.getByRole('button', { name: /Test Runner/ });
+    expect(screen.getByText('Manager 1')).toBeTruthy();
+    expect(screen.getByText('Manager 3')).toBeTruthy();
+    expect(screen.queryByText('Manager 4')).toBeNull();
+    fireEvent.keyDown(toggle, { key: 'Enter' });
+    fireEvent.click(toggle);
+    expect(screen.getByText('Manager 1')).toBeTruthy();
+    expect(screen.getByText('Manager 10')).toBeTruthy();
+    expect(screen.queryByText('Manager 11')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Show more (2)' }));
+    expect(screen.getByText('Manager 11')).toBeTruthy();
+    expect(screen.getByText('Manager 12')).toBeTruthy();
+  });
+
+  it('keeps week-one/no-history cards to the overall prediction only', () => {
+    render(<WaiverPlayerCard {...cardProps} strategy="weeks-starter" showManagerPredictions={false} />);
+    fireEvent.click(screen.getByRole('button', { name: /Test Runner/ }));
+    expect(screen.getByText((_text, element) => element?.textContent === 'Predicted bid $61')).toBeTruthy();
+    expect(screen.queryByText(/Likely competing bids/i)).toBeNull();
+    expect(screen.queryByText(/No canonical|Not enough history/i)).toBeNull();
   });
 
   it('uses the VoRP team count label and accessible explanatory disclosure', () => {

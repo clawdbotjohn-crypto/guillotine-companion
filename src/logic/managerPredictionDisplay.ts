@@ -1,0 +1,66 @@
+import type { Roster, SleeperUser } from '../api';
+import { predictManagerBid, type ManagerBiddingProfile } from './biddingProfiles';
+
+export type BuyerLikelihood = 'Likely' | 'Possible' | 'Unlikely';
+
+export interface ManagerPredictionDisplay {
+  rosterId: number;
+  managerName: string;
+  predictedBid: number;
+  currentFaab: number;
+  likelihood: BuyerLikelihood;
+  profile: ManagerBiddingProfile;
+}
+
+export function managerName(rosterId: number, rosters: Roster[], users: SleeperUser[]): string {
+  const roster = rosters.find((row) => row.roster_id === rosterId);
+  const user = users.find((row) => row.user_id === roster?.owner_id);
+  return user?.display_name || user?.username || `Roster ${rosterId}`;
+}
+
+export function currentFaab(rosterId: number, rosters: Roster[], initialBudget: number): number {
+  const used = rosters.find((row) => row.roster_id === rosterId)?.settings.waiver_budget_used ?? 0;
+  return Math.max(0, initialBudget - used);
+}
+
+/** Split active-team positional ranks into thirds. Strong teams need the player least. */
+export function buyerLikelihood(rank: number | null, outOf: number | null): BuyerLikelihood {
+  if (rank == null || outOf == null || outOf < 1) return 'Possible';
+  if (rank <= Math.ceil(outOf / 3)) return 'Unlikely';
+  if (rank > Math.ceil((outOf * 2) / 3)) return 'Likely';
+  return 'Possible';
+}
+
+export function buildManagerPredictions({
+  profiles,
+  baseline,
+  rosters,
+  users,
+  initialFaab,
+  activeRosterIds,
+  positionRanks,
+}: {
+  profiles: ManagerBiddingProfile[];
+  baseline: number;
+  rosters: Roster[];
+  users: SleeperUser[];
+  initialFaab: number;
+  activeRosterIds: ReadonlySet<number>;
+  positionRanks: ReadonlyMap<number, { rank: number; outOf: number }>;
+}): ManagerPredictionDisplay[] {
+  return profiles.flatMap((profile) => {
+    if (!activeRosterIds.has(profile.managerRosterId)) return [];
+    const faab = currentFaab(profile.managerRosterId, rosters, initialFaab);
+    const prediction = predictManagerBid(profile, baseline, faab);
+    if (!prediction) return [];
+    const positionRank = positionRanks.get(profile.managerRosterId);
+    return [{
+      rosterId: profile.managerRosterId,
+      managerName: managerName(profile.managerRosterId, rosters, users),
+      predictedBid: Math.round(prediction.feasiblePredictedBid),
+      currentFaab: faab,
+      likelihood: buyerLikelihood(positionRank?.rank ?? null, positionRank?.outOf ?? null),
+      profile,
+    }];
+  }).sort((a, b) => b.predictedBid - a.predictedBid || a.managerName.localeCompare(b.managerName));
+}
