@@ -27,3 +27,7 @@
 - Claims about exact historical Weeks-as-Starter context beyond snapshot provenance.
 - Per-league backend storage or profile persistence.
 - Automatic waiver submission or predicting which managers will bid on a player.
+
+## Baseline migration: Max VORP v1 (PR #11)
+
+The original V1 notes above document the Weeks-as-Starter baseline at initial rollout. PR #11 intentionally replaces that baseline for both historical ratios and current manager predictions with the shared, versioned `max-vorp-v1` resolver in `src/logic/waiverStrategies.ts`. Derived evidence records the baseline strategy/version; immutable transaction and projection snapshot evidence remains unchanged. See `docs/MAX-VORP.md` for the exact formula and analysis.

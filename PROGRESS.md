@@ -1,15 +1,51 @@
 # Guillotine Companion — Progress
 
-## 🚨 PR #10 owner correction round 3.4 — remove expanded-row top gap (John, 2026-09-26)
+## 🚀 PR #11 — Max VORP default strategy + bidding-style baseline (John, 2026-09-26; IMPLEMENT NOW)
+
+**Product decision:** Add **Max VORP** and make it the default and first strategy option. Max VORP also replaces Weeks as Starter as the default baseline used to calculate manager bidding-style ratios. The separate real-bid strategy-accuracy analysis is not part of this PR and does not gate the decision.
+
+### Required behavior
+- [x] Add a first-class strategy ID/implementation named `max-vorp`, displayed as **Max VORP**. Put it first in every strategy selector, legend, comparison, and stable strategy registry. Keep Weekly, Safe, Aggressive, and Weeks as Starter available unless a surface intentionally supports a smaller documented set.
+- [x] For each player, calculate VORP at every valid remaining-team count supported by the app/league progression and use the maximum **positive** VORP. SeaMex currently spans 28 active teams down to 4, but the implementation must derive supported bounds/counts from league/configuration logic rather than hard-code SeaMex. Clamp at `$0` only through the VORP/replacement-level definition; do not add arbitrary display thresholds.
+- [x] Use the exact all-count maximum unless measured analysis proves an endpoint-only shortcut is mathematically/empirically equivalent for all supported fixtures. Before choosing, run an all-player SeaMex analysis and report each player’s maximizing team count, interior maxima, endpoint-only disagreements/deltas, position patterns, and runtime. Include all players if practical, otherwise all players positive at the largest team count. Save a reproducible script/report in the repo.
+- [x] Make Max VORP the default selected strategy for new/unset state and the **first visible option**. Preserve an existing user’s explicit persisted non-default choice rather than silently overwriting it; migrate only legacy implicit/default state where distinguishable. Add hydration/migration tests.
+- [x] Make bidding-style/profile ratios use Max VORP as their baseline in both historical-event reconstruction and current manager predictions. Remove hard-coded Weeks-as-Starter lookups from profile/prediction code. Use one explicit, swappable `BIDDING_STYLE_BASELINE_STRATEGY`/strategy resolver so a later model can replace Max VORP without scattered edits.
+- [x] Version or record the baseline strategy used for generated profile/history calculations so future changes do not silently reinterpret persisted/snapshotted predictions. Existing immutable historical source evidence must not be mutated; derived views may be recomputed with an explicit strategy version.
+- [x] Preserve current manager multiplier formula, FAAB caps, buyer likelihood, ordering, Week 1/no-history fallbacks, ownership/elimination logic, and all PR #10 UI behavior. Only the baseline suggested bid changes to Max VORP.
+- [x] Define and test positional replacement populations, scarcity/tie behavior, all-zero/missing projections, monotonic/non-negative output, team-count bounds, eliminated-team progression, performance/caching, and deterministic results. Verify top players can peak at smaller-team scarcity while fringe starters can retain a larger-team maximum and replacement players naturally resolve to `$0`.
+- [x] Update all user-facing help/tooltips/docs so Max VORP is explained clearly and listed first/default. Do not expose implementation-only strategy IDs or claim empirical bid superiority.
+
+### Verification and delivery
+- [x] Add focused numeric fixtures for all-count maxima, interior maxima, endpoint disagreements, zero floor, strategy order/default/hydration, swappable bidding baseline, historical/current profile ratios, and regressions proving `predictedWinningBid` is still not double-multiplied.
+- [x] Run focused tests, full frontend/API suites, lint, typecheck, production build, diff/secret checks, and performance sanity.
+- [ ] Browser-test real 2026 SeaMex on desktop and 390px: Max VORP first/default, strategy switching/persistence, representative elite/fringe/replacement player values, Bid Predictions/profile ratios, no regressions/overflow/console errors.
+- [ ] Work on `feat/max-vorp-strategy`, open a PR to `main`, obtain the exact Azure preview, and leave it review-only. Never merge, push main, dispatch production, or deploy production.
+- [ ] Final HANDOFF/report must include the Max-VORP formula/data flow, SeaMex all-count analysis results, endpoint-vs-full decision, test counts, browser evidence, commit, PR/checks, exact preview, blockers, and explicit no-merge/no-deploy confirmation.
+
+### Implementation result (2026-09-26)
+
+- **Formula:** at every reachable survivor stage from current active teams through four, build the exact optimized replacement pool and final-four calibration, compute `max(0, ROS points - positional replacement) × (initial FAAB / average final-four-team VORP)`, select the highest unrounded value, and round once. Equal maxima prefer the earlier/larger-team stage.
+- **Progression:** generic two eliminations per week above 16, then one per week, lower-bounded at four. Current and historical contexts share the progression logic.
+- **Analysis:** reproducible `npm run analyze:max-vorp` output is checked in at `docs/analysis/max-vorp-seamex-2026.md`. Live 2026 SeaMex (28 active teams, Weeks 4–18, 2,110 projection rows) found 192 positive players, 21 interior maxima, and 21 endpoint-only disagreements. Mean positive endpoint miss was $1.850; largest was $6.720 (Lamar Jackson), so exact all-count evaluation is retained. Cold compute was 90.01 ms; complete results are memoized.
+- **Defaults/persistence:** the ordered registry puts `max-vorp` first and makes it the fresh/unset default. Store schema is v2; explicit valid legacy choices remain unchanged and `exponential` still migrates to `aggressive`.
+- **Baseline:** one frozen `BIDDING_BASELINE` descriptor (`max-vorp-v1`) drives historical profile ratios and current predictions. Derived evidence/profiles record strategy/version; source evidence remains immutable. Predictions multiply exactly once and retain FAAB caps/order/likelihood behavior.
+- **Docs:** `docs/MAX-VORP.md` documents formula, data flow, migration, baseline, caching, and analysis.
+
+### Explicitly separate follow-ups
+- Real-bid model-accuracy/outlier analysis remains a separate future effort.
+- Fixing positive values for too many replacement-level players in non-VORP Weekly/Safe/Aggressive strategies remains a later post-Max-VORP PR.
+- Player-level winning/recent bid history and own-team green-border polish remain separate.
+
+## ✅ PR #10 owner correction round 3.4 — remove expanded-row top gap (John, 2026-09-26; VERIFIED + MERGED)
 
 - [x] In expanded Waivers Bid Predictions, align the right-side `Predicted`/`Remaining FAAB` column to the top of the row beside the manager name. Removing the style badge left an awkward empty top gap because the prediction column still started on the second row. Keep likelihood below the manager name and Remaining FAAB below Predicted. Screenshot: `de4b8536-5be4-4368-a1ea-0c27b40f4233.jpg`.
-- [ ] Run verification, commit/push, await green preview, and let John verify. No merge or production deploy.
+- [x] Verification passed; John approved the hosted preview and PR #10 merged to `main` as `2dccfcbe6d2f3fa7e03999a661694340f104147a`.
 
-## 🚨 PR #10 owner correction round 3.3 — final badge removal + bye empty state (John, 2026-09-26)
+## ✅ PR #10 owner correction round 3.3 — final badge removal + bye empty state (John, 2026-09-26; VERIFIED + MERGED)
 
 - [x] Remove the aggression/style badge entirely from expanded Waivers Bid Predictions rows. It does not fit beside the team name on mobile. Preserve style+multiplier badges on Teams cards and in the manager popup.
 - [x] When a manager has no upcoming byes, render exactly: `No byes in the next few weeks.`
-- [ ] Run focused/full verification, commit/push, await green preview deployment, and let John verify the exact hosted preview. No merge or production deploy.
+- [x] Focused/full verification and hosted owner review passed; included in PR #10 merge commit `2dccfcbe6d2f3fa7e03999a661694340f104147a`.
 
 ## ✅ PR #10 owner correction round 3.2 — final mobile alignment + prediction consistency (John, 2026-09-26; COMPLETE)
 

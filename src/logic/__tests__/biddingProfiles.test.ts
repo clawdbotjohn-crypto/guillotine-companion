@@ -229,21 +229,38 @@ describe('snapshot projection evidence', () => {
       projectedWeeks: 17,
       position: 'WR',
     });
+    expect(buildSnapshotRosProjections(snapshot, 2, 'ppr', () => 'WR')).not.toBe(projections);
+    const stableResolver = () => 'WR';
+    const cached = buildSnapshotRosProjections(snapshot, 2, 'ppr', stableResolver);
+    expect(buildSnapshotRosProjections(snapshot, 2, 'ppr', stableResolver)).toBe(cached);
     expect(snapshot.provenance.effectiveKind).toBe('reconstructed');
   });
 
-  it('uses the historical Weeks-as-Starter suggestion rather than the larger market prediction', () => {
-    const result = calculateHistoricalBaseline(event({ playerId: 'p1' }), snapshot, {
+  it('uses the shared versioned historical Max VORP baseline and caps only ratio evidence by available FAAB', () => {
+    const maxVorpSnapshot: ProjectionSnapshotResponse = {
+      ...snapshot,
+      snapshot: { ...snapshot.snapshot, rowCount: 12 },
+      rows: Array.from({ length: 12 }, (_, index) => ({
+        projectionWeek: 2,
+        playerId: `p${index + 1}`,
+        ptsStd: 45 - index,
+        ptsHalfPpr: 45 - index,
+        ptsPpr: 45 - index,
+      })),
+    };
+    const result = calculateHistoricalBaseline(event({ playerId: 'p1' }), maxVorpSnapshot, {
       league_id: 'league', name: 'League', total_rosters: 12,
       settings: { waiver_budget: 1_000 }, scoring_settings: { rec: 1 }, season: '2026',
       season_type: 'regular', status: 'in_season', draft_id: 'draft', previous_league_id: null,
-      roster_positions: ['QB', 'RB', 'RB', 'WR', 'WR', 'FLEX'],
+      roster_positions: ['WR'],
     }, 'ppr', () => 'WR');
-    // Decision Week 2 applies a 1.875x market multiplier to the $250 weekly suggestion ($469).
-    expect(result.baseline).toBe(250);
-    expect(result.baseline).not.toBe(469);
+    expect(result).toMatchObject({
+      baseline: 2000,
+      baselineStrategyId: 'max-vorp',
+      baselineStrategyVersion: 'max-vorp-v1',
+    });
     const evaluated = evaluateBidEvidence(event({ playerId: 'p1', actualBid: 375 }), result);
-    expect(evaluated).toMatchObject({ effectiveBaseline: 250, eventRatio: 1.5 });
+    expect(evaluated).toMatchObject({ effectiveBaseline: 1000, eventRatio: 0.375 });
   });
 
   it('keeps an exact stored capture reconstructed when it is an older-week fallback', () => {

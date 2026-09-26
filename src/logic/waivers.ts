@@ -5,8 +5,9 @@
 import type { League, Roster, SleeperUser } from '../api/types';
 import type { RosPlayerProjection } from './projections';
 import type { BidInfo, EliminationResult } from './elimination';
+import { DEFAULT_WAIVER_STRATEGY, resolveStrategyBid, type StrategyKey } from './waiverStrategies';
 
-export type StrategyKey = 'safe' | 'aggressive' | 'weeks-starter' | 'vorp';
+export type { StrategyKey } from './waiverStrategies';
 
 export interface BidSuggestion {
   strategy: StrategyKey;
@@ -35,12 +36,14 @@ export interface WaiverPlayerRow {
   possibleStarterWeeks: number;
   suggestions: BidSuggestion[];
   predictedWinningBid: number;
+  maxVorpTeamCount?: number | null;
+  maxVorp?: number | null;
 }
 
 export function getWeeksAsStarterBid(
   row: Pick<WaiverPlayerRow, 'suggestions'>,
 ): number | null {
-  return row.suggestions.find((suggestion) => suggestion.strategy === 'weeks-starter')?.value ?? null;
+  return resolveStrategyBid(row, 'weeks-starter');
 }
 
 export interface StarterPositionCounts {
@@ -78,12 +81,27 @@ export interface VorpCalibration {
   dollarsPerVorp: number;
 }
 
+export interface MaxVorpPlayerValue {
+  playerId: string;
+  teamCount: number;
+  vorp: number;
+  rawBid: number;
+  bid: number;
+}
+
+export interface MaxVorpCalibration {
+  teamCounts: readonly number[];
+  calibrations: readonly VorpCalibration[];
+  playerValues: ReadonlyMap<string, MaxVorpPlayerValue>;
+}
+
 export interface BuildWaiverBoardOptions {
   maxPerPos?: number;
   /** Independent Sleeper ROS point projections used only by calibrated VoRP. */
   sleeperRosProjections?: Map<string, RosPlayerProjection>;
   replacementTeamCount?: number;
   vorpCalibration?: VorpCalibration | null;
+  maxVorpCalibration?: MaxVorpCalibration | null;
 }
 
 const VORP_WEIGHTS: Record<string, number> = { QB: 0.75, RB: 1.0, WR: 1.0, TE: 0.25, K: 0.1, DEF: 0.1 };
@@ -100,6 +118,27 @@ export function normalizeReplacementTeamTarget(
   const max = Math.max(FINAL_FOUR_TEAMS, Math.floor(Number.isFinite(teamsRemaining) ? teamsRemaining : 0));
   if (target == null || !Number.isFinite(target)) return max;
   return Math.min(max, Math.max(FINAL_FOUR_TEAMS, Math.floor(target)));
+}
+
+/** Every reachable survivor count under the app's two-chops-above-16 progression. */
+export function getValidRemainingTeamCounts(teamsRemaining: number): number[] {
+  const counts: number[] = [];
+  let count = Math.max(FINAL_FOUR_TEAMS, Math.floor(Number.isFinite(teamsRemaining) ? teamsRemaining : FINAL_FOUR_TEAMS));
+  while (count > FINAL_FOUR_TEAMS) {
+    counts.push(count);
+    count = Math.max(FINAL_FOUR_TEAMS, count - (count > 16 ? 2 : 1));
+  }
+  counts.push(FINAL_FOUR_TEAMS);
+  return counts;
+}
+
+/** Setup-only survivor estimate for historical snapshots that do not contain roster history. */
+export function estimateRemainingTeamsAtDecisionWeek(totalRosters: number, decisionWeek: number): number {
+  let remaining = Math.max(FINAL_FOUR_TEAMS, Math.floor(totalRosters));
+  for (let completedWeek = 1; completedWeek < Math.max(1, Math.floor(decisionWeek)); completedWeek++) {
+    remaining = Math.max(FINAL_FOUR_TEAMS, remaining - (remaining > 16 ? 2 : 1));
+  }
+  return remaining;
 }
 
 export function getReplacementTeamBounds(teamsRemaining: number): {
@@ -251,6 +290,73 @@ export function buildVorpCalibration(
   };
 }
 
+const maxVorpCache = new WeakMap<Map<string, RosPlayerProjection>, Map<string, MaxVorpCalibration | null>>();
+
+function starterSlotsCacheKey(startersPerPos: StarterPositionCounts): string {
+  return ['QB', 'RB', 'WR', 'TE', 'FLEX', 'SUPER_FLEX']
+    .map((position) => `${position}:${startersPerPos[position as keyof StarterPositionCounts] ?? 0}`)
+    .join('|');
+}
+
+/** Build exact per-stage calibrations and maximize every player's unrounded dollar VORP. */
+export function buildMaxVorpCalibration(
+  projections: Map<string, RosPlayerProjection>,
+  startersPerPos: StarterPositionCounts,
+  teamsRemaining: number,
+  initialLeagueFaab: number,
+): MaxVorpCalibration | null {
+  const teamCounts = getValidRemainingTeamCounts(teamsRemaining);
+  const cacheKey = `${initialLeagueFaab}|${starterSlotsCacheKey(startersPerPos)}|${teamCounts.join(',')}`;
+  let projectionCache = maxVorpCache.get(projections);
+  if (!projectionCache) {
+    projectionCache = new Map();
+    maxVorpCache.set(projections, projectionCache);
+  }
+  if (projectionCache.has(cacheKey)) return projectionCache.get(cacheKey)!;
+
+  const calibrations = teamCounts.flatMap((teamCount) => {
+    const calibration = buildVorpCalibration(projections, startersPerPos, teamCount, initialLeagueFaab);
+    return calibration ? [calibration] : [];
+  });
+  if (calibrations.length !== teamCounts.length) {
+    projectionCache.set(cacheKey, null);
+    return null;
+  }
+
+  const playerValues = new Map<string, MaxVorpPlayerValue>();
+  for (const player of [...projections.values()].sort((a, b) => a.playerId.localeCompare(b.playerId))) {
+    let best: MaxVorpPlayerValue | null = null;
+    for (const calibration of calibrations) {
+      const vorp = calculatePlayerVorp(player, calibration.replacementByPosition);
+      if (vorp == null) continue;
+      const rawBid = vorp * calibration.dollarsPerVorp;
+      if (!(rawBid > 0) || !Number.isFinite(rawBid)) continue;
+      // Strict comparison plus descending stage order makes exact ties prefer the larger league.
+      if (!best || rawBid > best.rawBid) {
+        best = {
+          playerId: player.playerId,
+          teamCount: calibration.replacementTeamCount,
+          vorp,
+          rawBid,
+          bid: Math.max(0, Math.round(rawBid)),
+        };
+      }
+    }
+    if (best) playerValues.set(player.playerId, best);
+  }
+
+  const result = { teamCounts, calibrations, playerValues };
+  projectionCache.set(cacheKey, result);
+  return result;
+}
+
+export function calculateMaxVorpBid(
+  playerId: string,
+  calibration: MaxVorpCalibration | null | undefined,
+): MaxVorpPlayerValue | null {
+  return calibration?.playerValues.get(playerId) ?? null;
+}
+
 /** Base safe value on a $1000 budget: ~$200/starter, $250 top, QB 0.75x. */
 function safeStrategy(row: { posRank: number; position: string }, ctx: LeagueContext): number {
   const base1000 = 200;
@@ -357,6 +463,11 @@ export function buildWaiverBoard(
     : sleeperRos
       ? buildVorpCalibration(sleeperRos, ctx.startersPerPos, replacementTeamCount, ctx.budget)
       : null;
+  const maxVorpCalibration = opts.maxVorpCalibration !== undefined
+    ? opts.maxVorpCalibration
+    : sleeperRos
+      ? buildMaxVorpCalibration(sleeperRos, ctx.startersPerPos, ctx.teamsRemaining, ctx.budget)
+      : null;
 
   const byPos = new Map<string, { playerId: string; rosPoints: number; pointsPerWeek: number }[]>();
   for (const pid of availablePlayerIds) {
@@ -385,6 +496,7 @@ export function buildWaiverBoard(
       const vorp = playerVorp == null || !calibration
         ? null
         : Math.round(playerVorp * calibration.dollarsPerVorp);
+      const maxVorpValue = calculateMaxVorpBid(p.playerId, maxVorpCalibration);
 
       rows.push({
         playerId: p.playerId,
@@ -398,16 +510,19 @@ export function buildWaiverBoard(
         starterWeeks,
         possibleStarterWeeks: ctx.weeksRemaining,
         suggestions: [
+          mk('max-vorp', 'Max VORP', maxVorpCalibration ? (maxVorpValue?.bid ?? 0) : null, ctx.budget),
           mk('weeks-starter', 'Weeks-as-Starter', weeks, ctx.budget),
           mk('safe', 'Safe', safe, ctx.budget),
           mk('aggressive', 'Aggressive', predictedWinningBid, ctx.budget),
           mk('vorp', 'VoRP', vorp, ctx.budget),
         ],
         predictedWinningBid,
+        maxVorpTeamCount: maxVorpValue?.teamCount ?? null,
+        maxVorp: maxVorpValue?.vorp ?? null,
       });
     });
   }
-  return sortWaiverRowsByStrategy(rows, 'weeks-starter');
+  return sortWaiverRowsByStrategy(rows, DEFAULT_WAIVER_STRATEGY);
 }
 
 export function sortWaiverRowsByStrategy(

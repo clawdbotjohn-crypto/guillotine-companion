@@ -3,6 +3,7 @@ import type { League, Roster } from '../../api/types';
 import type { EliminationResult } from '../elimination';
 import type { RosPlayerProjection } from '../projections';
 import {
+  buildMaxVorpCalibration,
   buildOptimizedStarterPool,
   buildVorpCalibration,
   buildLeagueContext,
@@ -14,6 +15,7 @@ import {
   computeAvailablePlayers,
   computeReplacementBaselines,
   computeRosteredPlayerOwners,
+  getValidRemainingTeamCounts,
   getReplacementTeamBounds,
   normalizeReplacementTeamTarget,
   predictedBidMultiplier,
@@ -253,6 +255,81 @@ describe('championship-calibrated VoRP helpers', () => {
   });
 });
 
+
+describe('Max VORP', () => {
+  function interiorFixture(): Map<string, RosPlayerProjection> {
+    let state = 1;
+    const random = () => {
+      state = (state * 1664525 + 1013904223) >>> 0;
+      return state / 4294967296;
+    };
+    const players = new Map<string, RosPlayerProjection>();
+    for (const position of ['QB', 'RB', 'WR', 'TE']) {
+      for (let rank = 1; rank <= 40; rank++) {
+        const totalPoints = Math.round((150 - rank * 2 + random() * 30) * 100) / 100;
+        const playerId = `${position}${rank}`;
+        players.set(playerId, { playerId, position, totalPoints, pointsPerWeek: totalPoints, projectedWeeks: 1 });
+      }
+    }
+    return players;
+  }
+
+  it('enumerates bounded survivor progression without hard-coding SeaMex', () => {
+    expect(getValidRemainingTeamCounts(28)).toEqual([28, 26, 24, 22, 20, 18, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4]);
+    expect(getValidRemainingTeamCounts(19)).toEqual([19, 17, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4]);
+    expect(getValidRemainingTeamCounts(2)).toEqual([4]);
+  });
+
+  it('takes the exact all-count maximum when an interior stage beats both endpoints', () => {
+    const players = interiorFixture();
+    const slots = { QB: 1, RB: 1, WR: 1, TE: 1, FLEX: 1, SUPER_FLEX: 0 };
+    const result = buildMaxVorpCalibration(players, slots, 20, 1000)!;
+    const value = result.playerValues.get('RB10')!;
+    expect(value.teamCount).toBe(16);
+    expect(value.vorp).toBeCloseTo(35.82);
+    expect(value.rawBid).toBeCloseTo(193.951864);
+    expect(value.bid).toBe(194);
+
+    const endpoints = result.calibrations.filter(({ replacementTeamCount }) => [20, 4].includes(replacementTeamCount));
+    const endpointMax = Math.max(...endpoints.map((calibration) =>
+      calculatePlayerVorp(players.get('RB10'), calibration.replacementByPosition)! * calibration.dollarsPerVorp));
+    expect(endpointMax).toBeCloseTo(180.06952);
+    expect(value.rawBid).toBeGreaterThan(endpointMax);
+    // The same fixture preserves a deeper fringe QB at the largest stage while an elite RB peaks at four.
+    expect(result.playerValues.get('QB10')?.teamCount).toBe(20);
+    expect(result.playerValues.get('RB1')?.teamCount).toBe(4);
+  });
+
+  it('floors replacement and negative values through VORP and handles missing/all-zero data', () => {
+    const players = new Map<string, RosPlayerProjection>();
+    for (let rank = 1; rank <= 8; rank++) players.set(`qb-${rank}`, projection(`qb-${rank}`, 'QB', 9 - rank, 1));
+    const slots = { QB: 1, RB: 0, WR: 0, TE: 0, FLEX: 0, SUPER_FLEX: 0 };
+    const result = buildMaxVorpCalibration(players, slots, 8, 500)!;
+    expect(result.playerValues.get('qb-8')).toBeUndefined();
+    expect(result.playerValues.get('missing')).toBeUndefined();
+
+    const zeroes = new Map<string, RosPlayerProjection>();
+    for (let rank = 1; rank <= 8; rank++) zeroes.set(`zero-${rank}`, projection(`zero-${rank}`, 'QB', 0, 1));
+    expect(buildMaxVorpCalibration(zeroes, slots, 8, 500)).toBeNull();
+  });
+
+  it('is deterministic for positional ties and memoizes by input identity and config', () => {
+    const players = new Map<string, RosPlayerProjection>();
+    for (const id of ['d', 'b', 'a', 'c', 'h', 'f', 'e', 'g']) players.set(id, projection(id, 'QB', 10, 1));
+    const slots = { QB: 1, RB: 0, WR: 0, TE: 0, FLEX: 0, SUPER_FLEX: 0 };
+    const first = buildMaxVorpCalibration(players, slots, 8, 500);
+    const second = buildMaxVorpCalibration(players, { ...slots }, 8, 500);
+    expect(second).toBe(first);
+    expect(first).toBeNull(); // all tied players are replacement-level, so calibration has zero total VORP.
+
+    players.set('elite', projection('elite', 'QB', 20, 1));
+    const immutableInput = new Map(players);
+    const result = buildMaxVorpCalibration(immutableInput, slots, 8, 500)!;
+    expect(result.calibrations[0].championshipPool.players.map(({ playerId }) => playerId)).toEqual(['elite', 'a', 'b', 'c']);
+    expect(buildMaxVorpCalibration(immutableInput, slots, 8, 500)).toBe(result);
+  });
+});
+
 describe('buildWaiverBoard', () => {
   it('ranks and values an available QB against all 21 higher Sleeper ROS projections', () => {
     const projections = new Map<string, RosPlayerProjection>();
@@ -385,8 +462,8 @@ describe('buildWaiverBoard', () => {
       [],
       (id) => id,
     );
-    expect(rows[0].playerId).toBe('te-1-available'); // Weeks-as-Starter is the default order
-    expect(rows[0].suggestions[0].strategy).toBe('weeks-starter');
+    expect(rows[0].playerId).toBe('te-1-available'); // Stable order is retained when Max VORP is unavailable
+    expect(rows[0].suggestions[0].strategy).toBe('max-vorp');
 
     const weeksSorted = sortWaiverRowsByStrategy(rows, 'weeks-starter');
     expect(weeksSorted[0].playerId).toBe('te-1-available');
@@ -558,7 +635,7 @@ describe('buildWaiverBoard', () => {
     expect(suggestionValue(rows, 'safe')).toBe(188);
     expect(suggestionValue(rows, 'safe')).toBeGreaterThan(20);
     expect(rows[0].suggestions.map((item) => item.strategy)).toEqual([
-      'weeks-starter', 'safe', 'aggressive', 'vorp',
+      'max-vorp', 'weeks-starter', 'safe', 'aggressive', 'vorp',
     ]);
   });
 });

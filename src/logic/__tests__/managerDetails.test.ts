@@ -8,6 +8,8 @@ const profile: ManagerBiddingProfile = {
   style: 'standard',
   confidence: 'low',
   usableEvidenceCount: 1,
+        baselineStrategyId: 'max-vorp',
+        baselineStrategyVersion: 'max-vorp-v1',
   evidence: [],
 };
 
