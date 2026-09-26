@@ -23,7 +23,7 @@
 - Real SeaMex Azure preview QA passed at desktop (1440×1000) and mobile (390×844): no horizontal overflow, collapsed previews show only likely/possible buyers, expanded tiers are ordered Likely → Possible → Unlikely, unlikely rows have reduced opacity, and capped `$165` displays red with visible `FAAB cap` plus the accessible `capped by available FAAB` label.
 - Live numeric spot-check: Zay Flowers uses `$105` Weeks-as-Starter × `2.06` = `$216`; it does not multiply the standalone `$171` predicted-winning-bid value.
 - Exact preview: https://nice-moss-07ec56310-10.centralus.7.azurestaticapps.net
-- PR #10 head `994b393`: CI passed, Azure Build and Deploy passed, and GitHub reports MERGEABLE.
+- Correction commit `994b393` and QA documentation commit `d8182c4` both passed CI/Azure checks; GitHub reports MERGEABLE.
 
 ## Remaining
 
