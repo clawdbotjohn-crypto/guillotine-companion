@@ -1,9 +1,10 @@
 // Waivers page — recommended bids per strategy, weekly context, and predicted winning bid.
 import { useMemo, useState, type ReactNode } from 'react';
 import { AlertTriangle, ChevronDown, ShoppingCart, Info, RefreshCw } from 'lucide-react';
-import { Button, Card, Skeleton, PositionBadge } from '../components/ui';
+import { Button, Card, Skeleton } from '../components/ui';
 import { FaabOverBudgetWarning } from '../components/FaabOverBudgetWarning';
-import { ManagerPredictionRow } from '../components/ManagerBiddingProfiles';
+import { WaiverManagerPredictions } from '../components/ManagerBiddingProfiles';
+import { buildManagerDetailData, type ManagerDetailData } from '../logic/managerDetails';
 import { buildManagerPredictions, type ManagerPredictionDisplay } from '../logic/managerPredictionDisplay';
 import { ContextDisclosure } from '../components/ContextDisclosure';
 import { useAppStore, usePlayers } from '../store';
@@ -21,6 +22,8 @@ import {
 } from '../api';
 import {
   computeEliminations,
+  getActiveRosterIds,
+  getCompletedLeagueWeek,
   extractBids,
   getProjectionScoring,
   getRestOfSeasonStartWeek,
@@ -202,14 +205,13 @@ export function WaiverPlayerCard({
   remainingFaab,
   nflTeam,
   weeklyPoints,
-  weeklyRank,
   isUpcomingBye,
   byeWeek,
   currentWeek,
-  injuryStatus,
   owner,
   selectedRosterId,
   managerPredictions = [],
+  managerDetails = new Map(),
   showManagerPredictions = false,
   getPlayerName: resolvePlayerName = getPlayerName,
 }: {
@@ -226,117 +228,86 @@ export function WaiverPlayerCard({
   owner?: RosteredPlayerOwner;
   selectedRosterId?: number | null;
   managerPredictions?: ManagerPredictionDisplay[];
+  managerDetails?: ReadonlyMap<number, ManagerDetailData>;
   showManagerPredictions?: boolean;
   getPlayerName?: (playerId: string) => string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [showAll, setShowAll] = useState(false);
   const suggestion = row.suggestions.find((item) => item.strategy === strategy);
   if (!suggestion) return null;
   const isOwnedBySelectedTeam = owner != null && owner.rosterId === selectedRosterId;
-  const visiblePredictions = showAll ? managerPredictions : managerPredictions.slice(0, 10);
   const collapsedPredictions = managerPredictions
     .filter((prediction) => prediction.likelihood !== 'Unlikely')
     .slice(0, 3);
-  const weeklyLabel = isUpcomingBye
-    ? `Week ${currentWeek + 1} Bye`
-    : weeklyPoints != null && weeklyRank != null
-      ? `Week ${currentWeek + 1} ${weeklyPoints.toFixed(1)} • Rank ${weeklyRank}`
-      : `Week ${currentWeek + 1} No projection`;
+  const hasManagerPredictions = !owner && showManagerPredictions && managerPredictions.length > 0;
+  const canExpand = hasManagerPredictions;
+  const nextWeek = currentWeek + 1;
+  const projectionLabel = isUpcomingBye
+    ? `W${nextWeek} bye`
+    : weeklyPoints != null
+      ? `W${nextWeek} ${weeklyPoints.toFixed(1)} pts`
+      : `W${nextWeek} no projection`;
+  const byeLabel = byeWeek == null ? 'Bye unavailable' : `Bye W${byeWeek}`;
 
   return (
     <Card hover={false} className={`${isOwnedBySelectedTeam ? 'border-[#10b981] border-l-4 border-l-[#10b981]' : ''}`}>
       <article
-        aria-disabled={owner ? 'true' : undefined}
         aria-label={`${row.name}, ${owner ? `rostered by ${owner.ownerName}` : 'available'}${isOwnedBySelectedTeam ? ', owned by your selected team' : ''}`}
+        aria-disabled={owner ? 'true' : undefined}
         data-owner-highlight={isOwnedBySelectedTeam ? 'selected-team' : 'neutral'}
       >
-        {isOwnedBySelectedTeam && <span className="sr-only">Owned by your selected team.</span>}
         <button
           type="button"
-          aria-expanded={isOpen}
-          aria-controls={`player-bids-${row.playerId}`}
-          onClick={() => setIsOpen((open) => !open)}
-          className="block w-full rounded-xl p-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#6366f1]"
+          aria-expanded={canExpand ? isOpen : undefined}
+          aria-controls={canExpand ? `player-bids-${row.playerId}` : undefined}
+          onClick={() => canExpand && setIsOpen((open) => !open)}
+          className={`block w-full rounded-xl p-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#6366f1] ${canExpand ? 'cursor-pointer' : 'cursor-default'}`}
         >
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex min-w-0 items-start gap-2">
-              <PositionBadge position={row.position} className="shrink-0 px-2 py-1 text-sm" />
-              <div className="min-w-0">
-                <div className="flex min-w-0 items-center gap-1.5">
-                  <span className="truncate text-sm font-semibold text-[#f0f0ff]">{row.name}</span>
-                  {injuryStatus ? <span className="shrink-0 rounded bg-[rgba(245,158,11,0.15)] px-1.5 text-[9px] font-semibold uppercase text-[#f59e0b]">{injuryStatus}</span> : null}
-                  {owner ? <span className="shrink-0 rounded bg-[rgba(100,116,139,0.18)] px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-[#94a3b8]">Rostered</span> : null}
-                </div>
-                <p className="mt-0.5 truncate text-[10px] font-['Space_Mono'] text-[#8b8ec7]">
-                  {row.position} #{row.posRank} <span aria-hidden="true">•</span> Value {row.sourceValue.toFixed(1)}
-                </p>
-                <p className="mt-0.5 truncate text-[10px] text-[#6b6e99]">
-                  {weeklyLabel} <span aria-hidden="true">•</span> {nflTeam ?? 'Team unavailable'} <span aria-hidden="true">•</span> {byeWeek == null ? 'Bye unavailable' : byeWeek === currentWeek + 1 ? 'Bye next week' : `Bye Week ${byeWeek}`}
-                </p>
-                {owner ? <p className="text-[9px] text-[#6b6e99]">Owner: {owner.ownerName}</p> : null}
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <span className="truncate text-sm font-semibold text-[#f0f0ff]">{row.name}</span>
+                {owner && <span className="shrink-0 rounded bg-[rgba(100,116,139,0.18)] px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-[#94a3b8]">Rostered</span>}
               </div>
+              <p className="mt-0.5 truncate text-[10px] font-['Space_Mono'] text-[#8b8ec7]">
+                {row.position} #{row.posRank}{nflTeam ? ` · ${nflTeam}` : ''}
+              </p>
+              <p className="mt-0.5 truncate text-[10px] text-[#6b6e99]">{projectionLabel} · {byeLabel}</p>
+              {owner && <p className="mt-0.5 truncate text-[9px] text-[#6b6e99]">{owner.ownerName}</p>}
             </div>
-            <div className="flex shrink-0 items-start gap-2 text-right">
-              <div>
-                <div className="flex items-center justify-end gap-1 font-['Space_Mono'] text-base font-bold tabular-nums text-[#10b981]">
-                  {!owner && remainingFaab != null && suggestion.value != null && suggestion.value > remainingFaab ? <FaabOverBudgetWarning /> : null}
-                  <span>{suggestion.value == null ? 'Unavailable' : `$${suggestion.value}`}</span>
-                </div>
-                <p className="text-[9px] text-[#6b6e99]">Suggested</p>
+
+            <div className="w-[8.75rem] shrink-0 rounded-lg bg-[#0c0f22] px-2.5 py-2 text-right" data-testid="compact-bid-summary">
+              <div className="flex items-center justify-end gap-1 font-['Space_Mono'] text-base font-bold tabular-nums text-[#10b981]">
+                {!owner && remainingFaab != null && suggestion.value != null && suggestion.value > remainingFaab && <FaabOverBudgetWarning />}
+                <span>{suggestion.value == null ? 'Unavailable' : `$${suggestion.value}`}</span>
+              </div>
+              <p className="text-[9px] text-[#6b6e99]">{owner ? 'Current value' : 'Suggested bid'}</p>
+              {hasManagerPredictions && collapsedPredictions.length > 0 ? (
+                <ul className="mt-1 border-t border-[#1a1e3a] pt-1">
+                  {collapsedPredictions.map((prediction) => (
+                    <li key={prediction.rosterId} className="flex items-center justify-between gap-1 text-[9px] leading-4">
+                      <span className="truncate text-[#aeb1d5]">{prediction.managerName}</span>
+                      <span className={`shrink-0 font-['Space_Mono'] font-semibold ${prediction.cappedByFaab ? 'text-[#f87171]' : 'text-[#d9daf5]'}`}>
+                        ${prediction.predictedBid}
+                        {prediction.cappedByFaab && <span className="sr-only"> capped by available FAAB</span>}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : !owner ? (
                 <PredictedWinningBidFooter strategy={strategy} row={row} />
-              </div>
-              <ChevronDown size={14} className={`mt-1 text-[#6b6e99] transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+              ) : null}
             </div>
+            {canExpand && <ChevronDown size={14} className={`mt-3 shrink-0 text-[#6b6e99] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />}
           </div>
-          {!isOpen && showManagerPredictions && collapsedPredictions.length > 0 && (
-            <div className="mt-2 grid gap-1 border-t border-[#1a1e3a] pt-2 sm:grid-cols-3">
-              {collapsedPredictions.map((prediction) => (
-                <div key={prediction.rosterId} className="flex min-w-0 items-center justify-between gap-2 rounded-md bg-[#0c0f22] px-2 py-1.5">
-                  <div className="min-w-0">
-                    <p className="truncate text-[10px] font-semibold text-[#d9daf5]">{prediction.managerName}</p>
-                    <p className="text-[8px] text-[#8b8eb8]">{prediction.profile.managerMultiplier?.toFixed(2)}× · {prediction.profile.style === 'standard' ? 'Typical' : prediction.profile.style}</p>
-                    <p className="text-[9px] text-[#8b8eb8]">{prediction.likelihood} buyer</p>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p
-                      aria-label={`Predicted bid $${prediction.predictedBid}${prediction.cappedByFaab ? ', capped by available FAAB' : ''}`}
-                      className={`font-['Space_Mono'] text-xs font-bold ${prediction.cappedByFaab ? 'text-[#f87171]' : 'text-[#34d399]'}`}
-                    >
-                      ${prediction.predictedBid}
-                    </p>
-                    <p className="text-[8px] text-[#6b6e99]">${prediction.currentFaab} left{prediction.cappedByFaab ? ' · FAAB cap' : ''}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
         </button>
 
-        {isOpen && (
-          <div id={`player-bids-${row.playerId}`} className="border-t border-[#1a1e3a] px-2.5 pb-2.5 pt-2">
-            {strategy === 'weeks-starter' && (
-              <p className="mb-2 text-[10px] text-[#8b8ec7]">Starts {row.starterWeeks} of {row.possibleStarterWeeks} remaining weeks</p>
-            )}
-            {showManagerPredictions && managerPredictions.length > 0 && (
-              <div>
-                <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#8b8eb8]">Likely competing bids</h3>
-                <div className="space-y-2">
-                  {visiblePredictions.map((prediction) => (
-                    <ManagerPredictionRow key={prediction.rosterId} prediction={prediction} getPlayerName={resolvePlayerName} />
-                  ))}
-                </div>
-                {!showAll && managerPredictions.length > 10 && (
-                  <button
-                    type="button"
-                    onClick={() => setShowAll(true)}
-                    className="mt-2 min-h-10 w-full rounded-lg border border-[#2a2e55] text-[11px] font-semibold text-[#a5b4fc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6366f1]"
-                  >
-                    Show more ({managerPredictions.length - 10})
-                  </button>
-                )}
-              </div>
-            )}
+        {canExpand && isOpen && (
+          <div id={`player-bids-${row.playerId}`} className="animate-in fade-in slide-in-from-top-1 duration-200">
+            <div className="border-t border-[#1a1e3a] px-2.5 pb-2.5 pt-2">
+              <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#8b8eb8]">Manager predictions</h3>
+              <WaiverManagerPredictions predictions={managerPredictions} detailsByRosterId={managerDetails} getPlayerName={resolvePlayerName} />
+            </div>
           </div>
         )}
       </article>
@@ -389,10 +360,11 @@ export function WaiversPage() {
   const { data: users } = useLeagueUsers(leagueId);
   const { data: rosters } = useRosters(leagueId);
   const playersQuery = usePlayers();
-  const { data: matchups, isLoading: matchupsLoading } = useAllMatchups(leagueId, 18);
+  const nflStateQuery = useNflState();
+  const completedWeek = getCompletedLeagueWeek(league, nflStateQuery.data);
+  const { data: matchups, isLoading: matchupsLoading } = useAllMatchups(leagueId, completedWeek);
   const transactionsQuery = useAllTransactions(leagueId, 18);
   const { data: transactions } = transactionsQuery;
-  const nflStateQuery = useNflState();
   const [rankingSource, setRankingSource] = useState<WaiverRankingSource>('sleeper');
 
   const projectionStartWeek = useMemo(() => {
@@ -667,9 +639,19 @@ export function WaiversPage() {
     weeklyScoredPlayers,
     league,
   ).byRosterId;
-  const activeRosterIds = new Set(
-    projectedTeams.filter((team) => !team.eliminated).map((team) => team.rosterId),
-  );
+  const activeRosterIds = getActiveRosterIds(waiverContext!.elim);
+  const playerValues = new Map(allRows.map((row) => [row.playerId, row.sourceValue]));
+  const playerPositionRanks = new Map(allRows.map((row) => [row.playerId, row.posRank]));
+  const managerDetails = buildManagerDetailData({
+    profiles: biddingProfiles.profiles,
+    rosters: rosters!,
+    players: playersQuery.data!,
+    season: league?.season,
+    currentWeek: nflStateQuery.data?.week ?? null,
+    playerValues,
+    positionRanks: playerPositionRanks,
+    projectedPositionRanks,
+  });
 
   return (
     <div className="px-6 py-6 pb-24 max-w-lg mx-auto">
@@ -794,7 +776,8 @@ export function WaiversPage() {
               owner={ownership.get(row.playerId)}
               selectedRosterId={rosterId}
               managerPredictions={predictions}
-              showManagerPredictions={biddingProfiles.hasHistory}
+              managerDetails={managerDetails}
+              showManagerPredictions={predictions.length > 0}
             />
           );
         })}

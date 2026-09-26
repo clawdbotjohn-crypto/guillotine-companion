@@ -8,6 +8,7 @@ import { useLeague, useLeagueUsers, useRosters, useAllMatchups, useAllTransactio
 import {
   buildWeeklyScoredPlayers,
   computeEliminations,
+  getCompletedLeagueWeek,
   extractBids,
   getProjectionScoring,
   getRestOfSeasonStartWeek,
@@ -27,10 +28,11 @@ export function LeaguePage() {
   const { data: users } = useLeagueUsers(leagueId);
   const { data: rosters } = useRosters(leagueId);
   const { isLoading: playersLoading } = usePlayers();
-  const { data: matchups, isLoading: matchupsLoading } = useAllMatchups(leagueId, 18);
+  const nflStateQuery = useNflState();
+  const completedWeek = getCompletedLeagueWeek(league, nflStateQuery.data);
+  const { data: matchups, isLoading: matchupsLoading } = useAllMatchups(leagueId, completedWeek);
   const { data: transactions } = useAllTransactions(leagueId, 18);
   const { data: leagueHistory, isLoading: historyLoading } = useLeagueHistory(rootLeagueId);
-  const nflStateQuery = useNflState();
   const projectionWeek = league && nflStateQuery.data && league.season === nflStateQuery.data.season
     ? getRestOfSeasonStartWeek(nflStateQuery.data)
     : null;

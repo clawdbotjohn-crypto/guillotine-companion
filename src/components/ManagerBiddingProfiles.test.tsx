@@ -97,23 +97,51 @@ describe('manager bid presentation', () => {
     ]);
   });
 
-  it('shows only plain-language prediction and simplified bidding history', () => {
+  it('opens one accessible shared modal with ordered sections and a mobile 2x2 history grid', () => {
     const prediction = buildManagerPredictions({
       profiles: [profile(1, 1.5)], baseline: 200, rosters, users, initialFaab: 1000,
       activeRosterIds: new Set([1]), positionRanks: new Map([[1, { rank: 5, outOf: 9 }]]),
     })[0];
-    render(<ManagerPredictionRow prediction={prediction} getPlayerName={() => 'History Player'} />);
-    const cappedBid = screen.getByLabelText('Predicted bid $100, capped by available FAAB');
-    expect(cappedBid.className).toContain('text-[#f87171]');
-    expect(screen.getByText(/FAAB cap/)).toBeTruthy();
-    expect(screen.getByText('Possible buyer')).toBeTruthy();
-    expect(screen.queryByText(/baseline|provenance|confidence|raw|willingness|feasible/i)).toBeNull();
-    fireEvent.click(screen.getByText('Bidding History'));
-    expect(screen.getByText('History Player · Wk 3 · Won')).toBeTruthy();
-    expect(screen.getByText('Suggested $100 · Actual $150 · FAAB $1000 · Ratio 1.50×')).toBeTruthy();
+    render(<ManagerPredictionRow
+      prediction={prediction}
+      getPlayerName={() => 'History Player'}
+      details={{
+        upcomingByes: [{ playerId: 'bye-1', name: 'Bye Player', position: 'WR', positionRank: 4, byeWeek: 5, value: 99 }],
+        teamNeeds: [
+          { position: 'QB', rank: 1, outOf: 9, tier: 'strong' },
+          { position: 'RB', rank: 9, outOf: 9, tier: 'weak' },
+          { position: 'WR', rank: 5, outOf: 9, tier: 'neutral' },
+        ],
+      }}
+    />);
+    const trigger = screen.getByRole('button', { name: /open details for Aggressive Alice/i });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    trigger.focus();
+    fireEvent.click(trigger);
+    const dialog = screen.getByRole('dialog', { name: 'Aggressive Alice' });
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: /close manager details/i }));
+    expect(document.body.style.overflow).toBe('hidden');
+    const headings = Array.from(dialog.querySelectorAll('h3')).map((node) => node.textContent);
+    expect(headings).toEqual(['Upcoming byes', 'Team needs', 'Bidding History']);
+    expect(screen.getByText('Bye Player')).toBeTruthy();
+    expect(screen.getByText(/WR #4 · W5/)).toBeTruthy();
+    expect(screen.getByLabelText(/QB strength, rank 1 of 9/)).toBeTruthy();
+    expect(screen.getByLabelText(/RB need, rank 9 of 9/)).toBeTruthy();
+    expect(screen.queryByText(/^WR$/)).toBeNull();
+    const metrics = screen.getByLabelText('Bid metrics for History Player');
+    expect(metrics.className).toContain('grid-cols-2');
+    expect(screen.getByText('Suggested bid')).toBeTruthy();
+    expect(screen.getByText('Actual bid')).toBeTruthy();
+    expect(screen.getByText('Pre-bid FAAB')).toBeTruthy();
+    expect(screen.getByText('Ratio')).toBeTruthy();
+    expect(screen.getByText('$150 · Won').className).toContain('text-[#34d399]');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+    expect(document.body.style.overflow).toBe('');
   });
 
-  it('sorts Teams bid profiles most-to-least aggressive and exposes current FAAB', () => {
+  it('keeps Teams cards ordered and compact while adding canonical highest bid', () => {
     render(<TeamBidProfiles
       profiles={[profile(2, 0.7), profile(1, 1.5)]}
       rosters={rosters}
@@ -124,12 +152,19 @@ describe('manager bid presentation', () => {
       onRetry={vi.fn()}
       getPlayerName={() => 'History Player'}
     />);
-    const summaries = screen.getAllByText(/Aggressive Alice|Careful Chris/);
-    expect(summaries.map((node) => node.textContent)).toEqual(['Aggressive Alice', 'Careful Chris']);
+    const cards = screen.getAllByRole('button', { name: /open bid profile/i });
+    expect(cards.map((node) => node.getAttribute('aria-label'))).toEqual([
+      'Open bid profile for Aggressive Alice', 'Open bid profile for Careful Chris',
+    ]);
     expect(screen.getByText('Current FAAB $100')).toBeTruthy();
     expect(screen.getByText('Current FAAB $800')).toBeTruthy();
-    expect(screen.getByText('1.50× · Aggressive')).toBeTruthy();
-    expect(screen.getByText('0.70× · Conservative')).toBeTruthy();
+    expect(screen.getByText('Highest bid: $150')).toBeTruthy();
+    expect(screen.getByText('Highest bid: No canonical bids')).toBeTruthy();
+    expect(screen.getByText('Aggressive')).toBeTruthy();
+    expect(screen.getByText('Conservative')).toBeTruthy();
+    fireEvent.click(cards[0]);
+    expect(screen.getByRole('dialog', { name: 'Aggressive Alice' })).toBeTruthy();
+    expect(screen.queryByText(/Details/i)).toBeNull();
   });
 
   it('renders loading and retryable error states', () => {
@@ -141,4 +176,5 @@ describe('manager bid presentation', () => {
     fireEvent.click(screen.getByRole('button', { name: /retry/i }));
     expect(retry).toHaveBeenCalledOnce();
   });
+
 });

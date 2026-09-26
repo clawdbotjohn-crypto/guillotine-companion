@@ -19,6 +19,7 @@ import {
   buildHubRosterRows,
   buildUpcomingByeWarnings,
   computeEliminations,
+  getCompletedLeagueWeek,
   computeProjectedLineupGroupRanks,
   computeAllRosterHistoricalRanks,
   extractBids,
@@ -80,11 +81,12 @@ export function HubPage() {
   const { data: users } = useLeagueUsers(leagueId);
   const { data: rosters } = useRosters(leagueId);
   const { data: players, isLoading: playersLoading } = usePlayers();
-  const { data: matchups, isLoading: matchupsLoading } = useAllMatchups(leagueId, 18);
+  const nflStateQuery = useNflState();
+  const completedWeek = getCompletedLeagueWeek(league, nflStateQuery.data);
+  const { data: matchups, isLoading: matchupsLoading } = useAllMatchups(leagueId, completedWeek);
   const { data: transactions } = useAllTransactions(leagueId, 18);
   const { data: draftPicks } = useDraftPicks(league?.draft_id ?? null);
   const { data: leagueHistory, isLoading: historyLoading } = useLeagueHistory(rootLeagueId);
-  const nflStateQuery = useNflState();
   const projectionWeek = league && nflStateQuery.data && league.season === nflStateQuery.data.season
     ? getRestOfSeasonStartWeek(nflStateQuery.data)
     : null;

@@ -1,5 +1,7 @@
 export {
   computeEliminations,
+  getCompletedLeagueWeek,
+  getActiveRosterIds,
   extractBids,
   isGuillotineLeague,
   type WeekResult,

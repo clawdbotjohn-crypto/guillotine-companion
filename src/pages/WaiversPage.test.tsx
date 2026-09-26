@@ -48,19 +48,27 @@ describe('waiver controls', () => {
     expect(onChange).toHaveBeenCalledWith(true);
   });
 
-  it('renders the compact metadata hierarchy, rank disclosure, and selected/predicted bids', () => {
-    render(<WaiverPlayerCard {...cardProps} strategy="weeks-starter" injuryStatus="Questionable" owner={{ rosterId: 9, ownerName: 'Rain City Axes' }} />);
+  it('renders only compact approved metadata and current value for rostered players', () => {
+    render(<WaiverPlayerCard
+      {...cardProps}
+      strategy="weeks-starter"
+      injuryStatus="Questionable"
+      owner={{ rosterId: 9, ownerName: 'Rain City Axes' }}
+      managerPredictions={[{
+        rosterId: 1, managerName: 'Hidden Manager', predictedBid: 50, currentFaab: 100,
+        cappedByFaab: false, likelihood: 'Likely',
+        profile: { managerRosterId: 1, managerMultiplier: 1, style: 'standard', confidence: 'low', usableEvidenceCount: 1, evidence: [] },
+      }]}
+      showManagerPredictions
+    />);
     const card = screen.getByRole('article', { name: /rostered by Rain City Axes/i });
-    expect(within(card).getByText('Questionable')).toBeTruthy();
-    expect(within(card).getByText(/RB #17.*Value 180\.0/)).toBeTruthy();
-    expect(within(card).getByText(/Week 7 13\.4.*Rank 16.*SEA.*Bye Week 8/)).toBeTruthy();
+    expect(within(card).getByText(/RB #17 · SEA/)).toBeTruthy();
+    expect(within(card).getByText(/W7 13\.4 pts · Bye W8/)).toBeTruthy();
     expect(within(card).getByText('$42')).toBeTruthy();
-    expect(within(card).getByText((_text, element) => element?.textContent === 'Predicted bid $61')).toBeTruthy();
-    expect(within(card).queryByText(/starter weeks/i)).toBeNull();
-    const toggle = within(card).getByRole('button', { name: /Test Runner/ });
-    fireEvent.click(toggle);
-    expect(toggle.getAttribute('aria-expanded')).toBe('true');
-    expect(within(card).getByText('Starts 8 of 14 remaining weeks')).toBeTruthy();
+    expect(within(card).getByText('Current value')).toBeTruthy();
+    expect(within(card).queryByText('Hidden Manager')).toBeNull();
+    expect(within(card).queryByText(/Predicted bid/)).toBeNull();
+    expect(within(card).queryByText(/Questionable|Value 180|Rank 16|starter weeks/i)).toBeNull();
   });
 
   it('highlights only players owned by the selected team while all rostered rows remain disabled', () => {
@@ -71,7 +79,6 @@ describe('waiver controls', () => {
     const selectedCard = screen.getByRole('article', { name: /owned by your selected team/i });
     expect(selectedCard.getAttribute('aria-disabled')).toBe('true');
     expect(selectedCard.getAttribute('data-owner-highlight')).toBe('selected-team');
-    expect(screen.getByText('Owned by your selected team.')).toBeTruthy();
     expect(selectedCard.parentElement?.className).toContain('border-[#10b981]');
 
     rerender(<WaiverPlayerCard {...cardProps} strategy="safe" owner={owner} selectedRosterId={8} />);
@@ -92,13 +99,13 @@ describe('waiver controls', () => {
     expect(screen.queryByText(/starter wks/)).toBeNull();
   });
 
-  it('expands by keyboard, shows ten manager bids, and reveals the remainder on demand', () => {
+  it('keeps collapsed cards to three one-line summaries, then expands all tiers into modal triggers', () => {
     const predictions: ManagerPredictionDisplay[] = Array.from({ length: 12 }, (_, index) => ({
       rosterId: index + 1,
       managerName: `Manager ${index + 1}`,
       predictedBid: 100 - index,
       currentFaab: 200,
-      cappedByFaab: false,
+      cappedByFaab: index === 4,
       likelihood: index < 4 ? 'Unlikely' : index < 8 ? 'Possible' : 'Likely',
       profile: {
         managerRosterId: index + 1,
@@ -116,18 +123,20 @@ describe('waiver controls', () => {
       showManagerPredictions
     />);
     const toggle = screen.getByRole('button', { name: /Test Runner/ });
-    expect(screen.queryByText('Manager 1')).toBeNull();
-    expect(screen.getByText('Manager 5')).toBeTruthy();
-    expect(screen.getByText('Manager 7')).toBeTruthy();
-    expect(screen.queryByText('Manager 8')).toBeNull();
-    fireEvent.keyDown(toggle, { key: 'Enter' });
+    const summary = screen.getByTestId('compact-bid-summary');
+    expect(within(summary).getByText('Manager 5')).toBeTruthy();
+    expect(within(summary).getByText('Manager 6')).toBeTruthy();
+    expect(within(summary).getByText('Manager 7')).toBeTruthy();
+    expect(within(summary).queryByText('Manager 8')).toBeNull();
+    expect(screen.queryByTestId('expanded-manager-list')).toBeNull();
+    expect(screen.queryByText(/Predicted bid \$61/)).toBeNull();
     fireEvent.click(toggle);
-    expect(screen.getByText('Manager 1')).toBeTruthy();
-    expect(screen.getByText('Manager 10')).toBeTruthy();
-    expect(screen.queryByText('Manager 11')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Show more (2)' }));
-    expect(screen.getByText('Manager 11')).toBeTruthy();
-    expect(screen.getByText('Manager 12')).toBeTruthy();
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByTestId('expanded-manager-list').children).toHaveLength(12);
+    expect(screen.getByText('Manager 1').closest('button')?.className).toContain('opacity-55');
+    fireEvent.click(screen.getByRole('button', { name: /open details for Manager 5/i }));
+    expect(screen.getByRole('dialog', { name: 'Manager 5' })).toBeTruthy();
+    expect(screen.getAllByText('Bidding History')).toHaveLength(1);
   });
 
   it('keeps week-one/no-history cards to the overall prediction only', () => {

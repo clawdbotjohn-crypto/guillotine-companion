@@ -1,12 +1,22 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ProjectionSnapshotResponse } from './types';
-import { fetchProjectionSnapshotBatch } from './hooks';
+import { CURRENT_ROSTER_QUERY_FRESHNESS, fetchProjectionSnapshotBatch } from './hooks';
 
 const snapshot = {
   snapshot: { id: 'snapshot' },
   provenance: { effectiveKind: 'reconstructed' },
   rows: [],
 } as unknown as ProjectionSnapshotResponse;
+
+describe('current roster query freshness', () => {
+  it('always refetches ownership after processed waivers and on focus', () => {
+    expect(CURRENT_ROSTER_QUERY_FRESHNESS).toEqual({
+      staleTime: 0,
+      refetchOnMount: 'always',
+      refetchOnWindowFocus: true,
+    });
+  });
+});
 
 describe('fetchProjectionSnapshotBatch', () => {
   it('preserves successful coordinates and reports only the failed week', async () => {

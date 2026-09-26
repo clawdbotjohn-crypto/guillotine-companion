@@ -24,6 +24,12 @@ const STALE_1H = 1000 * 60 * 60;
 const STALE_6H = STALE_1H * 6;
 const STALE_24H = STALE_1H * 24;
 
+export const CURRENT_ROSTER_QUERY_FRESHNESS = {
+  staleTime: 0,
+  refetchOnMount: 'always' as const,
+  refetchOnWindowFocus: true,
+};
+
 export function useLeague(leagueId: string | null) {
   return useQuery<League>({
     queryKey: ['league', leagueId],
@@ -47,7 +53,9 @@ export function useRosters(leagueId: string | null) {
     queryKey: ['rosters', leagueId],
     queryFn: () => api.getLeagueRosters(leagueId!),
     enabled: !!leagueId,
-    staleTime: STALE_1H,
+    // Processed waivers change current ownership immediately. Do not reuse an hour-old roster
+    // snapshot just because Hub or Teams mounted this query first.
+    ...CURRENT_ROSTER_QUERY_FRESHNESS,
   });
 }
 
@@ -60,12 +68,12 @@ export function useMatchups(leagueId: string | null, week: number) {
   });
 }
 
-export function useAllMatchups(leagueId: string | null, maxWeek: number) {
+export function useAllMatchups(leagueId: string | null, maxWeek: number | null) {
   return useQuery<Map<number, Matchup[]>>({
     queryKey: ['all-matchups', leagueId, maxWeek],
     queryFn: async () => {
       const map = new Map<number, Matchup[]>();
-      for (let w = 1; w <= maxWeek; w++) {
+      for (let w = 1; w <= (maxWeek ?? 0); w++) {
         const m = await api.getMatchups(leagueId!, w);
         if (m && m.length > 0 && m.some((x) => x.points != null && x.points > 0)) {
           map.set(w, m);
@@ -75,7 +83,7 @@ export function useAllMatchups(leagueId: string | null, maxWeek: number) {
       }
       return map;
     },
-    enabled: !!leagueId && maxWeek > 0,
+    enabled: !!leagueId && maxWeek != null,
     staleTime: STALE_1H,
   });
 }

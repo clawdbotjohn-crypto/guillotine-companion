@@ -500,7 +500,7 @@ describe('buildWaiverBoard', () => {
     ]);
   });
 
-  it('resolves active owner identity while treating eliminated roster players as available', () => {
+  it('uses current Sleeper ownership even when an eliminated roster still retains a player', () => {
     const rosters: Roster[] = [
       {
         roster_id: 1,
@@ -535,11 +535,11 @@ describe('buildWaiverBoard', () => {
     ], elim);
 
     expect(ownership.get('active-player')).toEqual({ rosterId: 1, ownerName: 'Alpha Manager' });
-    expect(ownership.has('released-player')).toBe(false);
+    expect(ownership.get('released-player')).toEqual({ rosterId: 2, ownerName: 'Chopped Manager' });
     expect(computeAvailablePlayers(rosters, new Map([
       ['active-player', projection('active-player', 'QB', 20)],
       ['released-player', projection('released-player', 'QB', 15)],
-    ]), elim)).toEqual(['released-player']);
+    ]), elim)).toEqual([]);
   });
 
   it('preserves raw model values without any budget-floor clamp path', () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { computeEliminations, isGuillotineLeague } from '../elimination';
+import { computeEliminations, getActiveRosterIds, getCompletedLeagueWeek, isGuillotineLeague } from '../elimination';
 import type { Matchup, Roster, SleeperUser } from '../../api/types';
 
 // Mock the players store
@@ -168,6 +168,47 @@ describe('computeEliminations', () => {
     expect(result.weeks).toHaveLength(0);
     expect(result.champion).toBeNull();
     expect(result.isComplete).toBe(false);
+  });
+});
+
+describe('current-week elimination guard', () => {
+  it('uses league last_scored_leg so partial Thursday scores cannot become an elimination week', () => {
+    expect(getCompletedLeagueWeek(
+      { season: '2026', settings: { last_scored_leg: 2 } },
+      { season: '2026', week: 3 },
+    )).toBe(2);
+    expect(getCompletedLeagueWeek(
+      { season: '2025', settings: { last_scored_leg: 18 } },
+      { season: '2026', week: 3 },
+    )).toBe(18);
+    expect(getCompletedLeagueWeek(undefined, { season: '2026', week: 3 })).toBeNull();
+  });
+
+  it('keeps a 32-team/two-chops-per-week league at 28 active before the third week is final', () => {
+    const leagueRosters = Array.from({ length: 32 }, (_, index) => makeRoster(index + 1, `u${index + 1}`));
+    const leagueUsers = Array.from({ length: 32 }, (_, index) => makeUser(`u${index + 1}`, `Manager ${index + 1}`));
+    const completedWeek = getCompletedLeagueWeek(
+      { season: '2026', settings: { last_scored_leg: 2 } },
+      { season: '2026', week: 3 },
+    )!;
+    const allFetchedWeeks = new Map<number, Matchup[]>([
+      [1, Array.from({ length: 32 }, (_, index) => makeMatchup(index + 1, index + 1))],
+      [2, Array.from({ length: 32 }, (_, index) => makeMatchup(index + 1, index < 2 ? 0 : index + 1))],
+      [3, Array.from({ length: 32 }, (_, index) => makeMatchup(index + 1, index < 21 ? 0 : index + 1))],
+    ]);
+    const completedMatchups = new Map([...allFetchedWeeks].filter(([week]) => week <= completedWeek));
+    const result = computeEliminations(completedMatchups, leagueRosters, leagueUsers);
+    expect(getActiveRosterIds(result).size).toBe(28);
+    expect([...result.teams.values()].filter((team) => team.eliminatedWeek != null)).toHaveLength(4);
+  });
+
+  it('derives one survivor set directly from the canonical elimination result', () => {
+    const result = computeEliminations(new Map([
+      [1, [makeMatchup(1, 10), makeMatchup(2, 20), makeMatchup(3, 30)]],
+    ]), [makeRoster(1, 'u1'), makeRoster(2, 'u2'), makeRoster(3, 'u3')], [
+      makeUser('u1', 'Alice'), makeUser('u2', 'Bob'), makeUser('u3', 'Charlie'),
+    ]);
+    expect([...getActiveRosterIds(result)]).toEqual([2, 3]);
   });
 });
 

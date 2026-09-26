@@ -459,17 +459,15 @@ function computeLeagueWidePositionRanks(
   return ranks;
 }
 
-/** Resolve current active-roster ownership for display without changing any valuation pool. */
+/** Resolve current Sleeper ownership for display, including rosters eliminated by our model. */
 export function computeRosteredPlayerOwners(
   rosters: Roster[],
   users: SleeperUser[],
-  elim: EliminationResult,
+  _elim?: EliminationResult,
 ): Map<string, RosteredPlayerOwner> {
   const namesByUserId = new Map(users.map((user) => [user.user_id, user.display_name]));
   const ownership = new Map<string, RosteredPlayerOwner>();
   for (const roster of rosters) {
-    const info = elim.teams.get(roster.roster_id);
-    if (info?.eliminatedWeek != null) continue;
     const ownerName = namesByUserId.get(roster.owner_id) || `Team ${roster.roster_id}`;
     for (const playerId of roster.players ?? []) {
       if (!playerId || playerId === '0') continue;
@@ -479,16 +477,14 @@ export function computeRosteredPlayerOwners(
   return ownership;
 }
 
-/** Determine which players are available (not rostered by any active team). */
+/** Determine availability from the latest Sleeper ownership across every current roster. */
 export function computeAvailablePlayers(
   rosters: Roster[],
   projections: Map<string, RosPlayerProjection>,
-  elim: EliminationResult,
+  _elim?: EliminationResult,
 ): string[] {
   const rostered = new Set<string>();
   for (const r of rosters) {
-    const info = elim.teams.get(r.roster_id);
-    if (info?.eliminatedWeek != null) continue;
     (r.players ?? []).forEach((p) => rostered.add(p));
   }
   const avail: string[] = [];

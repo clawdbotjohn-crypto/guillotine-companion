@@ -20,6 +20,8 @@ import {
 import {
   buildWeeklyScoredPlayers,
   computeEliminations,
+  getActiveRosterIds,
+  getCompletedLeagueWeek,
   getProjectionScoring,
   getRestOfSeasonStartWeek,
   projectAllTeams,
@@ -33,6 +35,7 @@ import {
 } from '../logic';
 import { Card, Skeleton, StatusBadge } from '../components/ui';
 import { TeamBidProfiles } from '../components/ManagerBiddingProfiles';
+import { buildManagerDetailData } from '../logic/managerDetails';
 import { useBiddingProfiles } from '../hooks/useBiddingProfiles';
 import { getPlayerName } from '../store/players';
 import { SeasonPicker } from '../components/SeasonPicker';
@@ -127,9 +130,10 @@ export function TeamsPage() {
   const { data: users } = useLeagueUsers(leagueId);
   const { data: rosters } = useRosters(leagueId);
   const { data: players, isLoading: playersLoading } = usePlayers();
-  const { data: matchups, isLoading: matchupsLoading } = useAllMatchups(leagueId, 18);
-  const { data: leagueHistory, isLoading: historyLoading } = useLeagueHistory(rootLeagueId);
   const nflStateQuery = useNflState();
+  const completedWeek = getCompletedLeagueWeek(league, nflStateQuery.data);
+  const { data: matchups, isLoading: matchupsLoading } = useAllMatchups(leagueId, completedWeek);
+  const { data: leagueHistory, isLoading: historyLoading } = useLeagueHistory(rootLeagueId);
   const projectionWeek = league && nflStateQuery.data && league.season === nflStateQuery.data.season
     ? getRestOfSeasonStartWeek(nflStateQuery.data)
     : null;
@@ -162,11 +166,7 @@ export function TeamsPage() {
         )
       : null;
     const projections = projectAllTeams(rosters, weeklyScoredPlayers, league, elim);
-    const activeRosterIds = new Set(
-      [...elim.teams.values()]
-        .filter((team) => team.eliminatedWeek == null)
-        .map((team) => team.rosterId),
-    );
+    const activeRosterIds = getActiveRosterIds(elim);
     const historicalPosRanks = computePositionGroupRanks(matchups, league, activeRosterIds);
     const projectedPosRanks = computeProjectedLineupGroupRanks(
       projections,
@@ -174,7 +174,7 @@ export function TeamsPage() {
       league,
     );
     const histRanks = computeHistoricalRanks(elim);
-    return { elim, projections, historicalPosRanks, projectedPosRanks, histRanks };
+    return { elim, projections, weeklyScoredPlayers, historicalPosRanks, projectedPosRanks, histRanks };
   }, [matchups, rosters, users, league, weeklyProjectionQuery.data]);
 
   if (!leagueId) {
@@ -195,8 +195,33 @@ export function TeamsPage() {
     );
   }
 
-  const { elim, projections, historicalPosRanks, projectedPosRanks, histRanks } = model;
+  const { elim, projections, weeklyScoredPlayers, historicalPosRanks, projectedPosRanks, histRanks } = model;
   const hasScores = elim.weeks.length > 0;
+  const scoredPlayers = weeklyScoredPlayers ?? new Map();
+  const playerValues = new Map<string, number>(
+    [...scoredPlayers.values()].map((row) => [row.playerId, row.points]),
+  );
+  const playerPositionRanks = new Map<string, number>();
+  const byPosition = new Map<string, Array<{ playerId: string; position: string; points: number }>>();
+  for (const row of scoredPlayers.values()) {
+    const group = byPosition.get(row.position) ?? [];
+    group.push(row);
+    byPosition.set(row.position, group);
+  }
+  for (const group of byPosition.values()) {
+    group.sort((a, b) => b.points - a.points || a.playerId.localeCompare(b.playerId))
+      .forEach((row, index) => playerPositionRanks.set(row.playerId, index + 1));
+  }
+  const managerDetails = buildManagerDetailData({
+    profiles: biddingProfiles.profiles,
+    rosters: rosters!,
+    players: players!,
+    season: league?.season,
+    currentWeek: nflStateQuery.data?.week ?? null,
+    playerValues,
+    positionRanks: playerPositionRanks,
+    projectedPositionRanks: projectedPosRanks.byRosterId,
+  });
 
   const rows = orderTeamProjections(projections, histRanks, orderBy);
   const eliminatedCount = projections.filter((team) => team.eliminated).length;
@@ -235,6 +260,7 @@ export function TeamsPage() {
           error={biddingProfiles.error}
           onRetry={biddingProfiles.retry}
           getPlayerName={getPlayerName}
+          detailsByRosterId={managerDetails}
         />
       ) : (<>
       {/* Order toggle */}

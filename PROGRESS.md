@@ -1,5 +1,49 @@
 # Guillotine Companion — Progress
 
+## 🚨 PR #10 owner review round 2 — modal details + live-data regressions (John, 2026-09-25)
+
+**Status: implemented on the PR branch; code/tests complete and live preview verification recorded in `HANDOFF.md`.**
+
+- [x] In the Bidding History modal, color **Actual bid** green for a successful/winning claim and red for a legitimate losing claim. Include a non-color won/lost label or icon for accessibility.
+- [x] Make the manager’s bidding style/category visually obvious by restoring the existing colored style badge next to the manager/owner name. Reuse the exact badge colors and visual language from Teams → Bid Profiles rather than introducing a second style system.
+- [x] In each manager-history modal, place **Upcoming byes** above Team needs:
+  - Include that manager’s currently rostered players whose byes occur during the current NFL week or next two weeks.
+  - Order first by nearest bye week, then by current player value descending; do not display the value.
+  - Display player name and position + positional rank when available, e.g. `WR #4`.
+  - Handle no upcoming byes with a compact empty state.
+- [x] Below Upcoming byes and above Bidding History, add **Team needs** from next-week position projections across active teams:
+  - Top/strong third: green up-arrow plus green position label, e.g. `↑ QB`.
+  - Bottom/weak third: red down-arrow plus red position label, e.g. `↓ WR`.
+  - Omit or neutrally de-emphasize middle-third positions.
+  - Use SVG/icon + text, not color alone; keep deterministic tie/small-league handling aligned with buyer-likelihood calculations.
+- [x] Teams → Bid Profiles must use the same manager-detail/modal component and Bidding History presentation as Waivers so the two surfaces cannot drift.
+- [x] Keep the Teams collapsed manager card largely as-is, but add a compact `Highest bid: $N` line beneath the style badge, sourced from canonical bidding history and with an honest no-history state.
+- [x] **Bug investigation: stale/non-available players in Waivers.** Zay Flowers and Lamar Jackson were free agents before Tuesday’s bidding but are now rostered; Jeremiyah Love appears as a free agent despite likely always being owned. Determine whether current ownership is stale, incorrectly derived from transaction-week state, filtered to active rosters, or cached. The default available-player list must be computed from current Sleeper roster ownership after processed waivers. Do not merely hard-code exclusions. Add current-roster/cache invalidation regression tests and real SeaMex verification. This may become a separate follow-up commit/PR only if the owner-review UI work would otherwise be blocked.
+- [x] **Regression investigation: Teams count now says 29 active / 3 eliminated instead of 28 / 4.** This was previously correct. Trace current-week/elimination derivation and identify the exact regression before changing it. Restore 28 active / 4 eliminated for the current SeaMex state without league-specific constants; add a deterministic regression test and verify Hub/Teams/Waivers use one consistent active-roster set.
+- [x] Browser-test desktop and 390px mobile for both Waivers and Teams: modal fit/scroll/focus, bye ordering, needs badges, style badge, history colors/grid, compact collapsed sizing, current free-agent ownership, and 28/4 team counts.
+
+## 🚨 PR #10 owner review round 2 — restore compact Waivers cards (John, 2026-09-25)
+
+**Status: implemented on the PR branch.**
+
+- [x] Restore the collapsed waiver player card to approximately its pre-bidding-profile height/density. It must not contain three full bidder cards.
+- [x] Use one compact right-side summary element in the collapsed card:
+  - Show **Suggested bid**.
+  - Under it, show at most three single-line bidder summaries ordered highest to lowest, e.g. `miluna92  $119`, followed by bidder 2 and bidder 3.
+  - Do not show multiplier, category, buyer label, remaining FAAB, or full row/card chrome until expansion.
+- [x] When **Show rostered players** is enabled, do not show bid predictions or bidder summaries. Show only the player’s current valued price.
+- [x] Correct and simplify collapsed player metadata. Show only the player name, natural position + positional rank (for example `WR #4`), team if useful, next-week projection, and bye week. Remove the raw/source `Value 262.3`, duplicate weekly `Rank 4`/`Rank 9`, starter-weeks text, and any other duplicate ranking/value metadata. Preserve injury status only if it remains compact and useful. Do not change the underlying valuation merely to fit the layout.
+- [x] Remove the standalone **Predicted bid** line now that top bidders are available. Keep the overall Predicted winning bid only in preseason/Week 1 when manager-level predictions cannot be produced.
+- [x] Expanding a player card should reveal the manager bidders and predicted bids in a smooth, compact list—visually closer to the current compact expanded-list rows, not stacked large cards.
+- [x] Do not embed a large **Bidding History** accordion inside every manager row. Clicking a manager row/card should open a single modal dialog containing that manager’s Bidding History, so only one history surface is open at a time. Include accessible modal focus management, keyboard close, backdrop close where appropriate, and mobile fit/scroll behavior.
+- [x] In the Bidding History modal, each historical event uses a compact 2×2 metric grid: two fields on top and two below. Use explicit labels **Suggested bid** and **Actual bid**; retain **Pre-bid FAAB** and **Ratio** unless John’s continuation changes them.
+- [x] Add mobile/desktop visual and interaction coverage for original-height collapsed cards, rostered-player mode, metadata cleanup, preseason/Week-1 fallback, expansion, manager modal behavior, 2×2 history layout, overflow, and keyboard/focus behavior.
+
+### Round-2 root cause and prevention — 2026-09-25
+
+- **Stale/non-available players:** ownership had two independent defects. `useRosters` treated live ownership as one-hour-stale metadata, so navigation could retain the pre-waiver snapshot; and `computeAvailablePlayers` / `computeRosteredPlayerOwners` deliberately skipped eliminated rosters, making players still present on those current Sleeper rosters appear free. Prevention: current rosters are stale immediately and refetch on mount/focus; availability and owner labels use every current Sleeper roster, while elimination still limits only buyers/projections. Live SeaMex evidence: roster 15 currently owns Zay Flowers (`9997`) and Jeremiyah Love (`13287`), so both are excluded; Sleeper currently reports no roster owner for Lamar Jackson (`6994`), so Lamar honestly remains available rather than being hard-coded.
+- **29/3 team count:** all matchup queries scanned through Week 18 and accepted a week as “complete” once any roster had positive points. As the active NFL week began, partial scores entered elimination-rate/current-week math and produced the transient bad count. `NFL display_week` is also already the in-progress week for this live state, so it is not a safe boundary. Prevention: every page now clips current-season matchup history to authoritative `league.settings.last_scored_leg`; a shared `getActiveRosterIds()` supplies Hub/Teams/Waivers and buyer tiers. Live SeaMex reports `leg=3`, `last_scored_leg=2`; only Weeks 1–2 are applied, producing 28 active / 4 eliminated.
+
 ## 🚨 P0 PR #10 follow-up — correct baseline and de-emphasize non-buyers (John, 2026-09-25)
 
 - [ ] **Fix an inflation bug:** manager multipliers are defined relative to the app's **Weeks-as-Starter weekly suggested bid**, not its higher market-adjusted `predictedWinningBid`. Both historical event ratios and current manager forecasts must use the corresponding Weeks-as-Starter suggestion (`strategy === 'weeks-starter'`) as their baseline. Do not feed `row.predictedWinningBid` into `calculateHistoricalBaseline()` or `buildManagerPredictions()`.
