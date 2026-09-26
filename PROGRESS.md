@@ -6,25 +6,25 @@
 
 **Owner-review gate:** Before claiming completion, produce a requirement-by-requirement trace in `HANDOFF.md` mapping every checkbox in this section to the implementation file, focused test, and real desktop/mobile preview observation. Re-read John’s full round-3 section after implementation and compare the rendered UI against it. Do not mark a checkbox complete from code inspection alone.
 
-- [ ] The shared manager-detail popup opens too low on mobile. Waivers and Teams must use the same placement: center it in the viewport or use a near/full-height mobile sheet. It must remain above fixed navigation, expose Bidding History without requiring awkward initial scrolling, respect safe areas, and preserve accessible focus/close behavior.
-- [ ] Position strength/need categories must be identical between Hub and the bid popup. Replace thirds with shared **top quartile = strength**, **bottom quartile = need**, middle 50% = neutral. Use one shared helper/component and deterministic tie/small-league behavior so labels cannot diverge.
-- [ ] Upcoming byes must use one shared window/helper on Hub and in the bid popup. John’s intended popup window is current week + next two weeks; Hub appears to include one extra week and should be aligned unless later feedback changes the common window.
-- [ ] Show **FAAB remaining** prominently in the manager popup.
-- [ ] Remove all user-facing bid-count/implementation copy from Teams Bid Profiles and the popup: no `3 bids`, `3 canonical bids`, numbered evidence counts, or `canonical bid` wording.
-- [ ] Restore the prior compact Teams Bid Profile card composition:
+- [x] The shared manager-detail popup opens too low on mobile. Waivers and Teams must use the same placement: center it in the viewport or use a near/full-height mobile sheet. It must remain above fixed navigation, expose Bidding History without requiring awkward initial scrolling, respect safe areas, and preserve accessible focus/close behavior.
+- [x] Position strength/need categories must be identical between Hub and the bid popup. Replace thirds with shared **top quartile = strength**, **bottom quartile = need**, middle 50% = neutral. Use one shared helper/component and deterministic tie/small-league behavior so labels cannot diverge.
+- [x] Upcoming byes must use one shared window/helper on Hub and in the bid popup. John’s intended popup window is current week + next two weeks; Hub appears to include one extra week and should be aligned unless later feedback changes the common window.
+- [x] Show **FAAB remaining** prominently in the manager popup.
+- [x] Remove all user-facing bid-count/implementation copy from Teams Bid Profiles and the popup: no `3 bids`, `3 canonical bids`, numbered evidence counts, or `canonical bid` wording.
+- [x] Restore the prior compact Teams Bid Profile card composition:
   - Combine bidding style and multiplier in one badge/element, as before.
   - Remove the bid-count text and put **Current FAAB** in that location.
   - Keep **Highest bid** on the left side.
-- [ ] Color Current/Remaining FAAB consistently across Teams and the modal. Rank **active managers** by current FAAB: top quartile green, bottom quartile red, middle 50% yellow/neutral. Ensure `$0` is red and the league maximum is green; add an accessible non-color label/description. Use one shared helper with deterministic ties and small-league behavior.
-- [ ] Remove the `Learning` tag. Managers without enough history get no style badge.
-- [ ] Replace `No canonical bid`/`No canonical bids` with a simple user-facing `—` (or similarly neutral empty state); never expose the word canonical.
-- [ ] Recalibrate bidding-style thresholds so `1.18×` is not Aggressive and **Aggressive starts at `1.50×`**. Preserve Conservative below `0.85×`; classify `0.85×` through `<1.50×` as Standard unless existing product semantics require a clearly documented narrower neutral subdivision. Update the one shared constant/helper, cards, modal, tests, and docs together. No `Learning` style.
-- [ ] **Superseding the prior collapsed three-manager summary:** collapsed Waivers player cards return to one compact overall **Predicted bid** in the prior yellow styling. Its numeric value is the highest eligible manager-level predicted bid (not the old market-adjusted `predictedWinningBid`). Do not show manager usernames or three prediction lines while collapsed.
-- [ ] Keep the compact card label/amount composition natural and remove the divider from the previous multi-manager layout.
-- [ ] Players whose current/suggested value is `$0` show no Predicted bid and the card is not expandable, because no meaningful manager-bid detail exists. Add keyboard/ARIA and boundary tests for exactly zero versus positive values.
-- [ ] Expanded Waivers manager predictions should visually reuse the compact Teams → Bid Profiles manager-card language: manager name, shared aggression/style badge beneath the name, FAAB remaining, predicted bid amount, and buyer status beneath that amount. Use clearer labels: **Likely bidder**, **Possible bidder**, and **Unlikely bidder**. Keep the same numeric predictions, eligibility, ordering, cap treatment, and shared modal opening behavior.
-- [ ] Rename the Waivers section heading from **Manager Predictions** to **Bid Predictions**.
-- [ ] Add responsive visual/component coverage for modal placement/safe-area/nav overlap, shared quartiles, shared bye window, FAAB display/colors, no implementation terminology, no Learning tag, style+multiplier composition, empty states, new category thresholds, and divider-free Suggested-bid layout.
+- [x] Color Current/Remaining FAAB consistently across Teams and the modal. Rank **active managers** by current FAAB: top quartile green, bottom quartile red, middle 50% yellow/neutral. Ensure `$0` is red and the league maximum is green; add an accessible non-color label/description. Use one shared helper with deterministic ties and small-league behavior.
+- [x] Remove the `Learning` tag. Managers without enough history get no style badge.
+- [x] Replace `No canonical bid`/`No canonical bids` with a simple user-facing `—` (or similarly neutral empty state); never expose the word canonical.
+- [x] Recalibrate bidding-style thresholds so `1.18×` is not Aggressive and **Aggressive starts at `1.50×`**. Preserve Conservative below `0.85×`; classify `0.85×` through `<1.50×` as Standard unless existing product semantics require a clearly documented narrower neutral subdivision. Update the one shared constant/helper, cards, modal, tests, and docs together. No `Learning` style.
+- [x] **Superseding the prior collapsed three-manager summary:** collapsed Waivers player cards return to one compact overall **Predicted bid** in the prior yellow styling. Its numeric value is the highest eligible manager-level predicted bid (not the old market-adjusted `predictedWinningBid`). Do not show manager usernames or three prediction lines while collapsed.
+- [x] Keep the compact card label/amount composition natural and remove the divider from the previous multi-manager layout.
+- [x] Players whose current/suggested value is `$0` show no Predicted bid and the card is not expandable, because no meaningful manager-bid detail exists. Add keyboard/ARIA and boundary tests for exactly zero versus positive values.
+- [x] Expanded Waivers manager predictions should visually reuse the compact Teams → Bid Profiles manager-card language: manager name, shared aggression/style badge beneath the name, FAAB remaining, predicted bid amount, and buyer status beneath that amount. Use clearer labels: **Likely bidder**, **Possible bidder**, and **Unlikely bidder**. Keep the same numeric predictions, eligibility, ordering, cap treatment, and shared modal opening behavior.
+- [x] Rename the Waivers section heading from **Manager Predictions** to **Bid Predictions**.
+- [x] Add responsive visual/component coverage for modal placement/safe-area/nav overlap, shared quartiles, shared bye window, FAAB display/colors, no implementation terminology, no Learning tag, style+multiplier composition, empty states, new category thresholds, and divider-free Suggested-bid layout.
 
 ## 🔮 Future PR — Max VORP strategy + empirical bid-model comparison (John, 2026-09-26)
 
