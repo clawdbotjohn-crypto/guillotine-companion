@@ -1,5 +1,23 @@
 # Guillotine Companion — Progress
 
+## 🚨 P0 PR #10 follow-up — correct baseline and de-emphasize non-buyers (John, 2026-09-25)
+
+- [ ] **Fix an inflation bug:** manager multipliers are defined relative to the app's **Weeks-as-Starter weekly suggested bid**, not its higher market-adjusted `predictedWinningBid`. Both historical event ratios and current manager forecasts must use the corresponding Weeks-as-Starter suggestion (`strategy === 'weeks-starter'`) as their baseline. Do not feed `row.predictedWinningBid` into `calculateHistoricalBaseline()` or `buildManagerPredictions()`.
+- [ ] Preserve formulas after that correction: historical ratio = actual bid / min(historical Weeks-as-Starter suggestion, pre-bid FAAB); current uncapped estimate = current Weeks-as-Starter suggestion × manager multiplier; displayed predicted bid = min(uncapped estimate, current FAAB).
+- [ ] Add regression tests proving the larger market-adjusted predicted-winning number is never used as the manager-multiplier baseline and showing the corrected lower forecast numerically.
+- [ ] Color a FAAB-capped displayed predicted bid red, with accessible non-color text/label indicating it is capped by available FAAB.
+- [ ] Collapsed top-three predictions should include only **Likely** and **Possible** buyers. Do not include **Unlikely** buyers merely because their numeric prediction is high; showing fewer than three is preferable to implying false interest.
+- [ ] Expanded manager list remains complete, but sort Likely first, Possible next, and Unlikely last; visually de-emphasize/gray Unlikely buyers. Within each tier, retain deterministic predicted-bid ordering.
+
+## 📈 This-season prediction calibration + weekly league snapshots (John, 2026-09-25)
+
+- [ ] Persist immutable, pre-waiver weekly prediction snapshots in the dedicated Guillotine database so this season can become a calibration dataset. Snapshot enough league state to reproduce each forecast: league/season/week/cutoff, active/eliminated rosters, rostered players, current FAAB, position-strength/need tier, player baseline, manager multiplier, uncapped estimate, capped prediction, and exact model/version inputs.
+- [ ] After waivers process, attach canonical actual winners, winning bids, legitimate losing bids, and no-bid outcomes to the frozen predictions; never rewrite the original forecast.
+- [ ] Track error/calibration by player, manager, week, buyer tier, cap state, and behavior category. Measure predicted-vs-actual bid error plus whether Likely/Possible/Unlikely tiers actually bid.
+- [ ] To evaluate whether displaying predictions changes a user's willingness to bid, add an explicit privacy-conscious exposure/intended-bid measurement or app-mediated bid flow; transaction outcomes alone cannot establish that behavioral effect. Keep observational accuracy separate from causal product-impact claims.
+- [ ] Use this season's evidence to recalibrate next season's buyer likelihood and decide whether Unlikely teams can be hidden entirely; during this season they remain visible, gray, and below likely/possible buyers when expanded.
+- [ ] Design the capture schedule/idempotency/RLS/retention before implementation. Use only dedicated Supabase ref `xduqpomhjdlgmtmmkfed`; never expose service-role credentials to the browser.
+
 ## 🚨 PR #10 owner review — redesign bidding predictions inside player cards (John, 2026-09-25; feedback continuing)
 
 **Status: implemented and verified on the PR #10 branch; awaiting owner review.**

@@ -1,46 +1,29 @@
-# PR #10 Owner-Review Handoff
+# PR #10 follow-up handoff — correct baseline + buyer ranking
 
-## Status
+## Completed
 
-Owner review revision implemented and verified on `feat/bidding-behavior-profiles`.
+- Historical manager event ratios now use the reconstructed historical `Weeks-as-Starter` suggestion, capped by pre-bid FAAB, rather than `predictedWinningBid`.
+- Current manager forecasts now multiply the current row's `Weeks-as-Starter` suggestion by the manager multiplier and cap the displayed result by current FAAB.
+- FAAB-capped amounts render red and include both an accessible label (`capped by available FAAB`) and visible `FAAB cap` text.
+- Collapsed manager previews exclude all Unlikely buyers, even when fewer than three remain.
+- Expanded predictions sort Likely → Possible → Unlikely, then capped predicted bid descending, manager name, and roster ID. Unlikely rows are visually de-emphasized.
+- Added numeric regression coverage proving historical `$250` Weeks-as-Starter is used instead of `$469` predicted winning bid, and current `$42 × 1.50 = $63` is used instead of the materially different `$61` market prediction.
+- The separate future weekly prediction-snapshot feature was intentionally not implemented.
 
-## Implemented
+## Validation
 
-- Removed the standalone Waivers manager-profile panel.
-- Added the top three active-manager predicted bids directly to collapsed player cards.
-- Full-card click/native keyboard activation expands to the top ten predictions; `Show more` reveals the rest.
-- Each prediction shows manager, FAAB-capped predicted bid, current FAAB, multiplier/category, and positional-need buyer likelihood.
-- Simplified player metadata to `Position #N • Value X`, `Week N X • Rank N`, team, and bye; kept Suggested and overall Predicted bid on the right.
-- Added Teams > Bid Profiles sorted most-to-least aggressive, with current FAAB and expandable plain-language behavior/history.
-- Simplified history to player, `Wk N`, Won/Lost, Suggested, Actual, pre-bid FAAB, and Ratio; provenance/reconstruction/confidence/model terminology stays hidden.
-- Week 1/no canonical history renders only the existing overall predicted winning bid.
-- Preserved the prior uncommitted per-coordinate snapshot parse/cache/partial-failure changes in API client/hooks/tests.
+- Focused tests: 32 passed.
+- Full frontend tests: 138 passed.
+- API tests (`node --test api/test/*.test.js`): 36 passed.
+- Lint: clean.
+- Typecheck: clean.
+- Production build: passed.
+- `git diff --check`: clean.
+- Secret pattern scan: clean.
+- Real SeaMex desktop/mobile Azure preview QA: pending final hosted build verification after push.
 
-## Math semantics
+## Remaining
 
-- Overall baseline remains the existing season-adjusted Sleeper / Weeks-as-Starter predicted winning bid.
-- Internal willingness remains `baseline × manager multiplier`.
-- Displayed manager prediction remains `min(internal willingness, current FAAB)`.
-- Historical ratio remains `actual / min(historical suggested baseline, pre-bid FAAB)`.
-- Buyer likelihood is display-only: among active teams, top positional-strength third = Unlikely, middle = Possible, bottom = Likely. It does not alter any bid value.
-- Canonical transaction classification/deduplication, historical FAAB reconstruction, top-three bid history, geometric multipliers, snapshot provenance, and backend security are unchanged.
-
-## Verification
-
-- Focused owner-requirement tests: passing.
-- Full frontend suite: 135/135 passing across 22 files.
-- API suite: 36/36 passing.
-- Lint: 0 warnings/errors. TypeScript and production build: passing. `git diff --check`: clean. Changed-file secret scan: clean.
-- SeaMex browser QA completed on the hosted Azure PR preview at 1440 px desktop and 390 px mobile: compact cards show exactly three live manager predictions; native keyboard Enter expands to 10; Show more revealed the remaining 15 (25 active-manager rows total); Teams > Bid Profiles loaded live profiles in descending aggressiveness (2.71×, 1.44×, 1.35× at the top); simplified nested history rendered Suggested/Actual/FAAB/Ratio; 0 px horizontal overflow; no console errors.
-
-## PR / Preview
-
-- Implementation commit: `bb24b514277db94c6a041dca871a14464e364760`.
-- PR: https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/10
-- Exact preview: https://nice-moss-07ec56310-10.centralus.7.azurestaticapps.net
-- At implementation head: CI `build` passed; Azure `Build and Deploy` passed; PR was `MERGEABLE` / `CLEAN`.
-- This documentation-only follow-up commit does not change runtime code; final head check status is reported by the scheduler summary.
-
-## Safety
-
-No merge, main/master push, production deployment, or workflow dispatch was performed.
+1. Commit/push the correction to `feat/bidding-behavior-profiles`.
+2. Resolve the exact PR preview URL, wait for CI/deployment, and run authenticated SeaMex desktop/mobile QA.
+3. Record final preview/check/mergeability status here if another session needs to continue.

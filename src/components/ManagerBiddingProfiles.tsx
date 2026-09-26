@@ -69,7 +69,7 @@ export function ManagerPredictionRow({
   getPlayerName: (playerId: string) => string;
 }) {
   return (
-    <div className="rounded-lg border border-[#202442] bg-[#0c0f22] px-3 py-2.5">
+    <div className={`rounded-lg border px-3 py-2.5 ${prediction.likelihood === 'Unlikely' ? 'border-[#202442]/60 bg-[#0c0f22]/60 opacity-60' : 'border-[#202442] bg-[#0c0f22]'}`}>
       <div className="flex min-w-0 items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-xs font-semibold text-[#f0f0ff]">{prediction.managerName}</p>
@@ -81,8 +81,13 @@ export function ManagerPredictionRow({
           </p>
         </div>
         <div className="shrink-0 text-right">
-          <p className="font-['Space_Mono'] text-sm font-bold tabular-nums text-[#34d399]">${prediction.predictedBid}</p>
-          <p className="text-[9px] text-[#6b6e99]">${prediction.currentFaab} left</p>
+          <p
+            aria-label={`Predicted bid $${prediction.predictedBid}${prediction.cappedByFaab ? ', capped by available FAAB' : ''}`}
+            className={`font-['Space_Mono'] text-sm font-bold tabular-nums ${prediction.cappedByFaab ? 'text-[#f87171]' : 'text-[#34d399]'}`}
+          >
+            ${prediction.predictedBid}
+          </p>
+          <p className="text-[9px] text-[#6b6e99]">${prediction.currentFaab} left{prediction.cappedByFaab ? ' · FAAB cap' : ''}</p>
         </div>
       </div>
       <BiddingHistory profile={prediction.profile} getPlayerName={getPlayerName} />

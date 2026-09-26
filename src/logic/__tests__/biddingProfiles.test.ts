@@ -231,6 +231,20 @@ describe('snapshot projection evidence', () => {
     expect(snapshot.provenance.effectiveKind).toBe('reconstructed');
   });
 
+  it('uses the historical Weeks-as-Starter suggestion rather than the larger market prediction', () => {
+    const result = calculateHistoricalBaseline(event({ playerId: 'p1' }), snapshot, {
+      league_id: 'league', name: 'League', total_rosters: 12,
+      settings: { waiver_budget: 1_000 }, scoring_settings: { rec: 1 }, season: '2026',
+      season_type: 'regular', status: 'in_season', draft_id: 'draft', previous_league_id: null,
+      roster_positions: ['QB', 'RB', 'RB', 'WR', 'WR', 'FLEX'],
+    }, 'ppr', () => 'WR');
+    // Decision Week 2 applies a 1.875x market multiplier to the $250 weekly suggestion ($469).
+    expect(result.baseline).toBe(250);
+    expect(result.baseline).not.toBe(469);
+    const evaluated = evaluateBidEvidence(event({ playerId: 'p1', actualBid: 375 }), result);
+    expect(evaluated).toMatchObject({ effectiveBaseline: 250, eventRatio: 1.5 });
+  });
+
   it('keeps an exact stored capture reconstructed when it is an older-week fallback', () => {
     const fallback: ProjectionSnapshotResponse = {
       ...snapshot,

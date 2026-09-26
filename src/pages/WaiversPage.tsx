@@ -42,6 +42,7 @@ import {
   computeAvailablePlayers,
   computeRosteredPlayerOwners,
   getReplacementTeamBounds,
+  getWeeksAsStarterBid,
   normalizeReplacementTeamTarget,
   sortWaiverRowsByStrategy,
   type RosteredPlayerOwner,
@@ -234,6 +235,9 @@ export function WaiverPlayerCard({
   if (!suggestion) return null;
   const isOwnedBySelectedTeam = owner != null && owner.rosterId === selectedRosterId;
   const visiblePredictions = showAll ? managerPredictions : managerPredictions.slice(0, 10);
+  const collapsedPredictions = managerPredictions
+    .filter((prediction) => prediction.likelihood !== 'Unlikely')
+    .slice(0, 3);
   const weeklyLabel = isUpcomingBye
     ? `Week ${currentWeek + 1} Bye`
     : weeklyPoints != null && weeklyRank != null
@@ -285,9 +289,9 @@ export function WaiverPlayerCard({
               <ChevronDown size={14} className={`mt-1 text-[#6b6e99] transition-transform ${isOpen ? 'rotate-180' : ''}`} />
             </div>
           </div>
-          {!isOpen && showManagerPredictions && managerPredictions.length > 0 && (
+          {!isOpen && showManagerPredictions && collapsedPredictions.length > 0 && (
             <div className="mt-2 grid gap-1 border-t border-[#1a1e3a] pt-2 sm:grid-cols-3">
-              {managerPredictions.slice(0, 3).map((prediction) => (
+              {collapsedPredictions.map((prediction) => (
                 <div key={prediction.rosterId} className="flex min-w-0 items-center justify-between gap-2 rounded-md bg-[#0c0f22] px-2 py-1.5">
                   <div className="min-w-0">
                     <p className="truncate text-[10px] font-semibold text-[#d9daf5]">{prediction.managerName}</p>
@@ -295,8 +299,13 @@ export function WaiverPlayerCard({
                     <p className="text-[9px] text-[#8b8eb8]">{prediction.likelihood} buyer</p>
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className="font-['Space_Mono'] text-xs font-bold text-[#34d399]">${prediction.predictedBid}</p>
-                    <p className="text-[8px] text-[#6b6e99]">${prediction.currentFaab} left</p>
+                    <p
+                      aria-label={`Predicted bid $${prediction.predictedBid}${prediction.cappedByFaab ? ', capped by available FAAB' : ''}`}
+                      className={`font-['Space_Mono'] text-xs font-bold ${prediction.cappedByFaab ? 'text-[#f87171]' : 'text-[#34d399]'}`}
+                    >
+                      ${prediction.predictedBid}
+                    </p>
+                    <p className="text-[8px] text-[#6b6e99]">${prediction.currentFaab} left{prediction.cappedByFaab ? ' · FAAB cap' : ''}</p>
                   </div>
                 </div>
               ))}
@@ -756,10 +765,12 @@ export function WaiversPage() {
             const rank = ranks.find((item) => item.group === row.position);
             if (rank) positionRanks.set(managerRosterId, { rank: rank.rank, outOf: rank.outOf });
           }
+          const weeksAsStarterBaseline = getWeeksAsStarterBid(row);
           const predictions = biddingProfiles.hasHistory && !biddingProfiles.error
+            && weeksAsStarterBaseline != null
             ? buildManagerPredictions({
               profiles: biddingProfiles.profiles,
-              baseline: row.predictedWinningBid,
+              baseline: weeksAsStarterBaseline,
               rosters: rosters!,
               users: users!,
               initialFaab: ctx.budget,

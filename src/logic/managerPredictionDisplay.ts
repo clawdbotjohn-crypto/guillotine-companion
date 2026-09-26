@@ -8,6 +8,7 @@ export interface ManagerPredictionDisplay {
   managerName: string;
   predictedBid: number;
   currentFaab: number;
+  cappedByFaab: boolean;
   likelihood: BuyerLikelihood;
   profile: ManagerBiddingProfile;
 }
@@ -59,8 +60,15 @@ export function buildManagerPredictions({
       managerName: managerName(profile.managerRosterId, rosters, users),
       predictedBid: Math.round(prediction.feasiblePredictedBid),
       currentFaab: faab,
+      cappedByFaab: prediction.cappedByFaab,
       likelihood: buyerLikelihood(positionRank?.rank ?? null, positionRank?.outOf ?? null),
       profile,
     }];
-  }).sort((a, b) => b.predictedBid - a.predictedBid || a.managerName.localeCompare(b.managerName));
+  }).sort((a, b) => {
+    const tierOrder: Record<BuyerLikelihood, number> = { Likely: 0, Possible: 1, Unlikely: 2 };
+    return tierOrder[a.likelihood] - tierOrder[b.likelihood]
+      || b.predictedBid - a.predictedBid
+      || a.managerName.localeCompare(b.managerName)
+      || a.rosterId - b.rosterId;
+  });
 }

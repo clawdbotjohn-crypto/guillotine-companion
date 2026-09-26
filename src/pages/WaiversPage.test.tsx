@@ -98,6 +98,7 @@ describe('waiver controls', () => {
       managerName: `Manager ${index + 1}`,
       predictedBid: 100 - index,
       currentFaab: 200,
+      cappedByFaab: false,
       likelihood: index < 4 ? 'Unlikely' : index < 8 ? 'Possible' : 'Likely',
       profile: {
         managerRosterId: index + 1,
@@ -115,9 +116,10 @@ describe('waiver controls', () => {
       showManagerPredictions
     />);
     const toggle = screen.getByRole('button', { name: /Test Runner/ });
-    expect(screen.getByText('Manager 1')).toBeTruthy();
-    expect(screen.getByText('Manager 3')).toBeTruthy();
-    expect(screen.queryByText('Manager 4')).toBeNull();
+    expect(screen.queryByText('Manager 1')).toBeNull();
+    expect(screen.getByText('Manager 5')).toBeTruthy();
+    expect(screen.getByText('Manager 7')).toBeTruthy();
+    expect(screen.queryByText('Manager 8')).toBeNull();
     fireEvent.keyDown(toggle, { key: 'Enter' });
     fireEvent.click(toggle);
     expect(screen.getByText('Manager 1')).toBeTruthy();

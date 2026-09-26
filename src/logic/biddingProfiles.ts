@@ -6,7 +6,7 @@ import type {
   Transaction,
 } from '../api/types';
 import type { ProjectionScoring, RosPlayerProjection } from './projections';
-import { buildWaiverBoard, type LeagueContext } from './waivers';
+import { buildWaiverBoard, getWeeksAsStarterBid, type LeagueContext } from './waivers';
 
 export const BIDDING_PROFILE_MODEL_V1 = Object.freeze({
   version: 'bidding-profile-v1',
@@ -500,7 +500,7 @@ export function calculateHistoricalBaseline(
     { maxPerPos: Number.POSITIVE_INFINITY },
   )[0];
   return {
-    baseline: row?.predictedWinningBid ?? null,
+    baseline: row ? getWeeksAsStarterBid(row) : null,
     provenance: snapshot.provenance.effectiveKind,
     captureProvenance: snapshot.provenance.captureKind,
     matchesRequestedDecisionWeek: snapshot.provenance.matchesRequestedDecisionWeek,

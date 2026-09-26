@@ -2,6 +2,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { ManagerBiddingProfile } from '../logic';
+import { getWeeksAsStarterBid } from '../logic/waivers';
 import { ManagerPredictionRow, TeamBidProfiles } from './ManagerBiddingProfiles';
 import { buildManagerPredictions, buyerLikelihood } from '../logic/managerPredictionDisplay';
 
@@ -59,13 +60,52 @@ describe('manager bid presentation', () => {
     });
   });
 
+  it('uses the lower Weeks-as-Starter value for current forecasts, not predicted winning bid', () => {
+    const currentRow = {
+      suggestions: [{ strategy: 'weeks-starter' as const, label: 'Weeks-as-Starter', value: 42, pctOfBudget: 4.2 }],
+      predictedWinningBid: 61,
+    };
+    const baseline = getWeeksAsStarterBid(currentRow);
+    expect(baseline).toBe(42);
+    const prediction = buildManagerPredictions({
+      profiles: [profile(1, 1.5)], baseline: baseline!, rosters, users, initialFaab: 1000,
+      activeRosterIds: new Set([1]), positionRanks: new Map([[1, { rank: 9, outOf: 9 }]]),
+    })[0];
+    expect(prediction).toMatchObject({ predictedBid: 63, cappedByFaab: false });
+    expect(prediction.predictedBid).not.toBe(Math.round(currentRow.predictedWinningBid * 1.5));
+  });
+
+  it('sorts buyer tiers before bids and uses deterministic bid/name ordering within tiers', () => {
+    const tierRosters = [1, 2, 3, 4].map((id) => ({
+      roster_id: id, owner_id: `u${id}`, players: [], starters: [],
+      settings: { wins: 0, losses: 0, fpts: 0, waiver_budget_used: 0 },
+    }));
+    const tierUsers = ['Zed', 'Amy', 'Bob', 'Cal'].map((name, index) => ({
+      user_id: `u${index + 1}`, display_name: name, username: name.toLowerCase(), avatar: null,
+    }));
+    const rows = buildManagerPredictions({
+      profiles: [profile(1, 3), profile(2, 1), profile(3, 2), profile(4, 2)],
+      baseline: 10, rosters: tierRosters, users: tierUsers, initialFaab: 1000,
+      activeRosterIds: new Set([1, 2, 3, 4]),
+      positionRanks: new Map([
+        [1, { rank: 1, outOf: 9 }], [2, { rank: 8, outOf: 9 }],
+        [3, { rank: 5, outOf: 9 }], [4, { rank: 5, outOf: 9 }],
+      ]),
+    });
+    expect(rows.map((row) => `${row.likelihood}:${row.managerName}:${row.predictedBid}`)).toEqual([
+      'Likely:Amy:10', 'Possible:Bob:20', 'Possible:Cal:20', 'Unlikely:Zed:30',
+    ]);
+  });
+
   it('shows only plain-language prediction and simplified bidding history', () => {
     const prediction = buildManagerPredictions({
       profiles: [profile(1, 1.5)], baseline: 200, rosters, users, initialFaab: 1000,
       activeRosterIds: new Set([1]), positionRanks: new Map([[1, { rank: 5, outOf: 9 }]]),
     })[0];
     render(<ManagerPredictionRow prediction={prediction} getPlayerName={() => 'History Player'} />);
-    expect(screen.getByText('$100')).toBeTruthy();
+    const cappedBid = screen.getByLabelText('Predicted bid $100, capped by available FAAB');
+    expect(cappedBid.className).toContain('text-[#f87171]');
+    expect(screen.getByText(/FAAB cap/)).toBeTruthy();
     expect(screen.getByText('Possible buyer')).toBeTruthy();
     expect(screen.queryByText(/baseline|provenance|confidence|raw|willingness|feasible/i)).toBeNull();
     fireEvent.click(screen.getByText('Bidding History'));

@@ -37,6 +37,12 @@ export interface WaiverPlayerRow {
   predictedWinningBid: number;
 }
 
+export function getWeeksAsStarterBid(
+  row: Pick<WaiverPlayerRow, 'suggestions'>,
+): number | null {
+  return row.suggestions.find((suggestion) => suggestion.strategy === 'weeks-starter')?.value ?? null;
+}
+
 export interface StarterPositionCounts {
   QB: number;
   RB: number;
