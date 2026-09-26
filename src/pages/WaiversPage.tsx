@@ -470,6 +470,7 @@ export function WaiversPage() {
       ctx,
       remainingFaab,
       vorpCalibration,
+      maxVorpCalibration,
       ownership,
       availableRows: buildWaiverBoard(
         available,
@@ -588,8 +589,10 @@ export function WaiversPage() {
     availableRows,
     allRows,
     vorpCalibration,
+    maxVorpCalibration,
   } = board;
-  const sleeperUnavailableReason = vorpCalibration
+  const selectedVorpCalibration = strategy === 'max-vorp' ? maxVorpCalibration : vorpCalibration;
+  const sleeperUnavailableReason = selectedVorpCalibration
     ? undefined
     : projectionWeeksQuery.isLoading || nflStateQuery.isLoading
       ? 'Sleeper ROS projections are still loading'
@@ -705,7 +708,7 @@ export function WaiversPage() {
           {getWaiverStrategyExplanation(
             strategy,
             normalizedReplacementTarget,
-            !!vorpCalibration,
+            !!selectedVorpCalibration,
             sleeperUnavailableReason,
           )}
         </span>
