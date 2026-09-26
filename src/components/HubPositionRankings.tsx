@@ -1,4 +1,5 @@
 import type { ProjectedLineupGroup, ProjectedLineupGroupRank } from '../logic';
+import { rankQuartile } from '../logic/rankingQuartiles';
 import { Card } from './ui';
 import { ContextDisclosure } from './ContextDisclosure';
 
@@ -7,10 +8,9 @@ const GROUP_LABELS: Record<ProjectedLineupGroup, string> = {
 };
 
 function rankColor(rank: number, outOf: number): string {
-  if (outOf <= 1) return '#a5b4fc';
-  const percentile = (rank - 1) / (outOf - 1);
-  if (percentile <= 0.25) return '#10b981';
-  if (percentile >= 0.75) return '#f43f5e';
+  const quartile = rankQuartile(rank, outOf);
+  if (quartile === 'top') return '#10b981';
+  if (quartile === 'bottom') return '#f43f5e';
   return '#f59e0b';
 }
 

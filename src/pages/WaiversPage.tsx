@@ -184,21 +184,6 @@ export function VorpControls({
   );
 }
 
-export function PredictedWinningBidFooter({
-  strategy,
-  row,
-}: {
-  strategy: StrategyKey;
-  row: Pick<WaiverPlayerRow, 'predictedWinningBid'>;
-}) {
-  if (strategy === 'aggressive') return null;
-  return (
-    <div className="text-[9px] text-[#6b6e99]">
-      Predicted bid <span className="font-['Space_Mono'] text-[#f59e0b] tabular-nums">${row.predictedWinningBid}</span>
-    </div>
-  );
-}
-
 export function WaiverPlayerCard({
   row,
   strategy,
@@ -236,10 +221,11 @@ export function WaiverPlayerCard({
   const suggestion = row.suggestions.find((item) => item.strategy === strategy);
   if (!suggestion) return null;
   const isOwnedBySelectedTeam = owner != null && owner.rosterId === selectedRosterId;
-  const collapsedPredictions = managerPredictions
-    .filter((prediction) => prediction.likelihood !== 'Unlikely')
-    .slice(0, 3);
-  const hasManagerPredictions = !owner && showManagerPredictions && managerPredictions.length > 0;
+  const hasPositiveValue = suggestion.value != null && suggestion.value > 0;
+  const hasManagerPredictions = !owner && hasPositiveValue && showManagerPredictions && managerPredictions.length > 0;
+  const highestManagerPrediction = hasManagerPredictions
+    ? Math.max(...managerPredictions.map((prediction) => prediction.predictedBid))
+    : null;
   const canExpand = hasManagerPredictions;
   const nextWeek = currentWeek + 1;
   const projectionLabel = isUpcomingBye
@@ -282,21 +268,11 @@ export function WaiverPlayerCard({
                 <span>{suggestion.value == null ? 'Unavailable' : `$${suggestion.value}`}</span>
               </div>
               <p className="text-[9px] text-[#6b6e99]">{owner ? 'Current value' : 'Suggested bid'}</p>
-              {hasManagerPredictions && collapsedPredictions.length > 0 ? (
-                <ul className="mt-1 border-t border-[#1a1e3a] pt-1">
-                  {collapsedPredictions.map((prediction) => (
-                    <li key={prediction.rosterId} className="flex items-center justify-between gap-1 text-[9px] leading-4">
-                      <span className="truncate text-[#aeb1d5]">{prediction.managerName}</span>
-                      <span className={`shrink-0 font-['Space_Mono'] font-semibold ${prediction.cappedByFaab ? 'text-[#f87171]' : 'text-[#d9daf5]'}`}>
-                        ${prediction.predictedBid}
-                        {prediction.cappedByFaab && <span className="sr-only"> capped by available FAAB</span>}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : !owner ? (
-                <PredictedWinningBidFooter strategy={strategy} row={row} />
-              ) : null}
+              {highestManagerPrediction != null && (
+                <p className="mt-1 text-[9px] font-semibold text-[#fbbf24]">
+                  Predicted bid <span className="font-['Space_Mono'] tabular-nums">${highestManagerPrediction}</span>
+                </p>
+              )}
             </div>
             {canExpand && <ChevronDown size={14} className={`mt-3 shrink-0 text-[#6b6e99] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />}
           </div>
@@ -305,7 +281,7 @@ export function WaiverPlayerCard({
         {canExpand && isOpen && (
           <div id={`player-bids-${row.playerId}`} className="animate-in fade-in slide-in-from-top-1 duration-200">
             <div className="border-t border-[#1a1e3a] px-2.5 pb-2.5 pt-2">
-              <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#8b8eb8]">Manager predictions</h3>
+              <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#8b8eb8]">Bid Predictions</h3>
               <WaiverManagerPredictions predictions={managerPredictions} detailsByRosterId={managerDetails} getPlayerName={resolvePlayerName} />
             </div>
           </div>

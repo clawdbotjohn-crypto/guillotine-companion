@@ -57,6 +57,14 @@ export {
 } from './analytics';
 
 export {
+  rankQuartile,
+  faabQuartile,
+  faabQuartileLabel,
+  type QuartileBand,
+  type FaabQuartileBand,
+} from './rankingQuartiles';
+
+export {
   resolvePlayerAcquisition,
   buildHubRosterRows,
   buildUpcomingByeWarnings,

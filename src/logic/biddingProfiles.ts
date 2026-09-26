@@ -14,7 +14,7 @@ export const BIDDING_PROFILE_MODEL_V1 = Object.freeze({
   minimumUsableBaseline: 1,
   constrainedThreshold: 0.9,
   conservativeBelow: 0.85,
-  aggressiveAbove: 1.15,
+  aggressiveAtOrAbove: 1.5,
 });
 
 export type BidOutcome = 'won' | 'legitimate-loss';
@@ -318,7 +318,7 @@ export function selectTopCanonicalBids(
 export function styleForMultiplier(multiplier: number | null): ManagerBidStyle {
   if (multiplier == null || !Number.isFinite(multiplier)) return 'insufficient';
   if (multiplier < BIDDING_PROFILE_MODEL_V1.conservativeBelow) return 'conservative';
-  if (multiplier > BIDDING_PROFILE_MODEL_V1.aggressiveAbove) return 'aggressive';
+  if (multiplier >= BIDDING_PROFILE_MODEL_V1.aggressiveAtOrAbove) return 'aggressive';
   return 'standard';
 }
 

@@ -1,5 +1,75 @@
 # Guillotine Companion — Progress
 
+## 🚨 PR #10 owner review round 3 — modal/Teams terminology and visual consistency (John, 2026-09-26; IMPLEMENT NOW)
+
+**Status: John authorized implementation. The attached mobile screenshot is the reference for the current problems. PR #10 scope is only this round-3 section; explicitly exclude all Future PR/Analysis sections below.**
+
+**Owner-review gate:** Before claiming completion, produce a requirement-by-requirement trace in `HANDOFF.md` mapping every checkbox in this section to the implementation file, focused test, and real desktop/mobile preview observation. Re-read John’s full round-3 section after implementation and compare the rendered UI against it. Do not mark a checkbox complete from code inspection alone.
+
+- [ ] The shared manager-detail popup opens too low on mobile. Waivers and Teams must use the same placement: center it in the viewport or use a near/full-height mobile sheet. It must remain above fixed navigation, expose Bidding History without requiring awkward initial scrolling, respect safe areas, and preserve accessible focus/close behavior.
+- [ ] Position strength/need categories must be identical between Hub and the bid popup. Replace thirds with shared **top quartile = strength**, **bottom quartile = need**, middle 50% = neutral. Use one shared helper/component and deterministic tie/small-league behavior so labels cannot diverge.
+- [ ] Upcoming byes must use one shared window/helper on Hub and in the bid popup. John’s intended popup window is current week + next two weeks; Hub appears to include one extra week and should be aligned unless later feedback changes the common window.
+- [ ] Show **FAAB remaining** prominently in the manager popup.
+- [ ] Remove all user-facing bid-count/implementation copy from Teams Bid Profiles and the popup: no `3 bids`, `3 canonical bids`, numbered evidence counts, or `canonical bid` wording.
+- [ ] Restore the prior compact Teams Bid Profile card composition:
+  - Combine bidding style and multiplier in one badge/element, as before.
+  - Remove the bid-count text and put **Current FAAB** in that location.
+  - Keep **Highest bid** on the left side.
+- [ ] Color Current/Remaining FAAB consistently across Teams and the modal. Rank **active managers** by current FAAB: top quartile green, bottom quartile red, middle 50% yellow/neutral. Ensure `$0` is red and the league maximum is green; add an accessible non-color label/description. Use one shared helper with deterministic ties and small-league behavior.
+- [ ] Remove the `Learning` tag. Managers without enough history get no style badge.
+- [ ] Replace `No canonical bid`/`No canonical bids` with a simple user-facing `—` (or similarly neutral empty state); never expose the word canonical.
+- [ ] Recalibrate bidding-style thresholds so `1.18×` is not Aggressive and **Aggressive starts at `1.50×`**. Preserve Conservative below `0.85×`; classify `0.85×` through `<1.50×` as Standard unless existing product semantics require a clearly documented narrower neutral subdivision. Update the one shared constant/helper, cards, modal, tests, and docs together. No `Learning` style.
+- [ ] **Superseding the prior collapsed three-manager summary:** collapsed Waivers player cards return to one compact overall **Predicted bid** in the prior yellow styling. Its numeric value is the highest eligible manager-level predicted bid (not the old market-adjusted `predictedWinningBid`). Do not show manager usernames or three prediction lines while collapsed.
+- [ ] Keep the compact card label/amount composition natural and remove the divider from the previous multi-manager layout.
+- [ ] Players whose current/suggested value is `$0` show no Predicted bid and the card is not expandable, because no meaningful manager-bid detail exists. Add keyboard/ARIA and boundary tests for exactly zero versus positive values.
+- [ ] Expanded Waivers manager predictions should visually reuse the compact Teams → Bid Profiles manager-card language: manager name, shared aggression/style badge beneath the name, FAAB remaining, predicted bid amount, and buyer status beneath that amount. Use clearer labels: **Likely bidder**, **Possible bidder**, and **Unlikely bidder**. Keep the same numeric predictions, eligibility, ordering, cap treatment, and shared modal opening behavior.
+- [ ] Rename the Waivers section heading from **Manager Predictions** to **Bid Predictions**.
+- [ ] Add responsive visual/component coverage for modal placement/safe-area/nav overlap, shared quartiles, shared bye window, FAAB display/colors, no implementation terminology, no Learning tag, style+multiplier composition, empty states, new category thresholds, and divider-free Suggested-bid layout.
+
+## 🔮 Future PR — Max VORP strategy + empirical bid-model comparison (John, 2026-09-26)
+
+**Product direction:** In its dedicated follow-up PR, **Max VORP becomes the default suggested-bid strategy and the baseline used for bidding-style ratios**, replacing Weeks as Starter. The separate empirical strategy-accuracy analysis below does **not** gate that default choice. Keep the dependency modular/versioned so John can swap the baseline again later. Do not alter PR #10 valuation math.
+
+### Max VORP definition and league analysis
+- [ ] Add a new suggested-bid strategy named **Max VORP**. For each player, compute VORP at every allowed remaining-team count (SeaMex currently spans 28 teams down to 4) and use that player’s maximum positive VORP across the range. Replacement-level players should naturally remain around `$0`; top players receive the strongest scarcity value; fringe current starters can retain value from an earlier/larger-team state even if they later fall below replacement.
+- [ ] Before implementation, run an all-player SeaMex analysis across every allowed team count. At minimum include every player with positive VORP at the maximum team count; include all players if computationally reasonable. Report each player’s maximizing team count and verify whether any peak occurs at an interior count rather than only the largest or smallest allowed count. Do not assume endpoint-only behavior without evidence.
+- [ ] Compare the full all-count maximum against the cheaper endpoint-only approximation (highest and lowest team counts). Quantify disagreements, player/value deltas, runtime, and positional patterns before choosing an optimization.
+- [ ] Define replacement populations/positions, scarcity treatment, budget normalization, monotonicity, zero floor, tie handling, caching/performance, calibration fixtures, and migration/UX impact. Avoid cosmetic clamping or hard-coded thresholds.
+- [ ] Preserve separate Weekly, Safe, and Aggressive strategies for comparison, but make the baseline strategy dependency explicit and swappable through one strategy selector/interface. Replace Weeks as Starter with Max VORP anywhere manager bidding-category ratios currently depend on the baseline, without coupling profiles permanently to Max VORP.
+- [ ] Version the strategy used for predictions/history so future model swaps do not silently reinterpret historical ratios.
+
+### Separate future analysis — which bid strategy best predicts real bids
+- [ ] Build an offline analysis comparing Max VORP, Weekly, Safe, Aggressive, and the current Weeks-as-Starter baseline against historical real bids. Do not change production behavior until results are reviewed.
+- [ ] Separate the target being evaluated: winning/top serious bids versus all bids. Low token bids may represent “only if nobody wants him” rather than willingness to win, so report metrics both with and without low-intent bids where a defensible rule can be defined.
+- [ ] Use robust outlier handling for irrational/high bids (example: a `$200+` bid on backup RB Monangai). Candidate analysis: compare the top ~5 bids per player/waiver event after flagging an isolated top bid that is far above the next cluster. Never delete raw evidence; mark exclusions and run sensitivity analyses with all bids included.
+- [ ] Predefine/compare defensible outlier rules (for example top-to-second ratio, median/MAD or IQR on normalized bid ratios) and avoid choosing the rule that merely makes the favored strategy look best. Report sample sizes and results under multiple thresholds.
+- [ ] Normalize for available FAAB, week/team-count context, caps, player/position, and manager bidding behavior where possible. Evaluate MAE/median absolute error, calibration, rank correlation, winner accuracy, and serious-bid/top-N fit rather than one aggregate metric.
+- [ ] Use walk-forward or leave-week-out validation so the same event does not both fit and evaluate manager multipliers/strategy thresholds. Produce a reproducible report with raw-event traceability and a recommendation, including uncertainty and known data limitations.
+
+### Guardrail
+- [ ] Preserve current PR #10 math until this dedicated PR is approved. PR #10 may only suppress zero-value prediction UI as specified above; it must not introduce interim value zeroing or switch the profile denominator.
+
+## 🔮 Future PR after Max VORP — replacement-level zeroing for non-VORP strategies
+
+- [ ] Diagnose why Weekly, Safe, Aggressive, and any other non-VORP bid strategies still assign **positive (`> $0`) values to too many replacement-level players**. John explicitly excluded this from the current PR #10 work.
+- [ ] After Max VORP lands, define a shared replacement-level/zero-floor concept that makes those strategy curves reach `$0` at an appropriate player tier without cosmetic display clamping, arbitrary player-count cutoffs, or breaking monotonicity.
+- [ ] Preserve genuinely positive values above replacement and evaluate by position, remaining-team count, week, FAAB scale, and edge cases around exactly `$0`.
+- [ ] Add comparative fixtures/visualizations for Max VORP, Weekly, Safe, and Aggressive before changing production values; keep strategy implementations independently selectable.
+
+## 🔮 Future PR — player-level waiver bid history (John, 2026-09-26)
+
+**Goal:** Give both free-agent and rostered-player cards useful market history without mixing historical transactions into current bid predictions. Implement after PR #10 and the Max VORP follow-up unless reprioritized.
+
+- [ ] For any player with historical bids, add a player-card expansion section **before Bid Predictions** that shows prior successful/winning claims: buyer/manager, winning amount, and bidding cycle/week/date. Use canonical transaction identity/deduplication and truthful successful-claim classification.
+- [ ] Add a separate **Most recent bids** section below winning history that lists all legitimate bids from that player’s latest completed bidding cycle, including winning and losing bids, ordered meaningfully with clear outcome labels. Do not combine bids from multiple cycles or count duplicated transaction views.
+- [ ] Apply the same history to free agents and currently rostered players. A currently free player may still have prior winning/release history; current ownership and historical acquisition are separate facts.
+- [ ] On collapsed **rostered-player** cards, replace vague value-adjacent prediction wording with **Winning bid: $N** for that player’s most recent successful acquisition when available. Prefer `Winning bid` over `Actual Value`; “Actual Value” is ambiguous and could be mistaken for the current valuation. If no valid acquisition exists, use a neutral empty state or omit the line.
+- [ ] Keep the existing current-value display for rostered players; winning bid is acquisition history, not a substitute for current modeled value. Do not show manager predictions for rostered players.
+- [ ] Define behavior for `$0` claims/free-agent adds, dropped-and-reacquired players, multiple winning claims, commissioner moves, trades, orphaned/duplicate transaction data, failed bids, ties, and incomplete historical cycles.
+- [ ] Reuse the same won/lost colors and accessible labels as Bidding History, but do not expose `canonical`, reconstruction, evidence-count, or other implementation terminology.
+- [ ] Add focused transaction/dedupe/cycle-selection tests plus desktop/mobile card-layout and expansion tests.
+
+
 ## 🚨 PR #10 owner review round 2 — modal details + live-data regressions (John, 2026-09-25)
 
 **Status: implemented on the PR branch; code/tests complete and live preview verification recorded in `HANDOFF.md`.**

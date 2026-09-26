@@ -3,6 +3,7 @@ import type { PlayerRecord } from '../store/players';
 import { getTeamByeWeek } from './projections';
 import type { TeamProjection } from './analytics';
 import type { WeeklyScoredPlayer } from './projections';
+import { isUpcomingByeWeek } from './byeProximity';
 
 export type AcquisitionKind = 'draft' | 'waiver' | 'free_agent' | 'trade' | 'ambiguous' | 'unknown';
 
@@ -35,8 +36,6 @@ export interface HubByeWarning {
   byeWeek: number;
 }
 
-const NFL_REGULAR_SEASON_LAST_WEEK = 18;
-
 function compareIdentity(
   a: Pick<HubByeWarning, 'name' | 'playerId'>,
   b: Pick<HubByeWarning, 'name' | 'playerId'>,
@@ -55,28 +54,11 @@ export function buildUpcomingByeWarnings(
   rows: readonly HubRosterRow[],
   projectionWeek: number | null,
 ): HubByeWarning[] {
-  if (
-    projectionWeek == null
-    || !Number.isInteger(projectionWeek)
-    || projectionWeek < 1
-    || projectionWeek > NFL_REGULAR_SEASON_LAST_WEEK
-  ) {
-    return [];
-  }
-
-  const lastWindowWeek = Math.min(
-    projectionWeek + 2,
-    NFL_REGULAR_SEASON_LAST_WEEK,
-  );
   const seenPlayerIds = new Set<string>();
 
   return rows
     .filter((row) => {
-      const isSupportedWindowBye = row.byeWeek != null
-        && Number.isInteger(row.byeWeek)
-        && row.byeWeek >= projectionWeek
-        && row.byeWeek <= lastWindowWeek;
-      if (!isSupportedWindowBye || seenPlayerIds.has(row.playerId)) return false;
+      if (!isUpcomingByeWeek(row.byeWeek, projectionWeek) || seenPlayerIds.has(row.playerId)) return false;
       seenPlayerIds.add(row.playerId);
       return true;
     })

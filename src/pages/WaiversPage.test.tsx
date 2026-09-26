@@ -1,7 +1,7 @@
 /* @vitest-environment jsdom */
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { DEFAULT_SHOW_ROSTERED_PLAYERS, PredictedWinningBidFooter, RankingSourceSelector, ReplacementTeamSelector, RosteredPlayersToggle, WaiverPlayerCard, VorpControls, VorpSourceNotice } from './WaiversPage';
+import { DEFAULT_SHOW_ROSTERED_PLAYERS, RankingSourceSelector, ReplacementTeamSelector, RosteredPlayersToggle, WaiverPlayerCard, VorpControls, VorpSourceNotice } from './WaiversPage';
 import { DEFAULT_WAIVER_STRATEGY, getWaiverStrategyExplanation, WAIVER_STRATEGIES, WAIVER_STRATEGY_EXPLANATIONS } from '../logic/waiverDisplay';
 import type { WaiverPlayerRow } from '../logic/waivers';
 import type { ManagerPredictionDisplay } from '../logic/managerPredictionDisplay';
@@ -89,17 +89,15 @@ describe('waiver controls', () => {
     expect(otherTeamCard.parentElement?.className).not.toContain('border-[#10b981]');
   });
 
-  it('preserves warnings and hides duplicate predicted/starter-week data outside their strategies', () => {
-    const { rerender } = render(<WaiverPlayerCard {...cardProps} strategy="safe" remainingFaab={40} />);
+  it('preserves the FAAB warning without falling back to old market predictedWinningBid', () => {
+    render(<WaiverPlayerCard {...cardProps} strategy="safe" remainingFaab={40} />);
     expect(screen.getByLabelText(/More than your FAAB remaining/i)).toBeTruthy();
-    expect(screen.getByText(/Predicted bid/)).toBeTruthy();
-    expect(screen.queryByText(/starter wks/)).toBeNull();
-    rerender(<WaiverPlayerCard {...cardProps} strategy="aggressive" remainingFaab={40} />);
     expect(screen.queryByText(/Predicted bid/)).toBeNull();
+    expect(screen.queryByText('$61')).toBeNull();
     expect(screen.queryByText(/starter wks/)).toBeNull();
   });
 
-  it('keeps collapsed cards to three one-line summaries, then expands all tiers into modal triggers', () => {
+  it('shows one yellow highest manager prediction with no username/divider, then expands all tiers', () => {
     const predictions: ManagerPredictionDisplay[] = Array.from({ length: 12 }, (_, index) => ({
       rosterId: index + 1,
       managerName: `Manager ${index + 1}`,
@@ -124,27 +122,64 @@ describe('waiver controls', () => {
     />);
     const toggle = screen.getByRole('button', { name: /Test Runner/ });
     const summary = screen.getByTestId('compact-bid-summary');
-    expect(within(summary).getByText('Manager 5')).toBeTruthy();
-    expect(within(summary).getByText('Manager 6')).toBeTruthy();
-    expect(within(summary).getByText('Manager 7')).toBeTruthy();
-    expect(within(summary).queryByText('Manager 8')).toBeNull();
+    expect(within(summary).getByText((_text, element) => element?.textContent === 'Predicted bid $100')).toBeTruthy();
+    expect(within(summary).queryByText(/Manager \d+/)).toBeNull();
+    expect(within(summary).queryByText('$61')).toBeNull();
+    expect(summary.innerHTML).not.toContain('border-t');
     expect(screen.queryByTestId('expanded-manager-list')).toBeNull();
-    expect(screen.queryByText(/Predicted bid \$61/)).toBeNull();
     fireEvent.click(toggle);
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('Bid Predictions')).toBeTruthy();
     expect(screen.getByTestId('expanded-manager-list').children).toHaveLength(12);
     expect(screen.getByText('Manager 1').closest('button')?.className).toContain('opacity-55');
+    expect(screen.getAllByText(/Likely bidder|Possible bidder|Unlikely bidder/)).toHaveLength(12);
     fireEvent.click(screen.getByRole('button', { name: /open details for Manager 5/i }));
     expect(screen.getByRole('dialog', { name: 'Manager 5' })).toBeTruthy();
     expect(screen.getAllByText('Bidding History')).toHaveLength(1);
   });
 
-  it('keeps week-one/no-history cards to the overall prediction only', () => {
+  it('has no prediction or expansion when manager history is unavailable', () => {
     render(<WaiverPlayerCard {...cardProps} strategy="weeks-starter" showManagerPredictions={false} />);
-    fireEvent.click(screen.getByRole('button', { name: /Test Runner/ }));
-    expect(screen.getByText((_text, element) => element?.textContent === 'Predicted bid $61')).toBeTruthy();
-    expect(screen.queryByText(/Likely competing bids/i)).toBeNull();
-    expect(screen.queryByText(/No canonical|Not enough history/i)).toBeNull();
+    const card = screen.getByRole('button', { name: /Test Runner/ });
+    expect(card.getAttribute('aria-expanded')).toBeNull();
+    fireEvent.click(card);
+    expect(screen.queryByText(/Predicted bid|Bid Predictions/)).toBeNull();
+    expect(screen.queryByText(/canonical|Learning|Not enough history/i)).toBeNull();
+  });
+
+  it('distinguishes exactly-zero from positive cards and never multiplies the old market prediction', () => {
+    const managerPredictions: ManagerPredictionDisplay[] = [{
+      rosterId: 1, managerName: 'Hidden Manager', predictedBid: 40, currentFaab: 100,
+      cappedByFaab: false, likelihood: 'Likely',
+      profile: { managerRosterId: 1, managerMultiplier: 1, style: 'standard', confidence: 'low', usableEvidenceCount: 1, evidence: [] },
+    }];
+    const { rerender } = render(<WaiverPlayerCard
+      {...cardProps}
+      strategy="weeks-starter"
+      managerPredictions={managerPredictions}
+      showManagerPredictions
+    />);
+    expect(screen.getByText((_text, element) => element?.textContent === 'Predicted bid $40')).toBeTruthy();
+    expect(screen.queryByText('$61')).toBeNull();
+    expect(screen.queryByText('Hidden Manager')).toBeNull();
+    expect(screen.getByRole('button', { name: /Test Runner/ }).getAttribute('aria-expanded')).toBe('false');
+
+    const zeroRow: WaiverPlayerRow = {
+      ...waiverRow,
+      suggestions: waiverRow.suggestions.map((suggestion) => suggestion.strategy === 'weeks-starter' ? { ...suggestion, value: 0 } : suggestion),
+    };
+    rerender(<WaiverPlayerCard
+      {...cardProps}
+      row={zeroRow}
+      strategy="weeks-starter"
+      managerPredictions={managerPredictions}
+      showManagerPredictions
+    />);
+    const zeroCard = screen.getByRole('button', { name: /Test Runner/ });
+    expect(zeroCard.getAttribute('aria-expanded')).toBeNull();
+    expect(screen.queryByText(/Predicted bid/)).toBeNull();
+    fireEvent.click(zeroCard);
+    expect(screen.queryByText('Bid Predictions')).toBeNull();
   });
 
   it('uses the VoRP team count label and accessible explanatory disclosure', () => {
@@ -185,12 +220,4 @@ describe('waiver controls', () => {
     expect(getWaiverStrategyExplanation('vorp', 16, false, 'Sleeper ROS missing')).toContain('VoRP is unavailable: Sleeper ROS missing');
   });
 
-  it('removes confidence and suppresses predicted bid under Aggressive', () => {
-    const row = { predictedWinningBid: 275 };
-    const { rerender } = render(<PredictedWinningBidFooter strategy="aggressive" row={row} />);
-    expect(screen.queryByText(/Predicted bid/)).toBeNull();
-    rerender(<PredictedWinningBidFooter strategy="safe" row={row} />);
-    expect(screen.getByText(/Predicted bid/)).toBeTruthy();
-    expect(screen.queryByText(/low|medium|high/i)).toBeNull();
-  });
 });

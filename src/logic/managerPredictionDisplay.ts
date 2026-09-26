@@ -1,5 +1,6 @@
 import type { Roster, SleeperUser } from '../api';
 import { predictManagerBid, type ManagerBiddingProfile } from './biddingProfiles';
+import { rankQuartile } from './rankingQuartiles';
 
 export type BuyerLikelihood = 'Likely' | 'Possible' | 'Unlikely';
 
@@ -24,11 +25,11 @@ export function currentFaab(rosterId: number, rosters: Roster[], initialBudget: 
   return Math.max(0, initialBudget - used);
 }
 
-/** Split active-team positional ranks into thirds. Strong teams need the player least. */
+/** Map the shared active-team position quartiles to buyer likelihood. */
 export function buyerLikelihood(rank: number | null, outOf: number | null): BuyerLikelihood {
-  if (rank == null || outOf == null || outOf < 1) return 'Possible';
-  if (rank <= Math.ceil(outOf / 3)) return 'Unlikely';
-  if (rank > Math.ceil((outOf * 2) / 3)) return 'Likely';
+  const quartile = rankQuartile(rank, outOf);
+  if (quartile === 'top') return 'Unlikely';
+  if (quartile === 'bottom') return 'Likely';
   return 'Possible';
 }
 

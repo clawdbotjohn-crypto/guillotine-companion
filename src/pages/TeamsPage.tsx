@@ -256,6 +256,7 @@ export function TeamsPage() {
           rosters={rosters!}
           users={users!}
           initialFaab={league?.settings?.waiver_budget ?? 1000}
+          activeRosterIds={getActiveRosterIds(elim)}
           isLoading={biddingProfiles.isLoading}
           error={biddingProfiles.error}
           onRetry={biddingProfiles.retry}

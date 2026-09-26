@@ -46,12 +46,12 @@ describe('manager details', () => {
     ]);
   });
 
-  it('uses the same deterministic thirds as buyer likelihood', () => {
-    expect(teamNeedTier(1, 9)).toBe('strong');
-    expect(teamNeedTier(3, 9)).toBe('strong');
-    expect(teamNeedTier(4, 9)).toBe('neutral');
-    expect(teamNeedTier(6, 9)).toBe('neutral');
-    expect(teamNeedTier(7, 9)).toBe('weak');
-    expect(teamNeedTier(9, 9)).toBe('weak');
+  it('uses the shared deterministic position quartiles', () => {
+    expect(teamNeedTier(1, 8)).toBe('strong');
+    expect(teamNeedTier(2, 8)).toBe('strong');
+    expect(teamNeedTier(3, 8)).toBe('neutral');
+    expect(teamNeedTier(6, 8)).toBe('neutral');
+    expect(teamNeedTier(7, 8)).toBe('weak');
+    expect(teamNeedTier(8, 8)).toBe('weak');
   });
 });

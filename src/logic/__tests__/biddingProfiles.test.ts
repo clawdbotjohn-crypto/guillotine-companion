@@ -124,13 +124,14 @@ describe('ratio, multiplier, style, and confidence math', () => {
   it('uses the versioned style boundaries exactly', () => {
     expect(BIDDING_PROFILE_MODEL_V1).toMatchObject({
       conservativeBelow: 0.85,
-      aggressiveAbove: 1.15,
+      aggressiveAtOrAbove: 1.5,
       minimumUsableBaseline: 1,
     });
-    expect(styleForMultiplier(0.8499)).toBe('conservative');
+    expect(styleForMultiplier(0.84)).toBe('conservative');
     expect(styleForMultiplier(0.85)).toBe('standard');
-    expect(styleForMultiplier(1.15)).toBe('standard');
-    expect(styleForMultiplier(1.1501)).toBe('aggressive');
+    expect(styleForMultiplier(1.18)).toBe('standard');
+    expect(styleForMultiplier(1.49)).toBe('standard');
+    expect(styleForMultiplier(1.5)).toBe('aggressive');
   });
 
   it('uses a geometric mean and grants high confidence only to three exact, uncensored rows', () => {

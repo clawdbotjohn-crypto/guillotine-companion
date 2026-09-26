@@ -3,7 +3,8 @@ import type { PlayerRecord } from '../store/players';
 import type { ManagerBiddingProfile } from './biddingProfiles';
 import type { ProjectedLineupGroupRank } from './analytics';
 import { getTeamByeWeek } from './projections';
-import { buyerLikelihood } from './managerPredictionDisplay';
+import { rankQuartile } from './rankingQuartiles';
+import { isUpcomingByeWeek } from './byeProximity';
 
 export interface ManagerUpcomingBye {
   playerId: string;
@@ -27,9 +28,9 @@ export interface ManagerDetailData {
 }
 
 export function teamNeedTier(rank: number, outOf: number): ManagerTeamNeed['tier'] {
-  const likelihood = buyerLikelihood(rank, outOf);
-  if (likelihood === 'Unlikely') return 'strong';
-  if (likelihood === 'Likely') return 'weak';
+  const quartile = rankQuartile(rank, outOf);
+  if (quartile === 'top') return 'strong';
+  if (quartile === 'bottom') return 'weak';
   return 'neutral';
 }
 
@@ -61,13 +62,13 @@ export function buildManagerDetailData({
         const player = players.get(playerId);
         if (!player) continue;
         const byeWeek = getTeamByeWeek(season, player.team);
-        if (byeWeek == null || byeWeek < currentWeek || byeWeek > currentWeek + 2) continue;
+        if (!isUpcomingByeWeek(byeWeek, currentWeek)) continue;
         upcomingByes.push({
           playerId,
           name: player.full_name || `${player.first_name} ${player.last_name}`.trim() || playerId,
           position: player.position || 'UNK',
           positionRank: positionRanks.get(playerId) ?? null,
-          byeWeek,
+          byeWeek: byeWeek as number,
           value: playerValues.get(playerId) ?? 0,
         });
       }
