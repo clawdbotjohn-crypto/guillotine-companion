@@ -6,7 +6,8 @@ import type {
   Transaction,
 } from '../api/types';
 import type { ProjectionScoring, RosPlayerProjection } from './projections';
-import { buildWaiverBoard, getWeeksAsStarterBid, type LeagueContext } from './waivers';
+import { buildWaiverBoard, estimateRemainingTeamsAtDecisionWeek, type LeagueContext } from './waivers';
+import { BIDDING_BASELINE, resolveBiddingBaseline, type StrategyKey } from './waiverStrategies';
 
 export const BIDDING_PROFILE_MODEL_V1 = Object.freeze({
   version: 'bidding-profile-v1',
@@ -15,6 +16,13 @@ export const BIDDING_PROFILE_MODEL_V1 = Object.freeze({
   constrainedThreshold: 0.9,
   conservativeBelow: 0.85,
   aggressiveAtOrAbove: 1.5,
+});
+
+export const BIDDING_PROFILE_MODEL_V2 = Object.freeze({
+  ...BIDDING_PROFILE_MODEL_V1,
+  version: 'bidding-profile-v2',
+  baselineStrategyId: BIDDING_BASELINE.strategyId,
+  baselineStrategyVersion: BIDDING_BASELINE.version,
 });
 
 export type BidOutcome = 'won' | 'legitimate-loss';
@@ -45,6 +53,8 @@ export interface HistoricalBaselineEvidence {
   matchesRequestedDecisionWeek: boolean | null;
   snapshotDecisionWeek: number | null;
   unavailableReason?: string;
+  baselineStrategyId?: StrategyKey;
+  baselineStrategyVersion?: string;
 }
 
 export interface ManagerBidEvidence extends CanonicalBidEvent, HistoricalBaselineEvidence {
@@ -61,6 +71,8 @@ export interface ManagerBiddingProfile {
   style: ManagerBidStyle;
   confidence: ManagerBidConfidence;
   usableEvidenceCount: number;
+  baselineStrategyId: StrategyKey;
+  baselineStrategyVersion: string;
 }
 
 export interface ManagerBidPrediction {
@@ -295,7 +307,7 @@ export function classifyCanonicalBidEvents(
 /** Select the highest three canonical bids per manager with stable recency/ID tie-breaking. */
 export function selectTopCanonicalBids(
   events: CanonicalBidEvent[],
-  limit = BIDDING_PROFILE_MODEL_V1.maxEvidence,
+  limit = BIDDING_PROFILE_MODEL_V2.maxEvidence,
 ): CanonicalBidEvent[] {
   const grouped = new Map<number, CanonicalBidEvent[]>();
   for (const event of events) {
@@ -317,8 +329,8 @@ export function selectTopCanonicalBids(
 
 export function styleForMultiplier(multiplier: number | null): ManagerBidStyle {
   if (multiplier == null || !Number.isFinite(multiplier)) return 'insufficient';
-  if (multiplier < BIDDING_PROFILE_MODEL_V1.conservativeBelow) return 'conservative';
-  if (multiplier >= BIDDING_PROFILE_MODEL_V1.aggressiveAtOrAbove) return 'aggressive';
+  if (multiplier < BIDDING_PROFILE_MODEL_V2.conservativeBelow) return 'conservative';
+  if (multiplier >= BIDDING_PROFILE_MODEL_V2.aggressiveAtOrAbove) return 'aggressive';
   return 'standard';
 }
 
@@ -329,17 +341,17 @@ export function evaluateBidEvidence(
   const baseline = historical.baseline;
   const usableBaseline = baseline != null
     && Number.isFinite(baseline)
-    && baseline >= BIDDING_PROFILE_MODEL_V1.minimumUsableBaseline;
+    && baseline >= BIDDING_PROFILE_MODEL_V2.minimumUsableBaseline;
   const effectiveBaseline = usableBaseline
     ? Math.min(baseline, event.faabAvailableBeforeBid)
     : null;
   const eventRatio = effectiveBaseline != null
-    && effectiveBaseline >= BIDDING_PROFILE_MODEL_V1.minimumUsableBaseline
+    && effectiveBaseline >= BIDDING_PROFILE_MODEL_V2.minimumUsableBaseline
     ? event.actualBid / effectiveBaseline
     : null;
   const usableForMultiplier = eventRatio != null && Number.isFinite(eventRatio) && eventRatio > 0;
   const budgetConstrained = event.faabAvailableBeforeBid > 0
-    && event.actualBid >= event.faabAvailableBeforeBid * BIDDING_PROFILE_MODEL_V1.constrainedThreshold;
+    && event.actualBid >= event.faabAvailableBeforeBid * BIDDING_PROFILE_MODEL_V2.constrainedThreshold;
 
   return {
     ...event,
@@ -379,6 +391,8 @@ export function buildManagerBiddingProfiles(
         matchesRequestedDecisionWeek: null,
         snapshotDecisionWeek: null,
         unavailableReason: 'No projection snapshot was available for this claim.',
+        baselineStrategyId: BIDDING_BASELINE.strategyId,
+        baselineStrategyVersion: BIDDING_BASELINE.version,
       }));
     const ratios = evidence
       .filter((row) => row.usableForMultiplier)
@@ -393,6 +407,8 @@ export function buildManagerBiddingProfiles(
       style: styleForMultiplier(managerMultiplier),
       confidence: profileConfidence(evidence),
       usableEvidenceCount: ratios.length,
+      baselineStrategyId: BIDDING_BASELINE.strategyId,
+      baselineStrategyVersion: BIDDING_BASELINE.version,
     };
   });
 }
@@ -421,7 +437,12 @@ function snapshotPoints(row: ProjectionSnapshotRow, scoring: ProjectionScoring):
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
-/** Convert compact immutable rows into the same ROS shape consumed by Weeks-as-Starter. */
+const snapshotProjectionCache = new WeakMap<
+  ProjectionSnapshotRow[],
+  WeakMap<(playerId: string) => string | undefined, Map<string, Map<string, RosPlayerProjection>>>
+>();
+
+/** Convert compact immutable rows into the same ROS shape consumed by the baseline resolver. */
 export function buildSnapshotRosProjections(
   snapshot: ProjectionSnapshotResponse,
   requestedDecisionWeek: number,
@@ -429,9 +450,22 @@ export function buildSnapshotRosProjections(
   getPosition: (playerId: string) => string | undefined,
 ): Map<string, RosPlayerProjection> {
   const projectedWeeks = Math.max(0, 19 - requestedDecisionWeek);
-  const totals = new Map<string, number>();
   if (projectedWeeks === 0) return new Map();
+  let byResolver = snapshotProjectionCache.get(snapshot.rows);
+  if (!byResolver) {
+    byResolver = new WeakMap();
+    snapshotProjectionCache.set(snapshot.rows, byResolver);
+  }
+  let byDecision = byResolver.get(getPosition);
+  if (!byDecision) {
+    byDecision = new Map();
+    byResolver.set(getPosition, byDecision);
+  }
+  const cacheKey = `${requestedDecisionWeek}|${scoring}`;
+  const cached = byDecision.get(cacheKey);
+  if (cached) return cached;
 
+  const totals = new Map<string, number>();
   for (const row of snapshot.rows) {
     if (row.projectionWeek < requestedDecisionWeek || row.projectionWeek > 18) continue;
     const points = snapshotPoints(row, scoring);
@@ -451,24 +485,34 @@ export function buildSnapshotRosProjections(
       projectedWeeks,
     });
   }
+  byDecision.set(cacheKey, result);
   return result;
 }
 
 /**
- * V1 uses immutable projection evidence plus static current league setup. It intentionally does not
- * infer historical survivors, ownership, needs, or lineups that Sleeper cannot replay exactly.
+ * V2 uses immutable projection evidence plus deterministic setup-derived survivor progression. It intentionally does not
+ * invent exact historical rosters, ownership, needs, or lineups that Sleeper cannot replay.
  */
+function getRemainingEliminationWeeks(teamsRemaining: number): number {
+  let remaining = teamsRemaining;
+  let weeks = 0;
+  while (remaining > 1) {
+    remaining -= remaining > 16 ? 2 : 1;
+    weeks += 1;
+  }
+  return weeks;
+}
+
 export function buildHistoricalSetupContext(league: League, decisionWeek: number): LeagueContext {
   const positions = league.roster_positions ?? [];
   const count = (position: string) => positions.filter((value) => value === position).length;
-  const teamsRemaining = Math.max(1, league.total_rosters);
-  const eliminationsPerWeek = teamsRemaining > 16 ? 2 : 1;
+  const teamsRemaining = estimateRemainingTeamsAtDecisionWeek(league.total_rosters, decisionWeek);
   return {
     budget: league.settings?.waiver_budget ?? 1000,
     teamsRemaining,
     currentWeek: decisionWeek,
     weeksRemaining: Math.max(1, Math.min(
-      Math.ceil((teamsRemaining - 1) / eliminationsPerWeek),
+      getRemainingEliminationWeeks(teamsRemaining),
       19 - decisionWeek,
     )),
     startersPerPos: {
@@ -497,14 +541,16 @@ export function calculateHistoricalBaseline(
     context,
     [],
     (playerId) => playerId,
-    { maxPerPos: Number.POSITIVE_INFINITY },
+    { maxPerPos: Number.POSITIVE_INFINITY, sleeperRosProjections: projections },
   )[0];
   return {
-    baseline: row ? getWeeksAsStarterBid(row) : null,
+    baseline: row ? resolveBiddingBaseline(row) : null,
     provenance: snapshot.provenance.effectiveKind,
     captureProvenance: snapshot.provenance.captureKind,
     matchesRequestedDecisionWeek: snapshot.provenance.matchesRequestedDecisionWeek,
     snapshotDecisionWeek: snapshot.provenance.snapshotDecisionWeek,
     unavailableReason: row ? undefined : 'The snapshot had no usable projection for this player.',
+    baselineStrategyId: BIDDING_BASELINE.strategyId,
+    baselineStrategyVersion: BIDDING_BASELINE.version,
   };
 }

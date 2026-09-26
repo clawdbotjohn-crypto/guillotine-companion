@@ -10,7 +10,8 @@
     "test": "vitest run --exclude 'api/**'",
     "test:watch": "vitest --exclude 'api/**'",
     "typecheck": "tsc --noEmit",
-    "lint": "oxlint"
+    "lint": "oxlint",
+    "analyze:max-vorp": "tsx scripts/analyze-max-vorp.ts"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
@@ -35,6 +36,7 @@
     "jsdom": "^26.1.0",
     "oxlint": "^1.75.0",
     "postcss": "^8.5.6",
+    "tsx": "^4.23.15",
     "typescript": "~6.0.2",
     "vite": "^8.2.0",
     "vitest": "^3.2.4"

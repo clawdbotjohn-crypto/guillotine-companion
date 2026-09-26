@@ -3,7 +3,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { ManagerBiddingProfile } from '../logic';
 import { styleForMultiplier } from '../logic';
-import { getWeeksAsStarterBid } from '../logic/waivers';
+import { BIDDING_BASELINE, resolveBiddingBaseline } from '../logic/waiverStrategies';
 import { ManagerDetailsModal, ManagerPredictionRow, TeamBidProfiles, WaiverManagerPredictions } from './ManagerBiddingProfiles';
 import { buildManagerPredictions, buyerLikelihood, type ManagerPredictionDisplay } from '../logic/managerPredictionDisplay';
 
@@ -25,6 +25,8 @@ function profile(rosterId: number, multiplier: number | null): ManagerBiddingPro
     style: styleForMultiplier(multiplier),
     confidence: multiplier == null ? 'insufficient' : 'low',
     usableEvidenceCount: multiplier == null ? 0 : 1,
+        baselineStrategyId: 'max-vorp',
+        baselineStrategyVersion: 'max-vorp-v1',
     evidence: rosterId === 1 ? [{
       transactionId: 'tx-1', managerRosterId: 1, playerId: 'player-1', transactionWeek: 3,
       decisionWeek: 4, batchKey: 'batch', actualBid: 150, outcome: 'won', createdAt: 1,
@@ -83,12 +85,16 @@ describe('manager bid presentation', () => {
     expect(rows[0]).toMatchObject({ managerName: 'Aggressive Alice', predictedBid: 100, currentFaab: 100, likelihood: 'Likely', cappedByFaab: true });
   });
 
-  it('uses manager predictions from the Weeks-as-Starter baseline, never old predictedWinningBid', () => {
+  it('uses the shared versioned Max VORP baseline exactly once, never old predictedWinningBid', () => {
     const currentRow = {
-      suggestions: [{ strategy: 'weeks-starter' as const, label: 'Weeks-as-Starter', value: 42, pctOfBudget: 4.2 }],
+      suggestions: [
+        { strategy: 'max-vorp' as const, label: 'Max VORP', value: 42, pctOfBudget: 4.2 },
+        { strategy: 'weeks-starter' as const, label: 'Weeks-as-Starter', value: 18, pctOfBudget: 1.8 },
+      ],
       predictedWinningBid: 61,
     };
-    const baseline = getWeeksAsStarterBid(currentRow);
+    const baseline = resolveBiddingBaseline(currentRow);
+    expect(BIDDING_BASELINE).toEqual({ strategyId: 'max-vorp', version: 'max-vorp-v1' });
     expect(baseline).toBe(42);
     const result = buildManagerPredictions({
       profiles: [profile(1, 1.5)], baseline: baseline!, rosters, users, initialFaab: 1000,
@@ -272,6 +278,41 @@ describe('manager bid presentation', () => {
       'Open bid profile for Alpha Low',
       'Open bid profile for No History',
     ]);
+  });
+
+  it('applies eliminated-team visibility to Bid Profiles without changing active FAAB tiers and closes hidden details', () => {
+    const props = {
+      profiles: [profile(1, 1.5), profile(2, 0.84), profile(3, null)],
+      rosters,
+      users,
+      initialFaab: 1000,
+      activeRosterIds: new Set([1, 2]),
+      isLoading: false,
+      error: null,
+      onRetry: vi.fn(),
+      getPlayerName: () => 'History Player',
+    };
+    const { rerender } = render(<TeamBidProfiles {...props} showEliminatedTeams={false} />);
+
+    expect(screen.getAllByRole('button', { name: /open bid profile/i }).map((node) => node.getAttribute('aria-label'))).toEqual([
+      'Open bid profile for Aggressive Alice',
+      'Open bid profile for Careful Chris',
+    ]);
+    expect(screen.queryByRole('button', { name: /open bid profile for Zero Zoe/i })).toBeNull();
+    expect(screen.getByText('$800').closest('[data-faab-quartile]')?.getAttribute('data-faab-quartile')).toBe('top');
+
+    rerender(<TeamBidProfiles {...props} showEliminatedTeams />);
+    expect(screen.getAllByRole('button', { name: /open bid profile/i }).map((node) => node.getAttribute('aria-label'))).toEqual([
+      'Open bid profile for Aggressive Alice',
+      'Open bid profile for Careful Chris',
+      'Open bid profile for Zero Zoe',
+    ]);
+    fireEvent.click(screen.getByRole('button', { name: /open bid profile for Zero Zoe/i }));
+    expect(screen.getByRole('dialog', { name: 'Zero Zoe' })).toBeTruthy();
+
+    rerender(<TeamBidProfiles {...props} showEliminatedTeams={false} />);
+    expect(screen.queryByRole('dialog', { name: 'Zero Zoe' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /open bid profile for Zero Zoe/i })).toBeNull();
   });
 
   it('stacks Remaining FAAB beneath Predicted, omits the expanded-row style badge, and colors likelihood status', () => {

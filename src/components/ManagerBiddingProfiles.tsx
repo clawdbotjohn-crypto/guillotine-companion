@@ -379,6 +379,7 @@ export function TeamBidProfiles({
   users,
   initialFaab,
   activeRosterIds,
+  showEliminatedTeams = true,
   isLoading,
   error,
   onRetry,
@@ -390,6 +391,7 @@ export function TeamBidProfiles({
   users: SleeperUser[];
   initialFaab: number;
   activeRosterIds?: ReadonlySet<number>;
+  showEliminatedTeams?: boolean;
   isLoading: boolean;
   error: Error | null;
   onRetry: () => void;
@@ -397,6 +399,16 @@ export function TeamBidProfiles({
   detailsByRosterId?: ReadonlyMap<number, ManagerDetailData>;
 }) {
   const [selected, setSelected] = useState<ManagerBiddingProfile | null>(null);
+  useEffect(() => {
+    if (
+      selected
+      && !showEliminatedTeams
+      && activeRosterIds
+      && !activeRosterIds.has(selected.managerRosterId)
+    ) {
+      setSelected(null);
+    }
+  }, [activeRosterIds, selected, showEliminatedTeams]);
   if (isLoading) return <Card hover={false} className="p-4"><Skeleton lines={4} /></Card>;
   if (error) {
     return (
@@ -419,6 +431,7 @@ export function TeamBidProfiles({
     return byName || a.managerRosterId - b.managerRosterId;
   });
   const activeProfiles = ordered.filter((profile) => activeRosterIds?.has(profile.managerRosterId) ?? true);
+  const visibleProfiles = showEliminatedTeams ? ordered : activeProfiles;
   const activeFaabAmounts = activeProfiles.map((profile) => currentFaab(profile.managerRosterId, rosters, initialFaab));
   const selectedName = selected ? managerName(selected.managerRosterId, rosters, users) : '';
   const selectedFaab = selected ? currentFaab(selected.managerRosterId, rosters, initialFaab) : 0;
@@ -426,7 +439,10 @@ export function TeamBidProfiles({
   return (
     <>
       <div className="space-y-2">
-        {ordered.map((profile) => {
+        {visibleProfiles.length === 0 && (
+          <p className="text-xs text-[#6b6e99]">No active manager bid profiles are available.</p>
+        )}
+        {visibleProfiles.map((profile) => {
           const name = managerName(profile.managerRosterId, rosters, users);
           const faab = currentFaab(profile.managerRosterId, rosters, initialFaab);
           const faabBand = faabQuartile(faab, activeFaabAmounts);
