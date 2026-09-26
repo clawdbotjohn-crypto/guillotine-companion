@@ -1,3 +1,22 @@
+# Handoff — PR #10 owner correction round 3.3 (2026-09-26)
+
+John reviewed the completed 3.2 mobile preview and requested two final micro-corrections. Implemented directly on `feat/bidding-behavior-profiles`:
+
+- Removed the style/aggression badge entirely from expanded Waivers `Bid Predictions` rows. Teams cards and manager details modal still render the full style + multiplier badge.
+- Changed the empty Upcoming byes message to exactly `No byes in the next few weeks.`
+
+Verification before push:
+- Focused manager presentation: 11/11 passed.
+- Full frontend: 24 files / 156 tests passed.
+- Lint: passed.
+- Typecheck: passed.
+- Production build: passed.
+- `git diff --check`: passed.
+
+Pending at handoff creation: commit/push, CI + Azure preview deployment, and John’s visual verification. No merge or production deployment.
+
+---
+
 # Handoff — PR #10 owner correction round 3.2 complete (2026-09-26)
 
 ## Scope and state

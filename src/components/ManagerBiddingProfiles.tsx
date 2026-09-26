@@ -29,19 +29,13 @@ function ratioText(value: number | null) {
   return value == null ? 'Unavailable' : `${value.toFixed(2)}x`;
 }
 
-export function ManagerStyleBadge({
-  profile,
-  presentation = 'full',
-}: {
-  profile: ManagerBiddingProfile;
-  presentation?: 'full' | 'prediction-row';
-}) {
+export function ManagerStyleBadge({ profile }: { profile: ManagerBiddingProfile }) {
   if (profile.style === 'insufficient') return null;
   const multiplier = profile.managerMultiplier;
   return (
     <span className={`inline-flex items-center rounded-full border px-2 py-1 text-[9px] font-bold uppercase tracking-wide ${styleClasses(profile.style)}`}>
       {styleLabel(profile.style)}
-      {presentation === 'full' && multiplier != null && Number.isFinite(multiplier) && (
+      {multiplier != null && Number.isFinite(multiplier) && (
         <span className="ml-1 font-['Space_Mono'] normal-case tabular-nums">· {multiplier.toFixed(2)}x</span>
       )}
     </span>
@@ -87,7 +81,7 @@ function UpcomingByes({ rows }: { rows: ManagerDetailData['upcomingByes'] }) {
     <section aria-labelledby="manager-upcoming-byes">
       <h3 id="manager-upcoming-byes" className="mb-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-[#8b8eb8]">Upcoming byes</h3>
       {rows.length === 0 ? (
-        <p className="rounded-lg bg-[#0d1022] px-3 py-2 text-[11px] text-[#6b6e99]">No byes in the current week or next two weeks.</p>
+        <p className="rounded-lg bg-[#0d1022] px-3 py-2 text-[11px] text-[#6b6e99]">No byes in the next few weeks.</p>
       ) : (
         <div className="space-y-1.5">
           {rows.map((row) => (
@@ -312,9 +306,8 @@ export function ManagerPredictionRow({
         className={`w-full rounded-xl bg-[#0d1022] p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6366f1] ${prediction.likelihood === 'Unlikely' ? 'opacity-55' : ''}`}
       >
         <span className="block">
-          <span className="flex min-w-0 items-center justify-between gap-2" data-testid="prediction-manager-heading">
-            <span className="min-w-0 truncate text-xs font-semibold text-[#f0f0ff]">{prediction.managerName}</span>
-            <span className="shrink-0"><ManagerStyleBadge profile={prediction.profile} presentation="prediction-row" /></span>
+          <span className="block min-w-0" data-testid="prediction-manager-heading">
+            <span className="block min-w-0 truncate text-xs font-semibold text-[#f0f0ff]">{prediction.managerName}</span>
           </span>
           <span className="mt-2 flex items-start justify-between gap-3">
             <span className={`shrink-0 text-[10px] font-semibold ${likelihoodTextClass(prediction.likelihood)}`}>{prediction.likelihood} bidder</span>

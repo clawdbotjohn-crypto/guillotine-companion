@@ -141,6 +141,8 @@ describe('manager bid presentation', () => {
     expect(faab.className).toContain('text-[#34d399]');
     expect(within(faab).queryByText('Top FAAB quartile')).toBeNull();
     expect(screen.getByRole('group', { name: 'Remaining FAAB $800, Top FAAB quartile' })).toBe(faab);
+    expect(screen.getByText('No byes in the next few weeks.')).toBeTruthy();
+    expect(screen.queryByText('No byes in the current week or next two weeks.')).toBeNull();
 
     rerender(<ManagerDetailsModal
       profile={profile(3, null)} manager="Zero Zoe" currentFaabAmount={0}
@@ -189,7 +191,7 @@ describe('manager bid presentation', () => {
     expect(screen.queryByText(/canonical|Learning/i)).toBeNull();
   });
 
-  it('renders Bid Predictions rows with explicit prediction-side stacking and opens the shared modal', () => {
+  it('renders compact Bid Predictions rows without a style badge and opens the shared modal', () => {
     render(<WaiverManagerPredictions
       predictions={[
         prediction({ rosterId: 2, managerName: 'Careful Chris', currentFaab: 800, predictedBid: 40, likelihood: 'Possible', profile: profile(2, 1.18) }),
@@ -203,8 +205,7 @@ describe('manager bid presentation', () => {
     const text = row.textContent ?? '';
     expect(text.indexOf('Careful Chris')).toBeLessThan(text.indexOf('Predicted'));
     expect(text.indexOf('Predicted')).toBeLessThan(text.indexOf('Remaining FAAB'));
-    expect(text).toContain('Standard');
-    expect(text).not.toContain('1.18x');
+    expect(text).not.toMatch(/Standard|Conservative|Aggressive|1\.18x/);
     expect(screen.getByText('Likely bidder').className).toContain('text-[#34d399]');
     expect(screen.getByText('Possible bidder').className).toContain('text-[#fbbf24]');
     expect(screen.getByText('Unlikely bidder').className).toContain('text-[#fb7185]');
@@ -273,7 +274,7 @@ describe('manager bid presentation', () => {
     ]);
   });
 
-  it('stacks Remaining FAAB beneath Predicted, omits only the expanded-row multiplier, and colors likelihood status', () => {
+  it('stacks Remaining FAAB beneath Predicted, omits the expanded-row style badge, and colors likelihood status', () => {
     render(<ManagerPredictionRow
       prediction={prediction({ currentFaab: 100, predictedBid: 63, likelihood: 'Likely' })}
       details={details}
@@ -283,9 +284,9 @@ describe('manager bid presentation', () => {
 
     const row = screen.getByRole('button', { name: /open details for Aggressive Alice/i });
     const heading = within(row).getByTestId('prediction-manager-heading');
-    expect(heading.className).toContain('flex');
-    expect(heading.textContent).toBe('Aggressive AliceAggressive');
-    expect(within(heading).getByText('Aggressive').compareDocumentPosition(within(heading).getByText('Aggressive Alice')) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    expect(heading.className).toContain('block');
+    expect(heading.textContent).toBe('Aggressive Alice');
+    expect(within(row).queryByText('Aggressive')).toBeNull();
     const predictionSide = within(row).getByTestId('prediction-side');
     const predictedGroup = within(predictionSide).getByTestId('predicted-label-value');
     const faabGroup = within(predictionSide).getByTestId('remaining-faab-label-value');

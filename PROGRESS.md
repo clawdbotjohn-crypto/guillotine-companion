@@ -1,5 +1,11 @@
 # Guillotine Companion — Progress
 
+## 🚨 PR #10 owner correction round 3.3 — final badge removal + bye empty state (John, 2026-09-26)
+
+- [x] Remove the aggression/style badge entirely from expanded Waivers Bid Predictions rows. It does not fit beside the team name on mobile. Preserve style+multiplier badges on Teams cards and in the manager popup.
+- [x] When a manager has no upcoming byes, render exactly: `No byes in the next few weeks.`
+- [ ] Run focused/full verification, commit/push, await green preview deployment, and let John verify the exact hosted preview. No merge or production deploy.
+
 ## ✅ PR #10 owner correction round 3.2 — final mobile alignment + prediction consistency (John, 2026-09-26; COMPLETE)
 
 **Status:** Completed on implementation commit `3460721c5a22ed2e0d6c3023f2f5bb0cb63a7044` and verified on the exact Azure PR environment with real SeaMex data at desktop and 390px. Screenshot references: `db9546cb-380e-47eb-ab95-929c66adb11e.jpg` and annotated `885d0b52-b895-45f9-bdd7-1443badcc25e.jpg`. PR remains open; no merge, production deploy, or workflow dispatch.
