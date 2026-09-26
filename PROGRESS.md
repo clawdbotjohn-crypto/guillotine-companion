@@ -1,5 +1,11 @@
 # Guillotine Companion — Progress
 
+## 🚨 PR #11 analysis correction — evaluate every selectable VoRP count (John, 2026-09-26)
+
+- [x] Max VORP must evaluate every integer team count exposed by the existing VoRP selector, from current active-team count through 4 inclusive. For SeaMex now, that is all 25 counts 28, 27, …, 4—not only the 19 counts reachable under the elimination cadence.
+- [x] Regenerate the reproducible SeaMex report and reassess interior maxima, endpoint disagreements/deltas, position patterns, and runtime using all 25 selectable counts. Clearly distinguish this Max-VORP shape analysis from the separate unperformed real-bid strategy-accuracy study.
+- [x] Add a regression proving odd counts above 16 are included; run full verification and update PR #11 preview. No merge or production deploy.
+
 ## 🚨 PR #11 owner preview fix — eliminated-team visibility in Bid Profiles (John, 2026-09-26)
 
 - [x] The shared `Show eliminated teams` checkbox on Teams must filter both the Teams tab and the Bid Profiles tab. Default unchecked: Bid Profiles lists active managers only. Checked: eliminated managers are added without changing multiplier-descending ordering or active-manager FAAB quartile calculations.

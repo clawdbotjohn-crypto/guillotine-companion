@@ -122,14 +122,14 @@ export function normalizeReplacementTeamTarget(
 
 /** Every reachable survivor count under the app's two-chops-above-16 progression. */
 export function getValidRemainingTeamCounts(teamsRemaining: number): number[] {
-  const counts: number[] = [];
-  let count = Math.max(FINAL_FOUR_TEAMS, Math.floor(Number.isFinite(teamsRemaining) ? teamsRemaining : FINAL_FOUR_TEAMS));
-  while (count > FINAL_FOUR_TEAMS) {
-    counts.push(count);
-    count = Math.max(FINAL_FOUR_TEAMS, count - (count > 16 ? 2 : 1));
-  }
-  counts.push(FINAL_FOUR_TEAMS);
-  return counts;
+  const maximum = Math.max(
+    FINAL_FOUR_TEAMS,
+    Math.floor(Number.isFinite(teamsRemaining) ? teamsRemaining : FINAL_FOUR_TEAMS),
+  );
+  return Array.from(
+    { length: maximum - FINAL_FOUR_TEAMS + 1 },
+    (_, index) => maximum - index,
+  );
 }
 
 /** Setup-only survivor estimate for historical snapshots that do not contain roster history. */

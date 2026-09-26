@@ -1,3 +1,24 @@
+# Handoff — PR #11 Max VORP selectable-count analysis correction (2026-09-26)
+
+During owner follow-up, Clawdbot found the initial Max VORP implementation evaluated only survivor counts reachable under the elimination cadence (19 stages: 28, 26, …, 4), while the existing VoRP selector exposes every integer from the current active count through 4. John’s original request was to evaluate every allowed count.
+
+Correction:
+- Max VORP now evaluates all 25 selectable SeaMex counts from 28 through 4, including odd counts above 16.
+- The reproducible SeaMex report was regenerated from live selected-scoring projections.
+- Exact all-count computation remains the decision: 52/192 positive players peak at an interior count and disagree with endpoint-only evaluation. The largest endpoint miss is $6.720 (Lamar Jackson); mean positive miss is $1.320.
+- Interior peaks: 27 teams (34 players), 24 (9), 23 (5), 16 (3), 8 (1). By position: RB 39, WR 12, QB 1, TE 0.
+- Cold exact compute is 111.19 ms and remains memoized in production.
+
+Verification:
+- Focused Max VORP/waivers: 28/28 passed.
+- Full frontend: 24 files / 162 tests passed.
+- API: 36/36 passed.
+- Lint, typecheck, production build, and `git diff --check`: passed.
+
+This is shape/endpoint analysis only. It does not compare Max VORP, Weekly, Safe, Aggressive, or Weeks as Starter against historical real bids; that remains a separate future study. Pending commit/push and updated preview deployment. No merge or production deployment.
+
+---
+
 # Handoff — PR #11 owner preview fix: eliminated-team filtering (2026-09-26)
 
 John found that the shared `Show eliminated teams` checkbox filtered the Teams tab but not Bid Profiles. Root cause: `TeamsPage` passed the active roster set into `TeamBidProfiles` only for FAAB quartile calculation; it never passed the visibility preference, and the component always mapped every profile.

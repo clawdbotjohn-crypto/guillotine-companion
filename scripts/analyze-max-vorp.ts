@@ -142,7 +142,7 @@ async function main() {
     `## Inputs and decision\n\n` +
     `- League: ${league.name}; ${league.total_rosters} initial teams; ${teamsRemaining} teams analyzed now; ${scoring}; $${budget} initial FAAB.\n` +
     `- ROS window: Weeks ${startWeek}–18 (${weeks.length} weeks); ${projections.size} players had selected-scoring projection data.\n` +
-    `- Valid survivor stages: ${getValidRemainingTeamCounts(teamsRemaining).join(', ')}. These follow two eliminations per week above 16 teams, then one per week, with a final-four lower bound.\n` +
+    `- Evaluated selectable team counts: ${getValidRemainingTeamCounts(teamsRemaining).join(', ')}. This includes every integer offered by the VoRP team-count selector, with a final-four lower bound.\n` +
     `- Exact metric: for each player and each stage, \`max(0, ROS points − positional replacement points) × ($${budget} / average final-four-team VORP)\`; choose the largest unrounded dollar result, then round once. Exact ties prefer the earlier/larger-team stage.\n` +
     `- **Decision: retain exact all-count evaluation.** ${disagreements} players differed from an endpoint-only approximation; ${interior} players peaked at an interior stage.\n\n` +
     `## Summary\n\n` +

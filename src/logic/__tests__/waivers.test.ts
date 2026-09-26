@@ -275,8 +275,8 @@ describe('Max VORP', () => {
   }
 
   it('enumerates bounded survivor progression without hard-coding SeaMex', () => {
-    expect(getValidRemainingTeamCounts(28)).toEqual([28, 26, 24, 22, 20, 18, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4]);
-    expect(getValidRemainingTeamCounts(19)).toEqual([19, 17, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4]);
+    expect(getValidRemainingTeamCounts(28)).toEqual(Array.from({ length: 25 }, (_, index) => 28 - index));
+    expect(getValidRemainingTeamCounts(19)).toEqual(Array.from({ length: 16 }, (_, index) => 19 - index));
     expect(getValidRemainingTeamCounts(2)).toEqual([4]);
   });
 
