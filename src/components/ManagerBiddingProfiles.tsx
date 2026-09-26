@@ -29,13 +29,19 @@ function ratioText(value: number | null) {
   return value == null ? 'Unavailable' : `${value.toFixed(2)}x`;
 }
 
-export function ManagerStyleBadge({ profile }: { profile: ManagerBiddingProfile }) {
+export function ManagerStyleBadge({
+  profile,
+  presentation = 'full',
+}: {
+  profile: ManagerBiddingProfile;
+  presentation?: 'full' | 'prediction-row';
+}) {
   if (profile.style === 'insufficient') return null;
   const multiplier = profile.managerMultiplier;
   return (
     <span className={`inline-flex items-center rounded-full border px-2 py-1 text-[9px] font-bold uppercase tracking-wide ${styleClasses(profile.style)}`}>
       {styleLabel(profile.style)}
-      {multiplier != null && Number.isFinite(multiplier) && (
+      {presentation === 'full' && multiplier != null && Number.isFinite(multiplier) && (
         <span className="ml-1 font-['Space_Mono'] normal-case tabular-nums">· {multiplier.toFixed(2)}x</span>
       )}
     </span>
@@ -105,14 +111,17 @@ function needClasses(tier: ManagerTeamNeed['tier']) {
 }
 
 function TeamNeeds({ rows }: { rows: ManagerDetailData['teamNeeds'] }) {
+  const visibleRows = rows.filter((row) => row.tier !== 'neutral');
   return (
     <section aria-labelledby="manager-team-needs">
       <h3 id="manager-team-needs" className="mb-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-[#8b8eb8]">Team needs</h3>
       {rows.length === 0 ? (
         <p className="rounded-lg bg-[#0d1022] px-3 py-2 text-[11px] text-[#6b6e99]">Position strength is unavailable.</p>
+      ) : visibleRows.length === 0 ? (
+        <p className="rounded-lg bg-[#0d1022] px-3 py-2 text-[11px] text-[#6b6e99]">No notable position strengths or needs.</p>
       ) : (
         <div className="flex flex-wrap gap-2">
-          {rows.map((row) => {
+          {visibleRows.map((row) => {
             const semantic = row.tier === 'strong' ? 'strength' : row.tier === 'weak' ? 'need' : 'neutral';
             return (
               <span
@@ -140,6 +149,12 @@ function faabClasses(band: FaabQuartileBand) {
 function faabTextClass(band: FaabQuartileBand) {
   if (band === 'top') return 'text-[#34d399]';
   if (band === 'bottom') return 'text-[#fb7185]';
+  return 'text-[#fbbf24]';
+}
+
+function likelihoodTextClass(likelihood: ManagerPredictionDisplay['likelihood']) {
+  if (likelihood === 'Likely') return 'text-[#34d399]';
+  if (likelihood === 'Unlikely') return 'text-[#fb7185]';
   return 'text-[#fbbf24]';
 }
 
@@ -280,23 +295,26 @@ export function ManagerPredictionRow({
         aria-label={`Open details for ${prediction.managerName}`}
         className={`w-full rounded-xl bg-[#0d1022] p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6366f1] ${prediction.likelihood === 'Unlikely' ? 'opacity-55' : ''}`}
       >
-        <span className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-start gap-x-3 gap-y-2">
+        <span className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3">
           <span className="min-w-0">
             <span className="block truncate text-xs font-semibold text-[#f0f0ff]">{prediction.managerName}</span>
-            <span className="mt-1.5 inline-flex"><ManagerStyleBadge profile={prediction.profile} /></span>
+            <span className="mt-1.5 inline-flex"><ManagerStyleBadge profile={prediction.profile} presentation="prediction-row" /></span>
+            <span className={`mt-2 block text-[10px] font-semibold ${likelihoodTextClass(prediction.likelihood)}`}>{prediction.likelihood} bidder</span>
           </span>
-          <span className="text-right">
-            <span className="block text-[9px] uppercase tracking-wide text-[#6b6e99]">Remaining FAAB</span>
-            <span className={`mt-0.5 block font-['Space_Mono'] text-xs font-semibold tabular-nums ${faabTextClass(faabQuartile(prediction.currentFaab, faabAmounts))}`}>${prediction.currentFaab}</span>
-          </span>
-          <span className="text-right">
+          <span className="flex min-w-[6.5rem] flex-col items-end text-right" data-testid="prediction-side">
             <span className="block text-[9px] uppercase tracking-wide text-[#6b6e99]">Predicted</span>
             <span className={`mt-0.5 block font-['Space_Mono'] text-sm font-bold tabular-nums ${prediction.cappedByFaab ? 'text-[#f87171]' : 'text-[#fbbf24]'}`}>
               ${prediction.predictedBid}
               {prediction.cappedByFaab && <span className="sr-only"> capped by remaining FAAB</span>}
             </span>
+            <span className="mt-2 block text-[9px] uppercase tracking-wide text-[#6b6e99]">Remaining FAAB</span>
+            <span
+              className={`mt-0.5 block font-['Space_Mono'] text-xs font-semibold tabular-nums ${faabTextClass(faabQuartile(prediction.currentFaab, faabAmounts))}`}
+              data-faab-quartile={faabQuartile(prediction.currentFaab, faabAmounts)}
+            >
+              ${prediction.currentFaab}<span className="sr-only">, {faabQuartileLabel(faabQuartile(prediction.currentFaab, faabAmounts))}</span>
+            </span>
           </span>
-          <span className="col-span-3 text-[10px] text-[#8b8eb8]">{prediction.likelihood} bidder</span>
         </span>
       </button>
       {isOpen && (
@@ -376,7 +394,14 @@ export function TeamBidProfiles({
     return <p className="text-xs text-[#6b6e99]">Manager bid history is unavailable.</p>;
   }
 
-  const ordered = [...profiles].sort((a, b) => managerName(a.managerRosterId, rosters, users).localeCompare(managerName(b.managerRosterId, rosters, users)));
+  const ordered = [...profiles].sort((a, b) => {
+    const aMultiplier = a.managerMultiplier ?? Number.NEGATIVE_INFINITY;
+    const bMultiplier = b.managerMultiplier ?? Number.NEGATIVE_INFINITY;
+    if (aMultiplier !== bMultiplier) return bMultiplier - aMultiplier;
+    const byName = managerName(a.managerRosterId, rosters, users)
+      .localeCompare(managerName(b.managerRosterId, rosters, users));
+    return byName || a.managerRosterId - b.managerRosterId;
+  });
   const activeProfiles = ordered.filter((profile) => activeRosterIds?.has(profile.managerRosterId) ?? true);
   const activeFaabAmounts = activeProfiles.map((profile) => currentFaab(profile.managerRosterId, rosters, initialFaab));
   const selectedName = selected ? managerName(selected.managerRosterId, rosters, users) : '';
@@ -407,7 +432,11 @@ export function TeamBidProfiles({
                   <ManagerStyleBadge profile={profile} />
                   <span className="mt-1.5 block text-[10px] text-[#8b8eb8]">
                     Current FAAB{' '}
-                    <span className={`font-['Space_Mono'] tabular-nums ${faabTextClass(faabBand)}`} data-faab-quartile={faabBand}>
+                    <span
+                      className={`font-['Space_Mono'] font-semibold tabular-nums ${faabTextClass(faabBand)}`}
+                      data-faab-quartile={faabBand}
+                      aria-label={`$${faab}, ${faabQuartileLabel(faabBand)}`}
+                    >
                       ${faab}<span className="sr-only">, {faabQuartileLabel(faabBand)}</span>
                     </span>
                   </span>

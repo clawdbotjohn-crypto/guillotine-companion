@@ -5,6 +5,7 @@ import type { PlayerRecord } from '../../store/players';
 import {
   buildHubRosterRows,
   buildUpcomingByeWarnings,
+  getHubByeWindowWeek,
   resolvePlayerAcquisition,
   type HubRosterRow,
 } from '../hubRoster';
@@ -215,6 +216,31 @@ describe('Hub roster ordering and weekly context', () => {
 });
 
 describe('Hub upcoming bye warnings', () => {
+  it('anchors the rendered Hub window to Sleeper current scoring week and excludes the first week beyond it', () => {
+    const nflState = {
+      week: 5,
+      display_week: 5,
+      season: '2026',
+      season_type: 'regular',
+      leg: 5,
+      league_season: '2026',
+      season_start_date: '2026-09-10',
+      season_has_scores: true,
+    };
+    const rows = [
+      rosterRow({ playerId: 'current', byeWeek: 5 }),
+      rosterRow({ playerId: 'last-included', byeWeek: 7 }),
+      rosterRow({ playerId: 'first-excluded', byeWeek: 8 }),
+    ];
+
+    const hubWeek = getHubByeWindowWeek(nflState);
+    expect(hubWeek).toBe(5);
+    expect(buildUpcomingByeWarnings(rows, hubWeek).map((warning) => warning.playerId)).toEqual([
+      'current',
+      'last-included',
+    ]);
+  });
+
   it('uses exactly the projection week plus two and puts every starter before every bench player', () => {
     const warnings = buildUpcomingByeWarnings([
       rosterRow({ playerId: 'past', name: 'Past Bye', byeWeek: 4, isStarter: true }),

@@ -68,6 +68,7 @@ export {
   resolvePlayerAcquisition,
   buildHubRosterRows,
   buildUpcomingByeWarnings,
+  getHubByeWindowWeek,
   type AcquisitionKind,
   type PlayerAcquisition,
   type HubRosterRow,

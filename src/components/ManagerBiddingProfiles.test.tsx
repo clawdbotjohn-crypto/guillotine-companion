@@ -187,7 +187,7 @@ describe('manager bid presentation', () => {
     expect(screen.queryByText(/canonical|Learning/i)).toBeNull();
   });
 
-  it('renders Bid Predictions rows in manager/style, FAAB, amount, status order and opens the shared modal', () => {
+  it('renders Bid Predictions rows with explicit prediction-side stacking and opens the shared modal', () => {
     render(<WaiverManagerPredictions
       predictions={[
         prediction({ rosterId: 2, managerName: 'Careful Chris', currentFaab: 800, predictedBid: 40, likelihood: 'Possible', profile: profile(2, 1.18) }),
@@ -199,19 +199,70 @@ describe('manager bid presentation', () => {
     />);
     const row = screen.getByRole('button', { name: /open details for Careful Chris/i });
     const text = row.textContent ?? '';
-    expect(text.indexOf('Careful Chris')).toBeLessThan(text.indexOf('Remaining FAAB'));
-    expect(text.indexOf('Remaining FAAB')).toBeLessThan(text.indexOf('Predicted'));
-    expect(text.indexOf('Predicted')).toBeLessThan(text.indexOf('Possible bidder'));
+    expect(text.indexOf('Careful Chris')).toBeLessThan(text.indexOf('Predicted'));
+    expect(text.indexOf('Predicted')).toBeLessThan(text.indexOf('Remaining FAAB'));
     expect(text).toContain('Standard');
-    expect(text).toContain('1.18x');
-    expect(screen.getByText('Likely bidder')).toBeTruthy();
-    expect(screen.getByText('Possible bidder')).toBeTruthy();
-    expect(screen.getByText('Unlikely bidder')).toBeTruthy();
+    expect(text).not.toContain('1.18x');
+    expect(screen.getByText('Likely bidder').className).toContain('text-[#34d399]');
+    expect(screen.getByText('Possible bidder').className).toContain('text-[#fbbf24]');
+    expect(screen.getByText('Unlikely bidder').className).toContain('text-[#fb7185]');
     fireEvent.click(screen.getByRole('button', { name: /open details for Aggressive Alice/i }));
     expect(screen.getByRole('dialog', { name: 'Aggressive Alice' })).toBeTruthy();
     expect(screen.getByLabelText(/QB strength, rank 1 of 8/)).toBeTruthy();
     expect(screen.getByLabelText(/RB need, rank 8 of 8/)).toBeTruthy();
-    expect(screen.getByLabelText(/WR neutral, rank 4 of 8/)).toBeTruthy();
+    expect(screen.queryByLabelText(/WR neutral, rank 4 of 8/)).toBeNull();
+  });
+
+  it('sorts Teams profiles by multiplier descending with deterministic name and roster ties', () => {
+    const tieRosters = [
+      ...rosters,
+      { roster_id: 4, owner_id: 'four', players: [], starters: [], settings: { wins: 1, losses: 0, fpts: 100, waiver_budget_used: 500 } },
+    ];
+    const tieUsers = [
+      { user_id: 'one', display_name: 'Zulu High', username: 'zulu', avatar: null },
+      { user_id: 'two', display_name: 'Alpha Low', username: 'alpha', avatar: null },
+      { user_id: 'three', display_name: 'No History', username: 'none', avatar: null },
+      { user_id: 'four', display_name: 'Beta High', username: 'beta', avatar: null },
+    ];
+    render(<TeamBidProfiles
+      profiles={[profile(2, 0.84), profile(3, null), profile(1, 1.5), profile(4, 1.5)]}
+      rosters={tieRosters}
+      users={tieUsers}
+      initialFaab={1000}
+      activeRosterIds={new Set([1, 2, 3, 4])}
+      isLoading={false}
+      error={null}
+      onRetry={vi.fn()}
+      getPlayerName={() => 'History Player'}
+    />);
+
+    expect(screen.getAllByRole('button', { name: /open bid profile/i }).map((node) => node.getAttribute('aria-label'))).toEqual([
+      'Open bid profile for Beta High',
+      'Open bid profile for Zulu High',
+      'Open bid profile for Alpha Low',
+      'Open bid profile for No History',
+    ]);
+  });
+
+  it('stacks Remaining FAAB beneath Predicted, omits only the expanded-row multiplier, and colors likelihood status', () => {
+    render(<ManagerPredictionRow
+      prediction={prediction({ currentFaab: 100, predictedBid: 63, likelihood: 'Likely' })}
+      details={details}
+      activeFaabAmounts={[800, 100, 0]}
+      getPlayerName={() => 'History Player'}
+    />);
+
+    const row = screen.getByRole('button', { name: /open details for Aggressive Alice/i });
+    const predictionSide = within(row).getByTestId('prediction-side');
+    expect(within(predictionSide).getByText('Predicted')).toBeTruthy();
+    expect(within(predictionSide).getByText('Remaining FAAB')).toBeTruthy();
+    expect(predictionSide.textContent?.indexOf('Predicted')).toBeLessThan(predictionSide.textContent?.indexOf('Remaining FAAB') ?? -1);
+    expect(within(row).queryByText('1.50x')).toBeNull();
+    expect(within(row).getByText('Likely bidder').className).toContain('text-[#34d399]');
+
+    fireEvent.click(row);
+    expect(screen.getByRole('dialog', { name: 'Aggressive Alice' })).toBeTruthy();
+    expect(screen.getByText('1.50x')).toBeTruthy();
   });
 
   it('renders loading and retryable error states', () => {

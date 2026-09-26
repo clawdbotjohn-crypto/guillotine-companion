@@ -126,6 +126,10 @@ describe('waiver controls', () => {
     expect(within(summary).queryByText(/Manager \d+/)).toBeNull();
     expect(within(summary).queryByText('$61')).toBeNull();
     expect(summary.innerHTML).not.toContain('border-t');
+    const suggestedBidRow = within(summary).getByTestId('suggested-bid-row');
+    expect(suggestedBidRow.className).toContain('flex');
+    expect(suggestedBidRow.textContent).toBe('Suggested bid$42');
+    expect(within(suggestedBidRow).getByText('Suggested bid').compareDocumentPosition(within(suggestedBidRow).getByText('$42')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByTestId('expanded-manager-list')).toBeNull();
     fireEvent.click(toggle);
     expect(toggle.getAttribute('aria-expanded')).toBe('true');

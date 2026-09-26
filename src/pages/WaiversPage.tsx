@@ -264,11 +264,13 @@ export function WaiverPlayerCard({
             </div>
 
             <div className="w-[8.75rem] shrink-0 rounded-lg bg-[#0c0f22] px-2.5 py-2 text-right" data-testid="compact-bid-summary">
-              <div className="flex items-center justify-end gap-1 font-['Space_Mono'] text-base font-bold tabular-nums text-[#10b981]">
-                {!owner && remainingFaab != null && suggestion.value != null && suggestion.value > remainingFaab && <FaabOverBudgetWarning />}
-                <span>{suggestion.value == null ? 'Unavailable' : `$${suggestion.value}`}</span>
+              <div className="flex items-center justify-between gap-2" data-testid="suggested-bid-row">
+                <span className="text-[9px] text-[#6b6e99]">{owner ? 'Current value' : 'Suggested bid'}</span>
+                <span className="flex items-center justify-end gap-1 font-['Space_Mono'] text-base font-bold tabular-nums text-[#10b981]">
+                  {!owner && remainingFaab != null && suggestion.value != null && suggestion.value > remainingFaab && <FaabOverBudgetWarning />}
+                  <span>{suggestion.value == null ? 'Unavailable' : `$${suggestion.value}`}</span>
+                </span>
               </div>
-              <p className="text-[9px] text-[#6b6e99]">{owner ? 'Current value' : 'Suggested bid'}</p>
               {highestManagerPrediction != null && (
                 <p className="mt-1 text-[9px] font-semibold text-[#fbbf24]">
                   Predicted bid <span className="font-['Space_Mono'] tabular-nums">${highestManagerPrediction}</span>

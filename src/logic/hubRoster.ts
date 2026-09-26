@@ -1,4 +1,4 @@
-import type { DraftPick, Roster, Transaction } from '../api/types';
+import type { DraftPick, NflState, Roster, Transaction } from '../api/types';
 import type { PlayerRecord } from '../store/players';
 import { getTeamByeWeek } from './projections';
 import type { TeamProjection } from './analytics';
@@ -45,20 +45,25 @@ function compareIdentity(
   return a.playerId < b.playerId ? -1 : 1;
 }
 
+/** Sleeper's `week` is the current scoring week; `display_week + 1` is only a projection fetch coordinate. */
+export function getHubByeWindowWeek(state: NflState): number | null {
+  return Number.isInteger(state.week) && state.week >= 1 && state.week <= 18 ? state.week : null;
+}
+
 /**
- * Select exact supported byes from the projection week's three-scoring-week window. Optimized
+ * Select exact supported byes from the current scoring week's three-week window. Optimized
  * starters are intentionally grouped ahead of every bench warning, then warnings are ordered by
  * bye week and stable player identity. Missing weeks/byes stay silent rather than being inferred.
  */
 export function buildUpcomingByeWarnings(
   rows: readonly HubRosterRow[],
-  projectionWeek: number | null,
+  currentWeek: number | null,
 ): HubByeWarning[] {
   const seenPlayerIds = new Set<string>();
 
   return rows
     .filter((row) => {
-      if (!isUpcomingByeWeek(row.byeWeek, projectionWeek) || seenPlayerIds.has(row.playerId)) return false;
+      if (!isUpcomingByeWeek(row.byeWeek, currentWeek) || seenPlayerIds.has(row.playerId)) return false;
       seenPlayerIds.add(row.playerId);
       return true;
     })
