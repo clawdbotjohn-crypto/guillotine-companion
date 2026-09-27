@@ -1,3 +1,17 @@
+# Handoff — PR #11 eliminated badge in Bid Profile popup (2026-09-26)
+
+John requested that an eliminated manager's Bid Profile popup explicitly show `Eliminated` beside the manager name using the same presentation as Teams/Teams.
+
+Implemented:
+- `ManagerDetailsModal` accepts an optional eliminated state and renders the shared `StatusBadge status="eliminated"` beside the manager heading.
+- `TeamBidProfiles` supplies that state from the active-roster set. Active Bid Profile popups and Waivers manager-prediction popups do not show the badge.
+- Existing modal title association, wrapping, geometry, focus behavior, and calculations remain intact.
+- Regression verifies the badge is absent for an active manager, present for an eliminated manager, and the hidden eliminated modal still closes when filtering is turned off.
+
+Verification: focused Teams/Bid Profiles 25/25, full frontend 24 files/162 tests, API 36/36, lint, typecheck, production build, and `git diff --check` all passed. Pending commit/push and preview rebuild. No merge or production deployment.
+
+---
+
 # Handoff — PR #11 eliminated Bid Profile grouping/presentation (2026-09-26)
 
 John requested two refinements after reviewing the checkbox patch: visually mute eliminated manager names just like Teams/Teams, and place eliminated Bid Profiles after all surviving profiles.

@@ -1,5 +1,11 @@
 # Guillotine Companion — Progress
 
+## 🚨 PR #11 owner follow-up — eliminated label in manager popup (John, 2026-09-26)
+
+- [x] When an eliminated manager's Bid Profile popup is opened, show the shared Teams/Teams `Eliminated` status badge beside the manager name.
+- [x] Do not show the badge for active managers or Waivers manager-prediction popups. Preserve existing modal geometry/accessibility and add regression coverage.
+- [x] Push to PR #11 after full verification; do not merge or deploy production.
+
 ## 🚨 PR #11 owner follow-up — visually separate eliminated Bid Profiles (John, 2026-09-26)
 
 - [x] When `Show eliminated teams` is enabled, list all active/surviving Bid Profiles first, then all eliminated profiles; retain multiplier-descending/deterministic ordering within each group.

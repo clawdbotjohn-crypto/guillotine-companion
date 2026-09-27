@@ -300,6 +300,10 @@ describe('manager bid presentation', () => {
     ]);
     expect(screen.queryByRole('button', { name: /open bid profile for Zero Zoe/i })).toBeNull();
     expect(screen.getByText('$800').closest('[data-faab-quartile]')?.getAttribute('data-faab-quartile')).toBe('top');
+    fireEvent.click(screen.getByRole('button', { name: /open bid profile for Aggressive Alice/i }));
+    const activeDialog = screen.getByRole('dialog', { name: 'Aggressive Alice' });
+    expect(within(activeDialog).queryByText('Eliminated')).toBeNull();
+    fireEvent.click(within(activeDialog).getByRole('button', { name: /close manager details/i }));
 
     rerender(<TeamBidProfiles {...props} showEliminatedTeams />);
     expect(screen.getAllByRole('button', { name: /open bid profile/i }).map((node) => node.getAttribute('aria-label'))).toEqual([
@@ -312,7 +316,8 @@ describe('manager bid presentation', () => {
     expect(activeName.className).toContain('text-[#f0f0ff]');
     expect(eliminatedName.className).toContain('text-[#4a4d77]');
     fireEvent.click(screen.getByRole('button', { name: /open bid profile for Zero Zoe/i }));
-    expect(screen.getByRole('dialog', { name: 'Zero Zoe' })).toBeTruthy();
+    const eliminatedDialog = screen.getByRole('dialog', { name: 'Zero Zoe' });
+    expect(within(eliminatedDialog).getByText('Eliminated')).toBeTruthy();
 
     rerender(<TeamBidProfiles {...props} showEliminatedTeams={false} />);
     expect(screen.queryByRole('dialog', { name: 'Zero Zoe' })).toBeNull();

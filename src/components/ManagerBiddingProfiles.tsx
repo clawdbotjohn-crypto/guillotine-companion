@@ -6,7 +6,7 @@ import type { ManagerBiddingProfile, ManagerBidEvidence, ManagerBidStyle } from 
 import type { ManagerDetailData, ManagerTeamNeed } from '../logic/managerDetails';
 import { currentFaab, managerName, orderManagerPredictions, type ManagerPredictionDisplay } from '../logic/managerPredictionDisplay';
 import { faabQuartile, faabQuartileLabel, type FaabQuartileBand } from '../logic/rankingQuartiles';
-import { Button, Card, Skeleton } from './ui';
+import { Button, Card, Skeleton, StatusBadge } from './ui';
 
 const EMPTY_DETAILS: ManagerDetailData = { upcomingByes: [], teamNeeds: [] };
 
@@ -192,6 +192,7 @@ export function ManagerDetailsModal({
   details,
   getPlayerName,
   onClose,
+  isEliminated = false,
 }: {
   profile: ManagerBiddingProfile;
   manager: string;
@@ -200,6 +201,7 @@ export function ManagerDetailsModal({
   details: ManagerDetailData;
   getPlayerName: (playerId: string) => string;
   onClose: () => void;
+  isEliminated?: boolean;
 }) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -256,7 +258,10 @@ export function ManagerDetailsModal({
       >
         <header className="flex shrink-0 items-start justify-between gap-4 border-b border-[#2d3262] px-4 py-4 sm:px-5">
           <div className="min-w-0">
-            <h2 id={`manager-dialog-${profile.managerRosterId}`} className="truncate font-['Orbitron'] text-base font-bold text-[#f0f0ff]">{manager}</h2>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <h2 id={`manager-dialog-${profile.managerRosterId}`} className="min-w-0 truncate font-['Orbitron'] text-base font-bold text-[#f0f0ff]">{manager}</h2>
+              {isEliminated && <StatusBadge status="eliminated" />}
+            </div>
             <div className="mt-2"><ManagerStyleBadge profile={profile} /></div>
           </div>
           <button ref={closeButtonRef} type="button" onClick={onClose} aria-label="Close manager details" className="-mr-1 min-h-11 min-w-11 rounded-lg p-2 text-[#a5a8cf] hover:bg-[#242855] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a5b4fc]">
@@ -493,6 +498,7 @@ export function TeamBidProfiles({
           activeFaabAmounts={activeFaabAmounts}
           details={detailsByRosterId.get(selected.managerRosterId) ?? EMPTY_DETAILS}
           getPlayerName={getPlayerName}
+          isEliminated={Boolean(activeRosterIds && !activeRosterIds.has(selected.managerRosterId))}
           onClose={() => setSelected(null)}
         />
       )}
