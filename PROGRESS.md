@@ -1,5 +1,19 @@
 # Guillotine Companion — Progress
 
+## 🚨 P0 follow-up — weekly top-three and median-market multiplier analysis (John, 2026-09-27)
+
+**Owner question:** For each completed decision week, excluding the owner-designated irrational-price outlier and omitting Aggressive because it is derived from Safe, quantify how actual winning and median-market bids scale relative to Max VORP, VoRP, Safe, and Weeks as Starter.
+
+- [x] Identify each week's top three unique won players by highest canonical completed winning bid after the explicit owner-directed exclusion. Audit all available completed weeks; include a week only if a same-week strategy snapshot supports a like-for-like result, and explain any missing week. Deterministically resolve ties and deduplicate contingency/drop-path claims.
+- [x] **Analysis A — top-three winning prices:** For each selected player/week and each non-Aggressive strategy, calculate `winning bid / intrinsic strategy suggestion`. Show player-level (privacy-safe labels), weekly arithmetic mean multiplier (John's requested “average”), and geometric mean plus median as skew sensitivity. Explicitly mark undefined zero-denominator cases and FAAB-censored winning bids.
+- [x] **Analysis B — median market:** For every eligible player/week cluster with a completed win, calculate the median canonical serious market bid from the winner plus legitimate failed competing claims (token threshold remains >$5). Compare each strategy to that median using MAE, median AE, signed bias, R²/Spearman where meaningful, and identify which strategy is closest overall and by week. Report all-bid median as sensitivity if materially different.
+- [x] **Analysis C — top-three median-market multipliers:** For the same weekly top-three players, calculate `median serious bid / intrinsic strategy suggestion` and report player-level ratios plus weekly arithmetic/geometric/median aggregate multipliers for Max VORP, VoRP, Safe, and Weeks as Starter.
+- [x] Keep the owner-designated event in the raw audit dataset; exclude it only in the explicitly labeled owner-directed view. Also show a compact with-vs-without sensitivity so the report does not silently discard an outlier.
+- [x] Add concise charts/tables and a 5-bullet answer to the existing owner-facing HTML/PDF presentation. Connect findings to the separate shape-vs-scale hypothesis without claiming individual manager styles from sparse data.
+- [x] Generate all results from canonical fixture/source code, add deterministic tests/formula guards, preserve reconstructed provenance labels, and disclose sample sizes and denominator/censoring rules. No manager identities, league ID, credentials, or raw private payloads.
+- [ ] Commit/push only `analysis/bidding-strategy-accuracy` to update PR #12. Never merge, deploy, push main, or dispatch workflows. Provide updated HTML/PDF paths for direct owner delivery.
+
+
 ## 🚨 P0 follow-up — visual bidding-analysis presentation (John, 2026-09-27)
 
 **Goal:** Turn PR #12's reproducible analyst appendix into an owner-facing presentation document that is easy to digest. The PR remains an audit trail, not the primary presentation.

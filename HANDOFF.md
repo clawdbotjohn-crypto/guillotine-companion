@@ -1,3 +1,45 @@
+# Handoff — weekly top-three + median-market P0 (2026-09-27)
+
+Status: complete locally; ready to commit and update review-only PR #12. No product/default behavior changed.
+
+## Exact owner answer
+
+- W2 top-three winning-bid arithmetic multipliers (observed ÷ intrinsic): Max VORP **3.34×**, VoRP **3.38×**, Safe **2.95×**, Weeks as Starter **3.37×**. Serious-market-median arithmetic multipliers: **1.40× / 1.42× / 1.35× / 1.53×** in the same strategy order.
+- W3 owner-directed top-three winning-bid arithmetic multipliers: Max VORP **2.35×**, VoRP **3.00×**, Safe **2.87×**, Weeks as Starter **2.87×**. Serious-market-median arithmetic multipliers: **0.78× / 1.00× / 1.13× / 1.13×**.
+- **VoRP is closest overall** to serious median market price: MAE **$10.98** across 21 defined-strategy clusters (28 eligible player/week serious-median clusters before zero-denominator coverage). By week, W2 narrowly favors Max VORP (**$14.86** vs VoRP **$14.95**); W3 favors VoRP (**$6.60**). All-bid median sensitivity also favors VoRP.
+- The private GET-only trace maps the owner-designated outlier to exactly one anonymized canonical **W3 $234** win using a unique exact position/total projection fingerprint in both W2 and W3 snapshots. Raw evidence remains; only the labeled owner view excludes it. Including it keeps VoRP closest overall (MAE $11.07 vs $10.98 excluded). No name, raw player/event ID, league ID, manager identity, or payload is committed.
+- Result supports **strategy shape × market scale**: intrinsic formulas rank/shape targets while weekly observed÷intrinsic multipliers estimate market scale. Two reconstructed weeks do not justify individual manager-style claims or a production default change.
+
+## Implementation and evidence rules
+
+- `scripts/weekly-market-analysis.ts`: pure player/week clustering, highest canonical winner selection, same-processing-batch legitimate competitor filtering, >$5 serious threshold, four non-derived strategies, ratio coverage, arithmetic/geometric/median aggregates, censoring, MAE/median AE/bias/unfitted R²/Spearman, and with/without sensitivity.
+- `scripts/weekly-market-report.ts`: deterministic five-bullet appendix and detailed tables.
+- `scripts/analyze-bidding-strategies.ts`: inserts the new answer first in the generated Markdown while preserving the prior study.
+- `scripts/generate-bidding-analysis-presentation.ts`: first-page five-bullet answer, new charts/tables, split print-safe player tables, and deterministic Chromium PDF metadata.
+- Tests: `scripts/__tests__/weekly-market-analysis.test.ts` plus presentation regressions.
+- W2/W3 are the only eligible same-week reconstructed snapshots. W4 remains explicitly unavailable; no fallback is manufactured. Zero suggestions are undefined with defined/total coverage. Exact FAAB equality is treated as censored; none of the six selected targets are censored.
+
+## Verification
+
+- Focused analysis/presentation: **3 files / 15 tests passed**.
+- Full frontend: **27 files / 177 tests passed**.
+- API: **36/36 passed**.
+- `npm run typecheck`, `npm run build`: passed.
+- `npm run lint`: 0 errors; one pre-existing `react(set-state-in-effect)` warning in `ManagerBiddingProfiles.tsx`.
+- `git diff --check`: passed. Added-line secret/private scan: passed; the generated legacy methodology retains only existing redacted refresh placeholders/project provenance.
+- Determinism: consecutive final SHA-256 values match — Markdown `2d3391f799394212898077db3425ea34d4fbc69366dbbed9927fd3a121ab29bd`, HTML `cabee38c4edb028ced8c58c1a4cf70e071abb2b3debfb6509968d13f6ccac219`, PDF `17421b3d9eb63db92818bfedf9fd642d97722daee29481d28f0e9954aecfe513`.
+- Render inspection: HTML at 1440×1000 and 390×844 has no document-level overflow; wide tables scroll only inside their containers. Letter print is **13 pages**. Ghostscript inspection confirmed the first five pages are readable and unclipped after splitting the winning/market target table; the previously reviewed legacy sections remain intact.
+
+## Artifacts and delivery
+
+- `docs/analysis/bidding-strategy-accuracy-seamex-2026.md`
+- `docs/analysis/bidding-strategy-accuracy-seamex-2026.html`
+- `docs/analysis/bidding-strategy-accuracy-seamex-2026.pdf`
+- Branch: `analysis/bidding-strategy-accuracy`; PR: <https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/12>.
+- Commit/push status: pending final top-level commit. Do not merge or deploy.
+
+---
+
 # Handoff — owner-facing bidding analysis presentation (2026-09-27)
 
 Completed the P0 visual follow-up on PR #12 without changing production behavior, merging, or deploying.

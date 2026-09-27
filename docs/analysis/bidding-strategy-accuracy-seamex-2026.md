@@ -2,6 +2,155 @@
 
 Deterministic offline report generated from anonymized fixture version 1. Data are complete through **2026-09-25T23:00:08.539Z**; there is no wall-clock generation timestamp. Regenerate byte-for-byte with `npm run analyze:bidding`.
 
+## Five-bullet answer: weekly price multipliers
+
+- Scope: W2 and W3 have same-week reconstructed snapshots. The top three are unique canonical winners after owner-directed-outlier-01 (private GET-only catalog match plus exact position/total fingerprints in both reconstructed snapshots map uniquely to one canonical completed W3 win at $234; proof matches=1); the closest overall serious-median strategy is VoRP.
+- W2 top-three winning-price arithmetic multipliers (observed/intrinsic): Max VORP 3.34× (3/3); VoRP 3.38× (3/3); Safe 2.95× (3/3); Weeks as Starter 3.37× (3/3).
+- W3 top-three winning-price arithmetic multipliers (observed/intrinsic): Max VORP 2.35× (3/3); VoRP 3.00× (3/3); Safe 2.87× (3/3); Weeks as Starter 2.87× (3/3).
+- W2 top-three serious-market-median arithmetic multipliers: Max VORP 1.40× (3/3); VoRP 1.42× (3/3); Safe 1.35× (3/3); Weeks as Starter 1.53× (3/3); closest across all W2 eligible market clusters: Max VORP.
+- W3 top-three serious-market-median arithmetic multipliers: Max VORP 0.78× (3/3); VoRP 1.00× (3/3); Safe 1.13× (3/3); Weeks as Starter 1.13× (3/3); closest across all W3 eligible market clusters: VoRP.
+
+## Weekly top-three and median-market appendix
+
+This owner-directed view compares only **Max VORP, VoRP, Safe, and Weeks as Starter**. Aggressive is excluded because it is derived from Safe. Only events with an exact decision-week snapshot join are eligible; W4 is absent because only a W3 fallback existed. “Serious” is strictly **bid > $5**. Ratios are **observed/intrinsic**, not intrinsic/observed. A zero intrinsic denominator is undefined, excluded from arithmetic/geometric/median aggregation, and counted in coverage. A winning or competing bid at its reconstructed pre-bid FAAB is marked as FAAB-censored because latent willingness may be higher.
+
+### W2 — Analysis A: top-three winning prices
+
+| Privacy-safe target | Winning bid | FAAB-censored? | Max VORP ratio | VoRP ratio | Safe ratio | Weeks as Starter ratio |
+| --- | --- | --- | --- | --- | --- | --- |
+| W2 target 1 | $285 | no | 4.75 | 4.83 | 3.17 | 3.65 |
+| W2 target 2 | $153 | no | 2.73 | 2.78 | 1.72 | 2.15 |
+| W2 target 3 | $99 | no | 2.54 | 2.54 | 3.96 | 4.30 |
+
+| Strategy | Defined/total | Arithmetic mean × | Geometric mean × | Median × |
+| --- | --- | --- | --- | --- |
+| Max VORP | 3/3 | 3.34 | 3.21 | 2.73 |
+| VoRP | 3/3 | 3.38 | 3.24 | 2.78 |
+| Safe | 3/3 | 2.95 | 2.78 | 3.17 |
+| Weeks as Starter | 3/3 | 3.37 | 3.24 | 3.65 |
+
+### W2 — Analysis C: top-three median-market prices
+
+| Privacy-safe target | Serious median | Serious/all n | Censored observations | All-bid median | Max VORP ratio | VoRP ratio | Safe ratio | Weeks as Starter ratio |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| W2 target 1 | $85.0 | 21/21 | 0 | $85.0 | 1.42 | 1.44 | 0.94 | 1.09 |
+| W2 target 2 | $75.0 | 19/19 | 0 | $75.0 | 1.34 | 1.36 | 0.84 | 1.06 |
+| W2 target 3 | $56.5 | 8/9 | 0 | $53.0 | 1.45 | 1.45 | 2.26 | 2.46 |
+
+| Strategy | Defined/total | Arithmetic mean × | Geometric mean × | Median × |
+| --- | --- | --- | --- | --- |
+| Max VORP | 3/3 | 1.40 | 1.40 | 1.42 |
+| VoRP | 3/3 | 1.42 | 1.42 | 1.44 |
+| Safe | 3/3 | 1.35 | 1.22 | 0.94 |
+| Weeks as Starter | 3/3 | 1.53 | 1.41 | 1.09 |
+
+† All-bid median differs from the serious-bid median by at least $5.
+
+### W3 — Analysis A: top-three winning prices
+
+| Privacy-safe target | Winning bid | FAAB-censored? | Max VORP ratio | VoRP ratio | Safe ratio | Weeks as Starter ratio |
+| --- | --- | --- | --- | --- | --- | --- |
+| W3 target 1 | $231 | no | 3.50 | 4.62 | 3.00 | 3.00 |
+| W3 target 2 | $187 | no | 2.23 | 2.43 | 1.78 | 1.78 |
+| W3 target 3 | $103 | no | 1.32 | 1.94 | 3.81 | 3.81 |
+
+| Strategy | Defined/total | Arithmetic mean × | Geometric mean × | Median × |
+| --- | --- | --- | --- | --- |
+| Max VORP | 3/3 | 2.35 | 2.17 | 2.23 |
+| VoRP | 3/3 | 3.00 | 2.79 | 2.43 |
+| Safe | 3/3 | 2.87 | 2.73 | 3.00 |
+| Weeks as Starter | 3/3 | 2.87 | 2.73 | 3.00 |
+
+### W3 — Analysis C: top-three median-market prices
+
+| Privacy-safe target | Serious median | Serious/all n | Censored observations | All-bid median | Max VORP ratio | VoRP ratio | Safe ratio | Weeks as Starter ratio |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| W3 target 1 | $56.0 | 13/14 | 0 | $53.0 | 0.85 | 1.12 | 0.73 | 0.73 |
+| W3 target 2 | $66.5 | 14/15 | 0 | $66.0 | 0.79 | 0.86 | 0.63 | 0.63 |
+| W3 target 3 | $54.5 | 14/14 | 0 | $54.5 | 0.70 | 1.03 | 2.02 | 2.02 |
+
+| Strategy | Defined/total | Arithmetic mean × | Geometric mean × | Median × |
+| --- | --- | --- | --- | --- |
+| Max VORP | 3/3 | 0.78 | 0.78 | 0.79 |
+| VoRP | 3/3 | 1.00 | 1.00 | 1.03 |
+| Safe | 3/3 | 1.13 | 0.98 | 0.73 |
+| Weeks as Starter | 3/3 | 1.13 | 0.98 | 0.73 |
+
+† All-bid median differs from the serious-bid median by at least $5.
+
+## Analysis B: median serious market versus intrinsic strategy
+
+Each player/week cluster selects its highest canonical completed winner, then includes only legitimate failed competing claims proven against that winner in the same processing batch. Metrics use one median observation per eligible player/week, avoiding duplicate weight from contingency/drop paths or a second clearing cycle. R² is the unfitted identity-line diagnostic (and may be negative); it and Spearman are shown only when at least two non-constant observations make them meaningful.
+
+### Overall
+
+Serious median clusters: 28/45; closest=VoRP. Undefined strategy zeros are omitted strategy-by-strategy, so n is visible.
+
+| Strategy | n | MAE | Median AE | Bias (intrinsic−market) | R² | Spearman ρ |
+| --- | --- | --- | --- | --- | --- | --- |
+| Max VORP | 21 | 12.5 | 8.0 | +1.5 | 0.56 | 0.79 |
+| VoRP | 21 | 11.0 | 7.0 | -1.0 | 0.63 | 0.78 |
+| Safe | 25 | 28.4 | 31.5 | +18.7 | -1.26 | 0.42 |
+| Weeks as Starter | 23 | 17.4 | 12.0 | +5.9 | 0.11 | 0.57 |
+
+**All-bid-median sensitivity** (12 materially changed clusters; closest=VoRP):
+
+| Strategy | n | MAE | Median AE | Bias (intrinsic−market) | R² | Spearman ρ |
+| --- | --- | --- | --- | --- | --- | --- |
+| Max VORP | 25 | 12.1 | 9.0 | +6.4 | 0.66 | 0.86 |
+| VoRP | 25 | 10.6 | 8.5 | +4.3 | 0.71 | 0.86 |
+| Safe | 34 | 28.2 | 25.0 | +22.9 | -1.10 | 0.50 |
+| Weeks as Starter | 32 | 15.2 | 10.5 | +9.2 | 0.31 | 0.69 |
+
+### W2
+
+Serious median clusters: 13/20; closest=Max VORP. Undefined strategy zeros are omitted strategy-by-strategy, so n is visible.
+
+| Strategy | n | MAE | Median AE | Bias (intrinsic−market) | R² | Spearman ρ |
+| --- | --- | --- | --- | --- | --- | --- |
+| Max VORP | 11 | 14.9 | 14.0 | -3.7 | 0.52 | 0.81 |
+| VoRP | 11 | 15.0 | 14.0 | -4.0 | 0.52 | 0.81 |
+| Safe | 11 | 31.0 | 31.5 | +25.0 | -1.05 | 0.46 |
+| Weeks as Starter | 11 | 18.7 | 12.0 | +5.0 | 0.14 | 0.50 |
+
+**All-bid-median sensitivity** (5 materially changed clusters; closest=Max VORP):
+
+| Strategy | n | MAE | Median AE | Bias (intrinsic−market) | R² | Spearman ρ |
+| --- | --- | --- | --- | --- | --- | --- |
+| Max VORP | 14 | 12.6 | 10.0 | +2.9 | 0.65 | 0.81 |
+| VoRP | 14 | 12.7 | 10.0 | +2.6 | 0.65 | 0.81 |
+| Safe | 15 | 31.3 | 28.0 | +27.6 | -0.90 | 0.64 |
+| Weeks as Starter | 15 | 16.6 | 10.5 | +9.3 | 0.33 | 0.64 |
+
+### W3
+
+Serious median clusters: 15/25; closest=VoRP. Undefined strategy zeros are omitted strategy-by-strategy, so n is visible.
+
+| Strategy | n | MAE | Median AE | Bias (intrinsic−market) | R² | Spearman ρ |
+| --- | --- | --- | --- | --- | --- | --- |
+| Max VORP | 10 | 9.9 | 8.0 | +7.1 | 0.65 | 0.91 |
+| VoRP | 10 | 6.6 | 6.0 | +2.3 | 0.85 | 0.91 |
+| Safe | 14 | 26.3 | 30.3 | +13.8 | -1.59 | 0.48 |
+| Weeks as Starter | 12 | 16.3 | 12.8 | +6.8 | 0.05 | 0.73 |
+
+**All-bid-median sensitivity** (7 materially changed clusters; closest=VoRP):
+
+| Strategy | n | MAE | Median AE | Bias (intrinsic−market) | R² | Spearman ρ |
+| --- | --- | --- | --- | --- | --- | --- |
+| Max VORP | 11 | 11.4 | 8.5 | +10.9 | 0.66 | 0.89 |
+| VoRP | 11 | 7.9 | 8.0 | +6.5 | 0.83 | 0.89 |
+| Safe | 19 | 25.7 | 25.0 | +19.3 | -1.40 | 0.44 |
+| Weeks as Starter | 17 | 13.9 | 10.5 | +9.1 | 0.27 | 0.73 |
+
+## Owner-directed exclusion sensitivity
+
+The underlying canonical evidence is retained. The primary view excludes only the deterministic anonymized marker **owner-directed-outlier-01**, established by private GET-only catalog match plus exact position/total fingerprints in both reconstructed snapshots map uniquely to one canonical completed W3 win at $234; no private name or identifier is stored or printed. Without owner-directed-outlier-01: n=28, closest=VoRP (Max VORP MAE 12.5; VoRP MAE 11.0; Safe MAE 28.4; Weeks as Starter MAE 17.4). With the marked target: n=29, closest=VoRP (Max VORP MAE 12.5; VoRP MAE 11.1; Safe MAE 28.5; Weeks as Starter MAE 16.9).
+
+## Shape × scale interpretation
+
+The four intrinsic strategies describe **target shape**—which players should cost relatively more—while the observed/intrinsic multipliers estimate a separate **market scale** for each week. The rank and error results can motivate a future model that combines strategy shape with a pooled week/market scale. They do **not** identify an individual manager style: two reconstructed weeks and sparse manager histories are insufficient for that claim.
+
+
 ## Executive result
 
 Among 47 usable winning bids, **Aggressive** has the lowest in-sample MAE (26.4). After the predeclared token rule, **Aggressive** is lowest (38.5). Robust-filter leaders are ratio-gap flag removed: Aggressive; MAD flag removed: Max VORP; IQR flag removed: Max VORP; the serious-bid leader is **not** stable across them. This is descriptive evidence from one 32-team league, 2 reconstructed decision weeks, not a universal strategy ranking. Do **not** change the production default from this study alone.

@@ -28,6 +28,8 @@ import {
   type EvaluatedBid,
   type FaabReconstruction,
 } from './bidding-strategy-analysis.ts';
+import { buildWeeklyMarketAnalysis } from './weekly-market-analysis.ts';
+import { renderWeeklyMarketMarkdown } from './weekly-market-report.ts';
 
 const FIXTURE_VERSION = 1;
 const SEASON = 2026;
@@ -508,6 +510,7 @@ function bestByMae(events: EnrichedEvent[], originalFaab: number): string {
 
 function renderReport(fixture: AnalysisFixture): string {
   const { usable, exclusions } = enrichEvents(fixture);
+  const weeklyAppendix = renderWeeklyMarketMarkdown(buildWeeklyMarketAnalysis(usable));
   const budget = fixture.league.initialFaab;
   const wins = usable.filter((event) => event.outcome === 'won');
   const serious = usable.filter((event) => !event.token);
@@ -638,6 +641,7 @@ function renderReport(fixture: AnalysisFixture): string {
 
   return `# SeaMex 2026 bidding-strategy accuracy analysis\n\n` +
 `Deterministic offline report generated from anonymized fixture version ${fixture.fixtureVersion}. Data are complete through **${fixture.source.dataThrough}**; there is no wall-clock generation timestamp. Regenerate byte-for-byte with \`npm run analyze:bidding\`.\n\n` +
+`${weeklyAppendix}\n\n` +
 `## Executive result\n\n` +
 `Among ${wins.length} usable winning bids, **${bestAllWins.label}** has the lowest in-sample MAE (${round(bestAllWins.mae, 1)}). After the predeclared token rule, **${bestSeriousWins.label}** is lowest (${round(bestSeriousWins.mae, 1)}). Robust-filter leaders are ${robustLeaders.join('; ')}; the serious-bid leader is ${robustlyStable ? '' : '**not** '}stable across them. This is descriptive evidence from one 32-team league, ${usableDecisionWeeks.length} reconstructed decision weeks, not a universal strategy ranking. Do **not** change the production default from this study alone.\n\n` +
 `The executable comparison uses the five strategies that actually exist in the registry: Max VORP, VoRP, Safe, Aggressive, and Weeks-as-Starter. The P0 label “Weekly” is **not** silently mapped to VoRP; the naming audit below establishes why it is excluded as undefined.\n\n` +

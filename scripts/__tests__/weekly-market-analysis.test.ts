@@ -1,0 +1,77 @@
+import { readFile } from 'node:fs/promises';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { enrichEvents, type AnalysisFixture } from '../analyze-bidding-strategies.ts';
+import {
+  buildWeeklyMarketAnalysis,
+  OWNER_DIRECTED_EXCLUSION,
+  summarizeRatios,
+  unfittedRSquared,
+  type WeeklyMarketAnalysis,
+} from '../weekly-market-analysis.ts';
+import { plainFiveBulletAnswer, renderWeeklyMarketMarkdown } from '../weekly-market-report.ts';
+
+let analysis: WeeklyMarketAnalysis;
+
+beforeAll(async () => {
+  const fixture = JSON.parse(await readFile('scripts/fixtures/bidding-strategy-seamex-2026.json', 'utf8')) as AnalysisFixture;
+  analysis = buildWeeklyMarketAnalysis(enrichEvents(fixture).usable);
+});
+
+describe('weekly top-three and median-market analysis', () => {
+  it('proves and excludes only the anonymized owner-directed W3 event', () => {
+    expect(OWNER_DIRECTED_EXCLUSION).toMatchObject({ decisionWeek: 3, actualBid: 234, outcome: 'won' });
+    expect(analysis.exclusion).toMatchObject({ marker: 'owner-directed-outlier-01', canonicalMatchCount: 1 });
+    expect(analysis.exclusion.proof).toContain('private GET-only catalog match');
+    expect(analysis.ownerDirected.topThree.map((week) => week.rows.map((row) => row.winningBid))).toEqual([
+      [285, 153, 99],
+      [231, 187, 103],
+    ]);
+    expect(analysis.withExcludedTarget.topThree[1].rows.map((row) => row.winningBid)).toEqual([234, 231, 187]);
+  });
+
+  it('reports exact weekly winning and serious-median ratio aggregates', () => {
+    const [week2, week3] = analysis.ownerDirected.topThree;
+    expect(week2.winnerMultipliers['max-vorp'].arithmeticMean).toBeCloseTo(3.3402014652, 9);
+    expect(week2.winnerMultipliers.vorp.geometricMean).toBeCloseTo(3.2431277708, 9);
+    expect(week2.marketMultipliers.safe.median).toBeCloseTo(0.9444444444, 9);
+    expect(week3.winnerMultipliers['max-vorp'].arithmeticMean).toBeCloseTo(2.3489010989, 9);
+    expect(week3.winnerMultipliers.vorp.median).toBeCloseTo(2.4285714286, 9);
+    expect(week3.marketMultipliers['weeks-starter'].geometricMean).toBeCloseTo(0.9760096884, 9);
+    expect(week2.rows.map((row) => row.seriousMedianBid)).toEqual([85, 75, 56.5]);
+    expect(week3.rows.map((row) => row.seriousMedianBid)).toEqual([56, 66.5, 54.5]);
+  });
+
+  it('finds VoRP closest overall, Max VORP in W2, and VoRP in W3', () => {
+    const [overall, week2, week3] = analysis.ownerDirected.marketMetrics;
+    expect([overall.week, week2.week, week3.week]).toEqual([null, 2, 3]);
+    expect(overall).toMatchObject({ seriousMedianClusters: 28, closest: 'VoRP', closestAllBid: 'VoRP' });
+    expect(week2).toMatchObject({ seriousMedianClusters: 13, closest: 'Max VORP' });
+    expect(week3).toMatchObject({ seriousMedianClusters: 15, closest: 'VoRP' });
+    expect(overall.metrics.find((row) => row.id === 'vorp')?.mae).toBeCloseTo(10.9761904762, 9);
+    expect(week2.metrics.find((row) => row.id === 'max-vorp')?.mae).toBeCloseTo(14.8636363636, 9);
+    expect(week3.metrics.find((row) => row.id === 'vorp')?.mae).toBeCloseTo(6.6, 9);
+    expect(analysis.withExcludedTarget.marketMetrics[0].seriousMedianClusters).toBe(29);
+    expect(analysis.withExcludedTarget.marketMetrics[0].closest).toBe('VoRP');
+  });
+
+  it('guards zero denominators, reports coverage, and treats R² as an unfitted diagnostic', () => {
+    expect(summarizeRatios([2, null, 8])).toEqual({ total: 3, defined: 2, arithmeticMean: 5, geometricMean: 4, median: 5 });
+    expect(unfittedRSquared([1, 2], [1, 2])).toBe(1);
+    expect(unfittedRSquared([1], [1])).toBeNull();
+    expect(unfittedRSquared([2, 2], [2, 2])).toBeNull();
+  });
+
+  it('puts exactly five plain bullets first and keeps identities private', () => {
+    const bullets = plainFiveBulletAnswer(analysis);
+    const markdown = renderWeeklyMarketMarkdown(analysis);
+    expect(bullets).toHaveLength(5);
+    expect(bullets[1]).toContain('W2');
+    expect(bullets[2]).toContain('W3');
+    expect(bullets.join('\n')).toContain('closest overall serious-median strategy is VoRP');
+    expect(markdown.indexOf('## Five-bullet answer')).toBeLessThan(markdown.indexOf('## Weekly top-three'));
+    expect(markdown).toContain('Max VORP 3.34×');
+    expect(markdown).toContain('VoRP 3.00×');
+    expect(markdown).toContain('private GET-only catalog match');
+    expect(markdown).not.toMatch(/player_[0-9]|manager_[0-9]|league[_ -]?id\s*[0-9]|\b[0-9]{17,20}\b/i);
+  });
+});

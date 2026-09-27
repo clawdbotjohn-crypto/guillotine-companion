@@ -4,6 +4,7 @@ import type { AnalysisFixture } from '../analyze-bidding-strategies.ts';
 import {
   buildPresentationModel,
   renderBiddingPresentation,
+  normalizePdfMetadata,
   rSquared,
   type PresentationModel,
 } from '../generate-bidding-analysis-presentation.ts';
@@ -18,6 +19,13 @@ beforeAll(async () => {
 });
 
 describe('owner-facing bidding analysis presentation', () => {
+  it('normalizes only volatile Chromium PDF timestamps', () => {
+    const first = Buffer.from("%PDF /CreationDate (D:20260927101000+00'00') /ModDate (D:20260927101000+00'00') body", 'latin1');
+    const second = Buffer.from("%PDF /CreationDate (D:20260927101159+00'00') /ModDate (D:20260927101159+00'00') body", 'latin1');
+    expect(normalizePdfMetadata(first)).toEqual(normalizePdfMetadata(second));
+    expect(normalizePdfMetadata(first).toString('latin1')).toContain("D:20260925230008+00'00'");
+  });
+
   it('reproduces the audited fixture values and distinguishes sample from robust result', () => {
     expect(model).toMatchObject({
       usable: { length: 239 },
@@ -48,13 +56,18 @@ describe('owner-facing bidding analysis presentation', () => {
 
   it('renders byte-deterministically with required caveats and no external runtime', () => {
     expect(renderBiddingPresentation(model)).toBe(html);
-    expect(html).toContain('Best in this sample');
-    expect(html).toContain('Robust recommendation');
-    expect(html).toContain('“Weekly” is not a formula.');
+    expect(model.weeklyBullets).toHaveLength(5);
+    expect(model.weeklyAnalysis.ownerDirected.marketMetrics[0].closest).toBe('VoRP');
+    expect(html.indexOf('Five-bullet answer')).toBeLessThan(html.indexOf('Prior accuracy study'));
+    expect(html).toContain('Weekly top-three winning multipliers');
+    expect(html).toContain('Exact weekly top-three multipliers');
+    expect(html).toContain('Median-market fit: overall, by week, and all-bid sensitivity');
+    expect(html).toContain('Compact with-vs-without sensitivity');
     expect(html).toContain('R² = 1 − SSE / SST');
     expect(html).toContain('95% bootstrap MAE CI');
     expect(html).toContain('smaller, non-comparable subset');
     expect(html).toContain('Reconstructed W2–W3 projection snapshots');
+    expect(html).not.toMatch(/manager_[0-9]|roster_[0-9]|\b\d{17,20}\b/i);
     expect(html).not.toMatch(/<script\b|https?:\/\/[^<]*\.(?:js|css)/i);
   });
 });
