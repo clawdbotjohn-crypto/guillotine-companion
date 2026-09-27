@@ -1,5 +1,11 @@
 # Guillotine Companion — Progress
 
+## 🚨 PR #11 owner follow-up — visually separate eliminated Bid Profiles (John, 2026-09-26)
+
+- [x] When `Show eliminated teams` is enabled, list all active/surviving Bid Profiles first, then all eliminated profiles; retain multiplier-descending/deterministic ordering within each group.
+- [x] Apply the same muted manager-name color used for eliminated cards in Teams/Teams so eliminated Bid Profiles are visually obvious.
+- [x] Preserve active-only FAAB quartiles, checkbox persistence/filtering, modal behavior, and all existing calculations. Add regression coverage, push to PR #11, and do not merge or deploy production.
+
 ## 🚨 PR #11 analysis correction — evaluate every selectable VoRP count (John, 2026-09-26)
 
 - [x] Max VORP must evaluate every integer team count exposed by the existing VoRP selector, from current active-team count through 4 inclusive. For SeaMex now, that is all 25 counts 28, 27, …, 4—not only the 19 counts reachable under the elimination cadence.

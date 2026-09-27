@@ -282,7 +282,7 @@ describe('manager bid presentation', () => {
 
   it('applies eliminated-team visibility to Bid Profiles without changing active FAAB tiers and closes hidden details', () => {
     const props = {
-      profiles: [profile(1, 1.5), profile(2, 0.84), profile(3, null)],
+      profiles: [profile(1, 1.5), profile(2, 0.84), profile(3, 2)],
       rosters,
       users,
       initialFaab: 1000,
@@ -307,6 +307,10 @@ describe('manager bid presentation', () => {
       'Open bid profile for Careful Chris',
       'Open bid profile for Zero Zoe',
     ]);
+    const activeName = within(screen.getByRole('button', { name: /open bid profile for Aggressive Alice/i })).getByText('Aggressive Alice');
+    const eliminatedName = within(screen.getByRole('button', { name: /open bid profile for Zero Zoe/i })).getByText('Zero Zoe');
+    expect(activeName.className).toContain('text-[#f0f0ff]');
+    expect(eliminatedName.className).toContain('text-[#4a4d77]');
     fireEvent.click(screen.getByRole('button', { name: /open bid profile for Zero Zoe/i }));
     expect(screen.getByRole('dialog', { name: 'Zero Zoe' })).toBeTruthy();
 

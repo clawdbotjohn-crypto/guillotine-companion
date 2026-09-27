@@ -430,8 +430,14 @@ export function TeamBidProfiles({
       .localeCompare(managerName(b.managerRosterId, rosters, users));
     return byName || a.managerRosterId - b.managerRosterId;
   });
-  const activeProfiles = ordered.filter((profile) => activeRosterIds?.has(profile.managerRosterId) ?? true);
-  const visibleProfiles = showEliminatedTeams ? ordered : activeProfiles;
+  const isActiveProfile = (profile: ManagerBiddingProfile) => (
+    activeRosterIds?.has(profile.managerRosterId) ?? true
+  );
+  const activeProfiles = ordered.filter(isActiveProfile);
+  const eliminatedProfiles = ordered.filter((profile) => !isActiveProfile(profile));
+  const visibleProfiles = showEliminatedTeams
+    ? [...activeProfiles, ...eliminatedProfiles]
+    : activeProfiles;
   const activeFaabAmounts = activeProfiles.map((profile) => currentFaab(profile.managerRosterId, rosters, initialFaab));
   const selectedName = selected ? managerName(selected.managerRosterId, rosters, users) : '';
   const selectedFaab = selected ? currentFaab(selected.managerRosterId, rosters, initialFaab) : 0;
@@ -444,6 +450,7 @@ export function TeamBidProfiles({
         )}
         {visibleProfiles.map((profile) => {
           const name = managerName(profile.managerRosterId, rosters, users);
+          const isEliminated = !isActiveProfile(profile);
           const faab = currentFaab(profile.managerRosterId, rosters, initialFaab);
           const faabBand = faabQuartile(faab, activeFaabAmounts);
           const highBid = highestBid(profile);
@@ -457,7 +464,7 @@ export function TeamBidProfiles({
             >
               <span className="flex items-start justify-between gap-3">
                 <span className="min-w-0">
-                  <span className="block truncate text-sm font-semibold text-[#f0f0ff]">{name}</span>
+                  <span className={`block truncate text-sm font-semibold ${isEliminated ? 'text-[#4a4d77]' : 'text-[#f0f0ff]'}`}>{name}</span>
                   <span className="mt-1 block text-[10px] text-[#8b8eb8]">Highest bid: <span className="font-['Space_Mono'] tabular-nums">{highBid == null ? '—' : `$${highBid}`}</span></span>
                 </span>
                 <span className="shrink-0 text-right">
