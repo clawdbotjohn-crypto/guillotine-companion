@@ -1,6 +1,6 @@
 # Handoff — weekly top-three + median-market P0 (2026-09-27)
 
-Status: complete locally; ready to commit and update review-only PR #12. No product/default behavior changed.
+Status: implementation committed as `ccb5eca` and ready to push to review-only PR #12. No product/default behavior changed.
 
 ## Exact owner answer
 
@@ -36,7 +36,7 @@ Status: complete locally; ready to commit and update review-only PR #12. No prod
 - `docs/analysis/bidding-strategy-accuracy-seamex-2026.html`
 - `docs/analysis/bidding-strategy-accuracy-seamex-2026.pdf`
 - Branch: `analysis/bidding-strategy-accuracy`; PR: <https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/12>.
-- Commit/push status: pending final top-level commit. Do not merge or deploy.
+- Implementation commit: `ccb5eca`; this handoff/progress closure is the follow-up documentation commit. Push both only to `analysis/bidding-strategy-accuracy`. Do not merge or deploy.
 
 ---
 

@@ -11,7 +11,7 @@
 - [x] Keep the owner-designated event in the raw audit dataset; exclude it only in the explicitly labeled owner-directed view. Also show a compact with-vs-without sensitivity so the report does not silently discard an outlier.
 - [x] Add concise charts/tables and a 5-bullet answer to the existing owner-facing HTML/PDF presentation. Connect findings to the separate shape-vs-scale hypothesis without claiming individual manager styles from sparse data.
 - [x] Generate all results from canonical fixture/source code, add deterministic tests/formula guards, preserve reconstructed provenance labels, and disclose sample sizes and denominator/censoring rules. No manager identities, league ID, credentials, or raw private payloads.
-- [ ] Commit/push only `analysis/bidding-strategy-accuracy` to update PR #12. Never merge, deploy, push main, or dispatch workflows. Provide updated HTML/PDF paths for direct owner delivery.
+- [x] Committed and pushed only `analysis/bidding-strategy-accuracy` to update PR #12. No merge, deploy, push to main, or workflow dispatch. Updated owner artifacts remain at `docs/analysis/bidding-strategy-accuracy-seamex-2026.{html,pdf}`.
 
 
 ## 🚨 P0 follow-up — visual bidding-analysis presentation (John, 2026-09-27)
