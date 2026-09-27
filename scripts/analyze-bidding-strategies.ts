@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
 import type { League, Transaction } from '../src/api/types.ts';
 import type { RosPlayerProjection } from '../src/logic/projections.ts';
 import {
@@ -34,7 +35,7 @@ const EXPECTED_PROJECT_REF = 'xduqpomhjdlgmtmmkfed';
 const FIXTURE_PATH = 'scripts/fixtures/bidding-strategy-seamex-2026.json';
 const REPORT_PATH = 'docs/analysis/bidding-strategy-accuracy-seamex-2026.md';
 const API = 'https://api.sleeper.app/v1';
-const STRATEGIES = [
+export const STRATEGIES = [
   ['max-vorp', 'Max VORP'],
   ['vorp', 'VoRP'],
   ['safe', 'Safe'],
@@ -42,7 +43,7 @@ const STRATEGIES = [
   ['weeks-starter', 'Weeks as Starter'],
 ] as const;
 
-type StrategyId = typeof STRATEGIES[number][0];
+export type StrategyId = typeof STRATEGIES[number][0];
 
 interface FixtureProjection {
   player: string;
@@ -83,7 +84,7 @@ interface EventFixture {
   duplicateCount: number;
 }
 
-interface AnalysisFixture {
+export interface AnalysisFixture {
   fixtureVersion: number;
   season: number;
   competitionLabel: string;
@@ -109,7 +110,7 @@ interface AnalysisFixture {
   events: EventFixture[];
 }
 
-interface EnrichedEvent extends EventFixture {
+export interface EnrichedEvent extends EventFixture {
   position: string;
   posRank: number;
   activeTeams: number;
@@ -405,7 +406,7 @@ function assignTiers(events: EnrichedEvent[]): void {
   }
 }
 
-function enrichEvents(fixture: AnalysisFixture): { usable: EnrichedEvent[]; exclusions: Record<string, number> } {
+export function enrichEvents(fixture: AnalysisFixture): { usable: EnrichedEvent[]; exclusions: Record<string, number> } {
   const exclusions: Record<string, number> = {};
   const usable: EnrichedEvent[] = [];
   const suggestionByEvent = new Map<string, Record<StrategyId, number>>();
@@ -468,7 +469,7 @@ function enrichEvents(fixture: AnalysisFixture): { usable: EnrichedEvent[]; excl
   return { usable, exclusions: Object.fromEntries(Object.entries(exclusions).sort(([a], [b]) => a.localeCompare(b))) };
 }
 
-function evaluationRows(events: EnrichedEvent[], strategy: StrategyId, originalFaab: number): EvaluatedBid[] {
+export function evaluationRows(events: EnrichedEvent[], strategy: StrategyId, originalFaab: number): EvaluatedBid[] {
   return events.map((event) => ({
     eventId: event.event,
     clusterId: `${event.decisionWeek}:${event.batch}:${event.player}`,
@@ -699,4 +700,6 @@ async function main(): Promise<void> {
   console.log(`Wrote ${REPORT_PATH}${refresh ? ` and ${FIXTURE_PATH}` : ''}`);
 }
 
-await main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error: unknown) => { console.error(error); process.exitCode = 1; });
+}

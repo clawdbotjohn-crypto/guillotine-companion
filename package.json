@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "oxlint",
     "analyze:max-vorp": "tsx scripts/analyze-max-vorp.ts",
-    "analyze:bidding": "tsx scripts/analyze-bidding-strategies.ts"
+    "analyze:bidding": "tsx scripts/analyze-bidding-strategies.ts",
+    "analyze:bidding:presentation": "tsx scripts/generate-bidding-analysis-presentation.ts --pdf"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",

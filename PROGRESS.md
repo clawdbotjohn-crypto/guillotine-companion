@@ -1,5 +1,16 @@
 # Guillotine Companion — Progress
 
+## 🚨 P0 follow-up — visual bidding-analysis presentation (John, 2026-09-27)
+
+**Goal:** Turn PR #12's reproducible analyst appendix into an owner-facing presentation document that is easy to digest. The PR remains an audit trail, not the primary presentation.
+
+- [x] Produce a polished standalone visual report from the committed anonymized fixture/results, with a one-page executive summary and concise key-finding bullets.
+- [x] Include charts for winning-bid error by strategy, serious/all-bid error, signed bias, rank/coverage performance, outlier-sensitivity stability, actual-vs-predicted behavior, and manager-adjusted forecast results where comparability is valid. Clearly display n and reconstructed provenance on every applicable view.
+- [x] Add and explain formulas for MAE, median AE, bias, Spearman rank correlation, R², normalized FAAB error, cluster-bootstrap intervals, token threshold, and outlier rules. State where R² is an unsuitable or potentially negative measure for unfitted intrinsic valuations.
+- [x] Use honest visual hierarchy: distinguish `best in this sample` from `robust recommendation`; do not imply Aggressive is universally best or compare manager-adjusted and raw models without noting their different forecastable subsets.
+- [x] Generate an easily viewable self-contained HTML plus PDF (or equivalent portable presentation) with no external runtime/CDN dependency, no identities/league ID/secrets, and accessible legends/colors. Add a reproducible generation command and automated data/formula checks.
+- [x] Verify rendered desktop and mobile/print output, commit/push to existing `analysis/bidding-strategy-accuracy`, and update PR #12. Do not merge or deploy. Provide the local artifact path so main can attach the presentation directly to John.
+
 ## 🚨 P0 — Bidding strategy accuracy analysis (John authorized, 2026-09-27; COMPLETE LOCALLY)
 
 **Goal:** Produce a reproducible, offline, review-only SeaMex report comparing Max VORP, Weekly, Safe, Aggressive, and Weeks as Starter against real 2026 waiver bids. This is analysis only; do not change production strategy/default behavior.

@@ -1,3 +1,34 @@
+# Handoff — owner-facing bidding analysis presentation (2026-09-27)
+
+Completed the P0 visual follow-up on PR #12 without changing production behavior, merging, or deploying.
+
+Artifacts:
+- `docs/analysis/bidding-strategy-accuracy-seamex-2026.html` — self-contained owner-facing report with inline CSS/SVG and no external runtime or CDN dependency.
+- `docs/analysis/bidding-strategy-accuracy-seamex-2026.pdf` — directly attachable 8-page Letter PDF generated from the HTML.
+- `scripts/generate-bidding-analysis-presentation.ts` — deterministic fixture-to-model-to-HTML/PDF generator; run with `npm run analyze:bidding:presentation`.
+- `scripts/__tests__/bidding-analysis-presentation.test.ts` — canonical counts/metrics/bootstrap-CI checks, explicit `R² = 1 − SSE/SST` and negative-R² coverage, deterministic HTML, privacy, and dependency guards.
+
+Presentation content:
+- Page 1 is a complete one-page executive summary: tested scope/provenance, four key findings, sample winner, robust recommendation, owner action, and the Weekly naming audit.
+- Inline SVGs cover winning MAE, all/serious MAE, signed bias, Spearman/range coverage, five token/outlier sensitivity cases, five actual-vs-predicted small multiples with identity lines and R², and the strictly prior-history manager-adjusted subset.
+- Every applicable visual/table labels n, subset, and reconstructed provenance. Tables include deterministic 95% cluster-bootstrap MAE intervals. The owner narrative explicitly separates “lowest error in this observed sample” from “robust winner,” avoids a universal Aggressive claim, and warns that manager-adjusted n=27 wins/n=133 bids is not directly comparable with raw strategy n=47/n=239.
+- Formula cards explain MAE, median AE, signed bias, Spearman ρ, R² (including valid negative values for unfitted predictors), normalized FAAB error, deterministic cluster bootstrap, token threshold, all three outlier rules, coverage, and tolerance.
+- No implemented Weekly key/formula was found or invented; VoRP appears under its actual name.
+
+Render verification:
+- Chromium desktop at 1440×1000: all 7 figures and 4 tables render; no external resource requests.
+- Chromium mobile at 390×844: `documentElement.scrollWidth === clientWidth` (375 CSS px after scrollbar), so there is no document-level horizontal overflow; wide dense SVG/table panels stay contained.
+- Chromium print to Letter PDF: 8 pages. Ghostscript-rendered page inspection confirmed the entire executive summary stays on page 1, each major section starts on a fresh page, charts/tables/formulas are readable and unclipped, and provenance/footer content no longer creates an orphan page.
+
+Verification:
+- `npm test -- scripts/__tests__/bidding-analysis-presentation.test.ts scripts/__tests__/bidding-strategy-analysis.test.ts` — 2 files / 9 tests passed.
+- `npm test` — 26 files / 171 tests passed.
+- `node --test api/test/*.test.js` — 36/36 API tests passed.
+- `npm run typecheck` and `npm run build` — passed.
+- `npm run lint` — 0 errors; one pre-existing `react(set-state-in-effect)` warning in `src/components/ManagerBiddingProfiles.tsx`.
+- `git diff --check` and changed-file secret/private-identifier scan — passed before commit.
+- Direct HTML scan found no `http://`, `https://`, external script/link/image, source payload, credential, project ref, manager/player alias, or private identifier.
+
 # Handoff — P0 bidding strategy accuracy analysis (2026-09-27)
 
 Implemented the complete review-only SeaMex 2026 strategy replay with no production/UI behavior changes.
