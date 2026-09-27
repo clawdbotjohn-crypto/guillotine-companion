@@ -102,16 +102,16 @@ export function renderWeeklyMarketMarkdown(analysis: WeeklyMarketAnalysis): stri
     const label = group.week == null ? 'Overall' : `W${group.week}`;
     return `### ${label}\n\n` +
       `Serious median clusters: ${group.seriousMedianClusters}/${group.clusters}; closest=${group.closest}. Undefined strategy zeros are omitted strategy-by-strategy, so n is visible.\n\n` +
-      markdownTable(['Strategy', 'n', 'MAE', 'Median AE', 'Bias (intrinsic−market)', 'R²', 'Spearman ρ'], metricRows(group)) +
+      markdownTable(['Strategy', 'n', 'MAE', 'Median AE', 'Bias (intrinsic−market)', 'Raw prediction R²*', 'Spearman ρ'], metricRows(group)) +
       `\n\n**All-bid-median sensitivity** (${group.materiallyDifferentClusters} materially changed clusters; closest=${group.closestAllBid}):\n\n` +
-      markdownTable(['Strategy', 'n', 'MAE', 'Median AE', 'Bias (intrinsic−market)', 'R²', 'Spearman ρ'], metricRows(group, true));
+      markdownTable(['Strategy', 'n', 'MAE', 'Median AE', 'Bias (intrinsic−market)', 'Raw prediction R²*', 'Spearman ρ'], metricRows(group, true));
   }).join('\n\n');
   return `## Five-bullet answer: weekly price multipliers\n\n${bullets}\n\n` +
 `## Weekly top-three and median-market appendix\n\n` +
 `This owner-directed view compares only **Max VORP, VoRP, Safe, and Weeks as Starter**. Aggressive is excluded because it is derived from Safe. Only events with an exact decision-week snapshot join are eligible; W4 is absent because only a W3 fallback existed. “Serious” is strictly **bid > $5**. Ratios are **observed/intrinsic**, not intrinsic/observed. A zero intrinsic denominator is undefined, excluded from arithmetic/geometric/median aggregation, and counted in coverage. A winning or competing bid at its reconstructed pre-bid FAAB is marked as FAAB-censored because latent willingness may be higher.\n\n` +
 `${topSections}\n\n` +
 `## Analysis B: median serious market versus intrinsic strategy\n\n` +
-`Each player/week cluster selects its highest canonical completed winner, then includes only legitimate failed competing claims proven against that winner in the same processing batch. Metrics use one median observation per eligible player/week, avoiding duplicate weight from contingency/drop paths or a second clearing cycle. R² is the unfitted identity-line diagnostic (and may be negative); it and Spearman are shown only when at least two non-constant observations make them meaningful.\n\n` +
+`Each player/week cluster selects its highest canonical completed winner, then includes only legitimate failed competing claims proven against that winner in the same processing batch. Metrics use one median observation per eligible player/week, avoiding duplicate weight from contingency/drop paths or a second clearing cycle. **Raw prediction R²*** is the standard predictive score against the observed-mean baseline, but it is **not the R² from a fitted regression**: strategy dollars are held fixed on the identity line rather than refit to bids. It may be negative when fixed predictions are worse than the mean-only baseline; that does not mean negative correlation. R² and Spearman are shown only when at least two non-constant observations make them meaningful.\n\n` +
 `${marketSections}\n\n` +
 `## Owner-directed exclusion sensitivity\n\n` +
 `The underlying canonical evidence is retained. The primary view excludes only the deterministic anonymized marker **${analysis.exclusion.marker}**, established by ${analysis.exclusion.proof}; no private name or identifier is stored or printed. ${sensitivityLine(analysis)}\n\n` +

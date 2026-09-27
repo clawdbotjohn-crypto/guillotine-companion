@@ -80,13 +80,13 @@ This owner-directed view compares only **Max VORP, VoRP, Safe, and Weeks as Star
 
 ## Analysis B: median serious market versus intrinsic strategy
 
-Each player/week cluster selects its highest canonical completed winner, then includes only legitimate failed competing claims proven against that winner in the same processing batch. Metrics use one median observation per eligible player/week, avoiding duplicate weight from contingency/drop paths or a second clearing cycle. R² is the unfitted identity-line diagnostic (and may be negative); it and Spearman are shown only when at least two non-constant observations make them meaningful.
+Each player/week cluster selects its highest canonical completed winner, then includes only legitimate failed competing claims proven against that winner in the same processing batch. Metrics use one median observation per eligible player/week, avoiding duplicate weight from contingency/drop paths or a second clearing cycle. **Raw prediction R²*** is the standard predictive score against the observed-mean baseline, but it is **not the R² from a fitted regression**: strategy dollars are held fixed on the identity line rather than refit to bids. It may be negative when fixed predictions are worse than the mean-only baseline; that does not mean negative correlation. R² and Spearman are shown only when at least two non-constant observations make them meaningful.
 
 ### Overall
 
 Serious median clusters: 28/45; closest=VoRP. Undefined strategy zeros are omitted strategy-by-strategy, so n is visible.
 
-| Strategy | n | MAE | Median AE | Bias (intrinsic−market) | R² | Spearman ρ |
+| Strategy | n | MAE | Median AE | Bias (intrinsic−market) | Raw prediction R²* | Spearman ρ |
 | --- | --- | --- | --- | --- | --- | --- |
 | Max VORP | 21 | 12.5 | 8.0 | +1.5 | 0.56 | 0.79 |
 | VoRP | 21 | 11.0 | 7.0 | -1.0 | 0.63 | 0.78 |
@@ -95,7 +95,7 @@ Serious median clusters: 28/45; closest=VoRP. Undefined strategy zeros are omitt
 
 **All-bid-median sensitivity** (12 materially changed clusters; closest=VoRP):
 
-| Strategy | n | MAE | Median AE | Bias (intrinsic−market) | R² | Spearman ρ |
+| Strategy | n | MAE | Median AE | Bias (intrinsic−market) | Raw prediction R²* | Spearman ρ |
 | --- | --- | --- | --- | --- | --- | --- |
 | Max VORP | 25 | 12.1 | 9.0 | +6.4 | 0.66 | 0.86 |
 | VoRP | 25 | 10.6 | 8.5 | +4.3 | 0.71 | 0.86 |
@@ -106,7 +106,7 @@ Serious median clusters: 28/45; closest=VoRP. Undefined strategy zeros are omitt
 
 Serious median clusters: 13/20; closest=Max VORP. Undefined strategy zeros are omitted strategy-by-strategy, so n is visible.
 
-| Strategy | n | MAE | Median AE | Bias (intrinsic−market) | R² | Spearman ρ |
+| Strategy | n | MAE | Median AE | Bias (intrinsic−market) | Raw prediction R²* | Spearman ρ |
 | --- | --- | --- | --- | --- | --- | --- |
 | Max VORP | 11 | 14.9 | 14.0 | -3.7 | 0.52 | 0.81 |
 | VoRP | 11 | 15.0 | 14.0 | -4.0 | 0.52 | 0.81 |
@@ -115,7 +115,7 @@ Serious median clusters: 13/20; closest=Max VORP. Undefined strategy zeros are o
 
 **All-bid-median sensitivity** (5 materially changed clusters; closest=Max VORP):
 
-| Strategy | n | MAE | Median AE | Bias (intrinsic−market) | R² | Spearman ρ |
+| Strategy | n | MAE | Median AE | Bias (intrinsic−market) | Raw prediction R²* | Spearman ρ |
 | --- | --- | --- | --- | --- | --- | --- |
 | Max VORP | 14 | 12.6 | 10.0 | +2.9 | 0.65 | 0.81 |
 | VoRP | 14 | 12.7 | 10.0 | +2.6 | 0.65 | 0.81 |
@@ -126,7 +126,7 @@ Serious median clusters: 13/20; closest=Max VORP. Undefined strategy zeros are o
 
 Serious median clusters: 15/25; closest=VoRP. Undefined strategy zeros are omitted strategy-by-strategy, so n is visible.
 
-| Strategy | n | MAE | Median AE | Bias (intrinsic−market) | R² | Spearman ρ |
+| Strategy | n | MAE | Median AE | Bias (intrinsic−market) | Raw prediction R²* | Spearman ρ |
 | --- | --- | --- | --- | --- | --- | --- |
 | Max VORP | 10 | 9.9 | 8.0 | +7.1 | 0.65 | 0.91 |
 | VoRP | 10 | 6.6 | 6.0 | +2.3 | 0.85 | 0.91 |
@@ -135,7 +135,7 @@ Serious median clusters: 15/25; closest=VoRP. Undefined strategy zeros are omitt
 
 **All-bid-median sensitivity** (7 materially changed clusters; closest=VoRP):
 
-| Strategy | n | MAE | Median AE | Bias (intrinsic−market) | R² | Spearman ρ |
+| Strategy | n | MAE | Median AE | Bias (intrinsic−market) | Raw prediction R²* | Spearman ρ |
 | --- | --- | --- | --- | --- | --- | --- |
 | Max VORP | 11 | 11.4 | 8.5 | +10.9 | 0.66 | 0.89 |
 | VoRP | 11 | 7.9 | 8.0 | +6.5 | 0.83 | 0.89 |

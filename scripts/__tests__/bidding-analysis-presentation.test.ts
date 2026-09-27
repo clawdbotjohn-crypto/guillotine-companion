@@ -64,6 +64,9 @@ describe('owner-facing bidding analysis presentation', () => {
     expect(html).toContain('Median-market fit: overall, by week, and all-bid sensitivity');
     expect(html).toContain('Compact with-vs-without sensitivity');
     expect(html).toContain('R² = 1 − SSE / SST');
+    expect(html).toContain('Raw prediction R²*');
+    expect(html).toContain('not the goodness-of-fit R² from a regression');
+    expect(html).not.toContain('<th scope="col">R²</th>');
     expect(html).toContain('95% bootstrap MAE CI');
     expect(html).toContain('smaller, non-comparable subset');
     expect(html).toContain('Reconstructed W2–W3 projection snapshots');

@@ -1,5 +1,16 @@
 # Guillotine Companion — Progress
 
+## 📅 Recurring Wednesday bidding-strategy calibration (John, 2026-09-27)
+
+- [x] Immediate clarity fix: relabeled every owner-facing R² as **raw/unfitted prediction R²**, added a prominent warning that it is not fitted-regression goodness-of-fit, and explained why negative values are possible without implying negative correlation. Added regression guards so ambiguous standalone table labels do not return.
+- [ ] Every Wednesday at 08:00 America/Los_Angeles, refresh the read-only SeaMex bidding analysis after the Tuesday snapshot/waiver cycle.
+- [ ] Lead with a concise dashboard, keeping detailed methodology/sensitivity in appendices rather than deleting audit evidence.
+- [ ] Quick summary must include the newest supported decision week’s: top-three winning multiplier by Max VORP/VoRP/Safe/Weeks as Starter; top-three serious-market median multiplier by those strategies; median-market-fit raw R², MAE, Spearman, and n by strategy; and season-to-date comparison/trend. Omit Aggressive from multiplier tables because it is derived from Safe.
+- [ ] Use arithmetic mean multiplier as the owner-facing primary value, with geometric mean/median sensitivity. Preserve the explicit Monangai historical exclusion plus with/without sensitivity.
+- [ ] Clearly distinguish raw identity-line R² (absolute dollar calibration; may be negative) from any scale-fitted/cross-validated R² (strategy shape after learning a multiplier). Never fit and score a multiplier on the same observations.
+- [ ] Require a valid same-week snapshot and canonical transaction evidence; never substitute a mutable/fallback snapshot. Label exact versus reconstructed provenance and skip unsupported weeks honestly.
+- [ ] Regenerate Markdown/HTML/PDF, verify deterministic output and privacy/secret guards, push only the analysis branch/update PR #12, and send a concise weekly summary. Never merge or deploy.
+
 ## 🚨 P0 follow-up — weekly top-three and median-market multiplier analysis (John, 2026-09-27)
 
 **Owner question:** For each completed decision week, excluding the owner-designated irrational-price outlier and omitting Aggressive because it is derived from Safe, quantify how actual winning and median-market bids scale relative to Max VORP, VoRP, Safe, and Weeks as Starter.

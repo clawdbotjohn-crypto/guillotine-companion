@@ -286,3 +286,9 @@ Real-bid model accuracy/outlier analysis, non-VORP replacement-level changes, pl
 ## Safety confirmation
 
 No merge, no push to `main`, no `workflow_dispatch`, and no production deployment were performed.
+## 2026-09-27 owner clarity update — prediction R² labeling
+- Owner flagged standalone `R²` labels as misleading because the report scores fixed strategy predictions against the identity line rather than presenting an in-sample fitted-regression goodness-of-fit statistic.
+- Relabeled median-market tables to `Raw prediction R²*`, scatter plots/tables to `Prediction R²*`, and the formula card to `Prediction R² (unfitted)`.
+- Added a prominent first-analysis warning: values are not fitted-regression R², may be negative when fixed predictions lose to the mean baseline, and do not imply negative correlation.
+- Generator regression test now requires the explicit label/explanation and rejects ambiguous `<th>R²</th>`.
+- Verification: `npm run analyze:bidding`; `npm run analyze:bidding:presentation`; focused presentation tests 4/4; `git diff --check`.
