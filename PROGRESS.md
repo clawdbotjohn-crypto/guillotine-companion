@@ -1,5 +1,19 @@
 # Guillotine Companion — Progress
 
+## 🚨 P0 — Bidding strategy accuracy analysis (John authorized, 2026-09-27; COMPLETE LOCALLY)
+
+**Goal:** Produce a reproducible, offline, review-only SeaMex report comparing Max VORP, Weekly, Safe, Aggressive, and Weeks as Starter against real 2026 waiver bids. This is analysis only; do not change production strategy/default behavior.
+
+- [x] Build an auditable extractor/classifier for canonical completed waiver wins and legitimate failed bids. `classifyTransactionsWithAudit` requires a different same-player winner in the identical processing batch, audits exclusion reasons, and removes 24 duplicate contingency/drop paths without inventing absent private bids.
+- [x] Reconstruct each event's pre-bid FAAB and available league context. The completed spend/transfer ledger reports transaction-ledger=311, inferred-minimum=0, uncertain=0. Refresh hard-verifies read-only Supabase ref `xduqpomhjdlgmtmmkfed`; W2/W3 are reconstructed and W4 is excluded rather than using its W3 fallback.
+- [x] Calculate every authoritative strategy suggestion for each usable player/event with the correct decision week, active-team count, lineup/scoring, budget, and source inputs. The script calls shared `buildWaiverBoard`; the naming audit proves no `weekly` key/formula or Weekly→`vorp` alias exists, so Weekly is explicitly excluded as undefined and current `vorp` is analyzed under its real VoRP label. Intrinsic values remain separate from capped manager forecasts.
+- [x] Analyze distinct targets: winning bids; canonical serious win/loss clusters; all valid bids; player price ranking; and manager-adjusted forecasts when historically valid. Report covers 239 usable bids, 47 wins, 165 non-token bids, 19 competitive clusters, and 133 strict walk-forward forecasts.
+- [x] Report MAE, median absolute error, signed bias, rank correlation, within-range/coverage metrics, and slices by position/week/player tier/cap state. Original-$500 and reconstructed pre-bid-FAAB normalization are included.
+- [x] Run transparent sensitivity analyses with all evidence, token/low-intent bids separated by a predefined ≤$5 rule, and isolated extreme bids independently flagged under ratio-gap, MAD, and IQR rules. The report preserves counts and shows all five sensitivity cases.
+- [x] Use leave-week-out/walk-forward validation when sample size permits; otherwise state why it does not. Two reconstructed decision weeks are insufficient for leave-week-out fitting; manager forecasts are strictly prior-batch walk-forward, and fixed-seed cluster-bootstrap MAE intervals quantify sample uncertainty.
+- [x] Save a reproducible script and committed report under `scripts/` and `docs/analysis/`, with commands, data provenance, formulas, anonymized outputs, limitations, and a recommendation. The committed derived fixture contains stable aliases only—no credential, raw payload, league ID, player ID/name, or manager ID/name.
+- [x] Verify deterministic reruns, classifier/metrics/edge-case tests, lint/typecheck, full tests, `git diff --check`, and changed-file secret scan. Local implementation is complete; commit/push/review-only PR are intentionally delegated to the top-level orchestrator under this task's explicit no-commit/no-push/no-PR boundary.
+
 ## 🚨 PR #11 owner follow-up — eliminated label in manager popup (John, 2026-09-26)
 
 - [x] When an eliminated manager's Bid Profile popup is opened, show the shared Teams/Teams `Eliminated` status badge beside the manager name.

@@ -1,3 +1,41 @@
+# Handoff — P0 bidding strategy accuracy analysis (2026-09-27)
+
+Implemented the complete review-only SeaMex 2026 strategy replay with no production/UI behavior changes.
+
+Evidence and result:
+- Sleeper public extraction: 469 transactions / 363 waivers. Proof filtering produced 70 completed wins and 265 legitimate-loss candidates; canonical dedupe retained 70 wins + 241 losses (311 bids) and removed 24 contingency/drop paths. Classifier reasons are preserved in the report.
+- Pre-bid FAAB is reconstructed from 47 completed spend rows plus transfers (none observed): 311 transaction-ledger, 0 inferred-minimum, 0 uncertain. Transaction week maps to decision week +1; 32-team PPR settings and production progression give W2=30 and W3=28 active teams.
+- Read-only Supabase refresh hard-checks approved project ref `xduqpomhjdlgmtmmkfed`. W2/W3 snapshots are explicitly reconstructed (never exact). W4 has only a W3 fallback, so all 23 W4 events are excluded; 49 more canonical events lack a supported-position projection. Final formula-usable sample: 239 bids, 47 wins, 192 legitimate losses.
+- All five current registry outputs are replayed through `buildWaiverBoard`. Audit correction: requested “Weekly” is **not** mapped to `vorp`. Exhaustive history shows `vorp` has always been VoRP and no `weekly` key/formula ever existed; PR #10's “historicalWeeklyBaseline” explicitly meant `weeks-starter`, already a separately requested strategy. Weekly is therefore excluded as `no-authoritative-formula-or-key`, and VoRP is reported under its real name. Manager forecasts are separate and strict prior-batch walk-forward (133 forecastable bids / 27 wins).
+- Naming evidence is documented in the report: initial registry `c331281`, Exponential→Aggressive rename `1656925`, Max-VORP addition `7c32a1f`, exhaustive all-ref search, and PR #10's explicit Weeks-as-Starter definition of “historicalWeeklyBaseline.”
+- Findings: Aggressive has lowest winning-bid MAE (26.4) and non-token winning MAE (38.5), but is not robust: ratio-gap filtering still favors Aggressive while MAD/IQR filtering favors Max VORP. No strategy is recommended as a robust winner; keep production unchanged and collect exact pre-waiver snapshots.
+- Report includes all/all-wins/non-token/competitive-cluster metrics, MAE bootstrap CIs (2,000 cluster resamples, seed 20260927), median AE, bias, Spearman, coverage/ranges, normalization, week/position/tier/cap slices, three predeclared outlier rules, provenance, formulas, limitations, and commands.
+
+Files added/changed:
+- `scripts/analyze-bidding-strategies.ts` — refresh, shared-formula replay, walk-forward forecast, deterministic report generator.
+- `scripts/bidding-strategy-analysis.ts` — pure classifier, metrics, rank correlation, robust flags, deterministic cluster bootstrap.
+- `scripts/__tests__/bidding-strategy-analysis.test.ts` — six focused deterministic tests.
+- `scripts/fixtures/bidding-strategy-seamex-2026.json` — anonymized derived offline fixture (no source identities/raw payload).
+- `docs/analysis/bidding-strategy-accuracy-seamex-2026.md` — generated report.
+- `package.json`, `PROGRESS.md`, `HANDOFF.md`.
+
+Verification:
+- `npm test -- --run scripts/__tests__/bidding-strategy-analysis.test.ts` — 6/6 passed.
+- `npm test -- --run` — 25 files / 168 tests passed.
+- `node --test api/test/*.test.js` — 36/36 passed.
+- `npm run lint` — 0 errors; one pre-existing React warning in `ManagerBiddingProfiles.tsx`.
+- `npm run typecheck` and `npm run build` — passed.
+- Script-only TypeScript check with TS 6/Bundler — passed using the required `--ignoreConfig` flag.
+- Three consecutive stabilized `npm run analyze:bidding` runs produced identical report SHA-256 `bc6014fb93069b5ab3e991de69c0a22b6244126e0343142da11f5669598f00db`.
+- An independent fixture audit reproduced 469 raw / 363 waiver / 311 canonical / 239 usable events, the 70/241 canonical and 47/192 usable win/loss splits, and the 49 missing-projection + 23 missing-snapshot exclusions.
+- `git diff --check` and changed-file credential/identity scans passed.
+
+Definition blocker recorded, not papered over: if John intended “Weekly” to be a sixth/distinct strategy rather than an erroneous backlog label, he must supply its formula; no authoritative implementation exists to replay.
+
+Delivery is intentionally pending: the top-level orchestrator owns commit, push, and review-only PR. Do not merge or deploy.
+
+---
+
 # Handoff — PR #11 eliminated badge in Bid Profile popup (2026-09-26)
 
 John requested that an eliminated manager's Bid Profile popup explicitly show `Eliminated` beside the manager name using the same presentation as Teams/Teams.
