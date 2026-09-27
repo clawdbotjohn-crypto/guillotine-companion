@@ -11,6 +11,7 @@ const waiverRow: WaiverPlayerRow = {
   projectedPointsPerWeek: 12, posRank: 17, starterWeeks: 8, possibleStarterWeeks: 14,
   sourceValue: 180, sourceRank: undefined,
   suggestions: [
+    { strategy: 'max-vorp', label: 'Max VORP', value: 55, pctOfBudget: 11 },
     { strategy: 'weeks-starter', label: 'Weeks-as-Starter', value: 42, pctOfBudget: 8.4 },
     { strategy: 'safe', label: 'Safe', value: 50, pctOfBudget: 10 },
     { strategy: 'aggressive', label: 'Aggressive', value: 75, pctOfBudget: 15 },
@@ -57,7 +58,7 @@ describe('waiver controls', () => {
       managerPredictions={[{
         rosterId: 1, managerName: 'Hidden Manager', predictedBid: 50, currentFaab: 100,
         cappedByFaab: false, likelihood: 'Likely',
-        profile: { managerRosterId: 1, managerMultiplier: 1, style: 'standard', confidence: 'low', usableEvidenceCount: 1, evidence: [] },
+        profile: { managerRosterId: 1, managerMultiplier: 1, style: 'standard', confidence: 'low', usableEvidenceCount: 1, baselineStrategyId: 'max-vorp', baselineStrategyVersion: 'max-vorp-v1', evidence: [] },
       }]}
       showManagerPredictions
     />);
@@ -111,6 +112,8 @@ describe('waiver controls', () => {
         style: 'standard',
         confidence: 'low',
         usableEvidenceCount: 1,
+        baselineStrategyId: 'max-vorp',
+        baselineStrategyVersion: 'max-vorp-v1',
         evidence: [],
       },
     }));
@@ -168,6 +171,8 @@ describe('waiver controls', () => {
         style: 'aggressive',
         confidence: 'low',
         usableEvidenceCount: 1,
+        baselineStrategyId: 'max-vorp',
+        baselineStrategyVersion: 'max-vorp-v1',
         evidence: [],
       },
     });
@@ -210,7 +215,7 @@ describe('waiver controls', () => {
     const managerPredictions: ManagerPredictionDisplay[] = [{
       rosterId: 1, managerName: 'Hidden Manager', predictedBid: 40, currentFaab: 100,
       cappedByFaab: false, likelihood: 'Likely',
-      profile: { managerRosterId: 1, managerMultiplier: 1, style: 'standard', confidence: 'low', usableEvidenceCount: 1, evidence: [] },
+      profile: { managerRosterId: 1, managerMultiplier: 1, style: 'standard', confidence: 'low', usableEvidenceCount: 1, baselineStrategyId: 'max-vorp', baselineStrategyVersion: 'max-vorp-v1', evidence: [] },
     }];
     const { rerender } = render(<WaiverPlayerCard
       {...cardProps}
@@ -260,6 +265,9 @@ describe('waiver controls', () => {
     const props = { replacementTeamCount: 8, maxReplacementTeams: 8, onReplacementTeamChange: vi.fn(), rankingSource: 'fantasypros' as const };
     const { rerender } = render(<VorpControls strategy="safe" {...props} />);
     expect(screen.queryByLabelText('VoRP team count')).toBeNull();
+    rerender(<VorpControls strategy="max-vorp" {...props} />);
+    expect(screen.queryByLabelText('VoRP team count')).toBeNull();
+    expect(screen.getByText(/Sleeper ROS projected/i)).toBeTruthy();
     rerender(<VorpControls strategy="vorp" {...props} />);
     expect(screen.getByLabelText('VoRP team count')).toBeTruthy();
     rerender(<VorpSourceNotice rankingSource="fantasypros" unavailableReason="Sleeper returned no usable remaining-season point projections" />);
@@ -267,19 +275,22 @@ describe('waiver controls', () => {
   });
 
   it('uses the requested exact strategy copy', () => {
-    expect(DEFAULT_WAIVER_STRATEGY).toBe('weeks-starter');
+    expect(DEFAULT_WAIVER_STRATEGY).toBe('max-vorp');
     expect(WAIVER_STRATEGIES.map(({ label }) => label)).toEqual([
+      'Max VORP',
       'Weeks-as-Starter',
       'Safe',
       'Aggressive',
       'VoRP',
     ]);
     expect(WAIVER_STRATEGIES.find(({ key }) => key === 'vorp')?.label).toBe('VoRP');
+    expect(WAIVER_STRATEGY_EXPLANATIONS['max-vorp']).toContain('highest positive');
     expect(WAIVER_STRATEGY_EXPLANATIONS['weeks-starter']).toBe('Values players according to how many weeks they project to be starting caliber.');
     expect(WAIVER_STRATEGY_EXPLANATIONS.safe).toBe('Conservative bidding style aimed at preserving budget and avoiding overspending.');
     expect(WAIVER_STRATEGY_EXPLANATIONS.aggressive).toBe('Aggressive spending style aimed at winning players early, at the risk of running out of FAAB.');
     expect(getWaiverStrategyExplanation('vorp', 16, true)).toBe('Value over Replacement Player (VoRP) calculates value from the replacement-team count you set, estimates the average VoRP required for a top-four roster, and prices players relative to that benchmark.');
     expect(getWaiverStrategyExplanation('vorp', 16, false, 'Sleeper ROS missing')).toContain('VoRP is unavailable: Sleeper ROS missing');
+    expect(getWaiverStrategyExplanation('max-vorp', 16, false, 'all stages could not calibrate')).toContain('Max VORP is unavailable: all stages could not calibrate');
   });
 
 });

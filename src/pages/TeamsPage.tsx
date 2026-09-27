@@ -257,6 +257,7 @@ export function TeamsPage() {
           users={users!}
           initialFaab={league?.settings?.waiver_budget ?? 1000}
           activeRosterIds={getActiveRosterIds(elim)}
+          showEliminatedTeams={showEliminatedTeams}
           isLoading={biddingProfiles.isLoading}
           error={biddingProfiles.error}
           onRetry={biddingProfiles.retry}

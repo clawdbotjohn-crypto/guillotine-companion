@@ -78,6 +78,7 @@ export {
 
 export {
   BIDDING_PROFILE_MODEL_V1,
+  BIDDING_PROFILE_MODEL_V2,
   classifyCanonicalBidEvents,
   selectTopCanonicalBids,
   styleForMultiplier,
@@ -97,3 +98,5 @@ export {
   type ManagerBiddingProfile,
   type ManagerBidPrediction,
 } from './biddingProfiles';
+
+export { BIDDING_BASELINE, DEFAULT_WAIVER_STRATEGY, WAIVER_STRATEGY_REGISTRY, resolveBiddingBaseline, resolveStrategyBid, type StrategyKey } from './waiverStrategies';

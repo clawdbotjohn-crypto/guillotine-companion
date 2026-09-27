@@ -6,7 +6,7 @@ import type { ManagerBiddingProfile, ManagerBidEvidence, ManagerBidStyle } from 
 import type { ManagerDetailData, ManagerTeamNeed } from '../logic/managerDetails';
 import { currentFaab, managerName, orderManagerPredictions, type ManagerPredictionDisplay } from '../logic/managerPredictionDisplay';
 import { faabQuartile, faabQuartileLabel, type FaabQuartileBand } from '../logic/rankingQuartiles';
-import { Button, Card, Skeleton } from './ui';
+import { Button, Card, Skeleton, StatusBadge } from './ui';
 
 const EMPTY_DETAILS: ManagerDetailData = { upcomingByes: [], teamNeeds: [] };
 
@@ -192,6 +192,7 @@ export function ManagerDetailsModal({
   details,
   getPlayerName,
   onClose,
+  isEliminated = false,
 }: {
   profile: ManagerBiddingProfile;
   manager: string;
@@ -200,6 +201,7 @@ export function ManagerDetailsModal({
   details: ManagerDetailData;
   getPlayerName: (playerId: string) => string;
   onClose: () => void;
+  isEliminated?: boolean;
 }) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -256,7 +258,10 @@ export function ManagerDetailsModal({
       >
         <header className="flex shrink-0 items-start justify-between gap-4 border-b border-[#2d3262] px-4 py-4 sm:px-5">
           <div className="min-w-0">
-            <h2 id={`manager-dialog-${profile.managerRosterId}`} className="truncate font-['Orbitron'] text-base font-bold text-[#f0f0ff]">{manager}</h2>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <h2 id={`manager-dialog-${profile.managerRosterId}`} className="min-w-0 truncate font-['Orbitron'] text-base font-bold text-[#f0f0ff]">{manager}</h2>
+              {isEliminated && <StatusBadge status="eliminated" />}
+            </div>
             <div className="mt-2"><ManagerStyleBadge profile={profile} /></div>
           </div>
           <button ref={closeButtonRef} type="button" onClick={onClose} aria-label="Close manager details" className="-mr-1 min-h-11 min-w-11 rounded-lg p-2 text-[#a5a8cf] hover:bg-[#242855] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a5b4fc]">
@@ -379,6 +384,7 @@ export function TeamBidProfiles({
   users,
   initialFaab,
   activeRosterIds,
+  showEliminatedTeams = true,
   isLoading,
   error,
   onRetry,
@@ -390,6 +396,7 @@ export function TeamBidProfiles({
   users: SleeperUser[];
   initialFaab: number;
   activeRosterIds?: ReadonlySet<number>;
+  showEliminatedTeams?: boolean;
   isLoading: boolean;
   error: Error | null;
   onRetry: () => void;
@@ -397,6 +404,16 @@ export function TeamBidProfiles({
   detailsByRosterId?: ReadonlyMap<number, ManagerDetailData>;
 }) {
   const [selected, setSelected] = useState<ManagerBiddingProfile | null>(null);
+  useEffect(() => {
+    if (
+      selected
+      && !showEliminatedTeams
+      && activeRosterIds
+      && !activeRosterIds.has(selected.managerRosterId)
+    ) {
+      setSelected(null);
+    }
+  }, [activeRosterIds, selected, showEliminatedTeams]);
   if (isLoading) return <Card hover={false} className="p-4"><Skeleton lines={4} /></Card>;
   if (error) {
     return (
@@ -418,7 +435,14 @@ export function TeamBidProfiles({
       .localeCompare(managerName(b.managerRosterId, rosters, users));
     return byName || a.managerRosterId - b.managerRosterId;
   });
-  const activeProfiles = ordered.filter((profile) => activeRosterIds?.has(profile.managerRosterId) ?? true);
+  const isActiveProfile = (profile: ManagerBiddingProfile) => (
+    activeRosterIds?.has(profile.managerRosterId) ?? true
+  );
+  const activeProfiles = ordered.filter(isActiveProfile);
+  const eliminatedProfiles = ordered.filter((profile) => !isActiveProfile(profile));
+  const visibleProfiles = showEliminatedTeams
+    ? [...activeProfiles, ...eliminatedProfiles]
+    : activeProfiles;
   const activeFaabAmounts = activeProfiles.map((profile) => currentFaab(profile.managerRosterId, rosters, initialFaab));
   const selectedName = selected ? managerName(selected.managerRosterId, rosters, users) : '';
   const selectedFaab = selected ? currentFaab(selected.managerRosterId, rosters, initialFaab) : 0;
@@ -426,8 +450,12 @@ export function TeamBidProfiles({
   return (
     <>
       <div className="space-y-2">
-        {ordered.map((profile) => {
+        {visibleProfiles.length === 0 && (
+          <p className="text-xs text-[#6b6e99]">No active manager bid profiles are available.</p>
+        )}
+        {visibleProfiles.map((profile) => {
           const name = managerName(profile.managerRosterId, rosters, users);
+          const isEliminated = !isActiveProfile(profile);
           const faab = currentFaab(profile.managerRosterId, rosters, initialFaab);
           const faabBand = faabQuartile(faab, activeFaabAmounts);
           const highBid = highestBid(profile);
@@ -441,7 +469,7 @@ export function TeamBidProfiles({
             >
               <span className="flex items-start justify-between gap-3">
                 <span className="min-w-0">
-                  <span className="block truncate text-sm font-semibold text-[#f0f0ff]">{name}</span>
+                  <span className={`block truncate text-sm font-semibold ${isEliminated ? 'text-[#4a4d77]' : 'text-[#f0f0ff]'}`}>{name}</span>
                   <span className="mt-1 block text-[10px] text-[#8b8eb8]">Highest bid: <span className="font-['Space_Mono'] tabular-nums">{highBid == null ? '—' : `$${highBid}`}</span></span>
                 </span>
                 <span className="shrink-0 text-right">
@@ -470,6 +498,7 @@ export function TeamBidProfiles({
           activeFaabAmounts={activeFaabAmounts}
           details={detailsByRosterId.get(selected.managerRosterId) ?? EMPTY_DETAILS}
           getPlayerName={getPlayerName}
+          isEliminated={Boolean(activeRosterIds && !activeRosterIds.has(selected.managerRosterId))}
           onClose={() => setSelected(null)}
         />
       )}

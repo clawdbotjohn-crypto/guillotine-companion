@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { StrategyKey } from '../logic/waivers';
+import { DEFAULT_WAIVER_STRATEGY, WAIVER_STRATEGY_REGISTRY, type StrategyKey } from '../logic/waiverStrategies';
 
 interface AppState {
   // User info
@@ -35,11 +35,13 @@ export function migratePersistedAppState(persistedState: unknown): unknown {
   if (!persistedState || typeof persistedState !== 'object') return persistedState;
 
   const state = persistedState as Record<string, unknown>;
-  // Version 0 persisted the old strategy key. Map it to the honest semantic name so
-  // existing users keep the same selected ceiling and hydration never yields an invalid key.
+  // Preserve every explicit recognized choice. Only legacy aliases, missing values, and invalid
+  // values migrate; old implicit defaults cannot otherwise be distinguished from user choices.
   if (state.activeStrategy === 'exponential') {
     return { ...state, activeStrategy: 'aggressive' };
   }
+  const valid = WAIVER_STRATEGY_REGISTRY.some(({ key }) => key === state.activeStrategy);
+  if (!valid) return { ...state, activeStrategy: DEFAULT_WAIVER_STRATEGY };
   return state;
 }
 
@@ -52,7 +54,7 @@ const initialState = {
   rootLeagueId: null as string | null,
   rosterId: null as number | null,
   teamName: null as string | null,
-  activeStrategy: 'safe' as const,
+  activeStrategy: DEFAULT_WAIVER_STRATEGY,
   showEliminatedTeams: false,
 };
 
@@ -86,7 +88,7 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'guillotine-companion-store',
-      version: 1,
+      version: 2,
       migrate: (persistedState) => migratePersistedAppState(persistedState) as AppState,
     },
   ),

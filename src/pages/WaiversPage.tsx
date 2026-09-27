@@ -39,13 +39,13 @@ import {
 } from '../logic';
 import {
   buildLeagueContext,
+  buildMaxVorpCalibration,
   buildVorpCalibration,
   buildWaiverBoard,
   calculateRemainingFaab,
   computeAvailablePlayers,
   computeRosteredPlayerOwners,
   getReplacementTeamBounds,
-  getWeeksAsStarterBid,
   normalizeReplacementTeamTarget,
   sortWaiverRowsByStrategy,
   type RosteredPlayerOwner,
@@ -55,10 +55,10 @@ import {
 import { getPlayerName, getPlayerPosition } from '../store/players';
 import { useBiddingProfiles } from '../hooks/useBiddingProfiles';
 import {
-  DEFAULT_WAIVER_STRATEGY,
   getWaiverStrategyExplanation,
   WAIVER_STRATEGIES,
 } from '../logic/waiverDisplay';
+import { resolveBiddingBaseline } from '../logic/waiverStrategies';
 
 const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE'];
 
@@ -168,14 +168,14 @@ export function VorpControls({
   rankingSource: WaiverRankingSource;
   unavailableReason?: string;
 }) {
-  if (strategy !== 'vorp') return null;
+  if (strategy !== 'vorp' && strategy !== 'max-vorp') return null;
   return (
     <>
-      <ReplacementTeamSelector
+      {strategy === 'vorp' && <ReplacementTeamSelector
         value={replacementTeamCount}
         max={maxReplacementTeams}
         onChange={onReplacementTeamChange}
-      />
+      />}
       <VorpSourceNotice
         rankingSource={rankingSource}
         unavailableReason={unavailableReason}
@@ -335,7 +335,7 @@ function ProjectionErrorState({ title, message, onRetry }: { title: string; mess
 }
 
 export function WaiversPage() {
-  const { leagueId, rosterId } = useAppStore();
+  const { leagueId, rosterId, activeStrategy: strategy, setStrategy } = useAppStore();
   const { data: league } = useLeague(leagueId);
   const { data: users } = useLeagueUsers(leagueId);
   const { data: rosters } = useRosters(leagueId);
@@ -372,7 +372,6 @@ export function WaiversPage() {
     players: playersQuery.data,
   });
 
-  const [strategy, setStrategy] = useState<StrategyKey>(DEFAULT_WAIVER_STRATEGY);
   const [posFilter, setPosFilter] = useState('ALL');
   const [showRosteredPlayers, setShowRosteredPlayers] = useState(DEFAULT_SHOW_ROSTERED_PLAYERS);
   const [replacementTeamSelection, setReplacementTeamSelection] = useState<{
@@ -449,10 +448,19 @@ export function WaiversPage() {
         ctx.budget,
       )
       : null;
+    const maxVorpCalibration = sleeperRosValues
+      ? buildMaxVorpCalibration(
+        sleeperRosValues,
+        ctx.startersPerPos,
+        ctx.teamsRemaining,
+        ctx.budget,
+      )
+      : null;
     const boardOptions = {
       sleeperRosProjections: sleeperRosValues ?? undefined,
       replacementTeamCount: normalizedReplacementTarget,
       vorpCalibration,
+      maxVorpCalibration,
     };
     const ownership = computeRosteredPlayerOwners(rosters, users!, elim);
     const allPositivePlayers = [...seasonValues.entries()]
@@ -462,6 +470,7 @@ export function WaiversPage() {
       ctx,
       remainingFaab,
       vorpCalibration,
+      maxVorpCalibration,
       ownership,
       availableRows: buildWaiverBoard(
         available,
@@ -580,8 +589,10 @@ export function WaiversPage() {
     availableRows,
     allRows,
     vorpCalibration,
+    maxVorpCalibration,
   } = board;
-  const sleeperUnavailableReason = vorpCalibration
+  const selectedVorpCalibration = strategy === 'max-vorp' ? maxVorpCalibration : vorpCalibration;
+  const sleeperUnavailableReason = selectedVorpCalibration
     ? undefined
     : projectionWeeksQuery.isLoading || nflStateQuery.isLoading
       ? 'Sleeper ROS projections are still loading'
@@ -697,7 +708,7 @@ export function WaiversPage() {
           {getWaiverStrategyExplanation(
             strategy,
             normalizedReplacementTarget,
-            !!vorpCalibration,
+            !!selectedVorpCalibration,
             sleeperUnavailableReason,
           )}
         </span>
@@ -727,12 +738,12 @@ export function WaiversPage() {
             const rank = ranks.find((item) => item.group === row.position);
             if (rank) positionRanks.set(managerRosterId, { rank: rank.rank, outOf: rank.outOf });
           }
-          const weeksAsStarterBaseline = getWeeksAsStarterBid(row);
+          const biddingBaseline = resolveBiddingBaseline(row);
           const predictions = biddingProfiles.hasHistory && !biddingProfiles.error
-            && weeksAsStarterBaseline != null
+            && biddingBaseline != null
             ? buildManagerPredictions({
               profiles: biddingProfiles.profiles,
-              baseline: weeksAsStarterBaseline,
+              baseline: biddingBaseline,
               rosters: rosters!,
               users: users!,
               initialFaab: ctx.budget,
