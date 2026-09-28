@@ -6,10 +6,10 @@ Implemented the approved `PLAN COMPLETE` semantics on `fix/non-vorp-replacement-
 
 ## Review-only PR / final independent verification
 
-- Implementation commit: `e36927502b99dce12dfac3b3970115f6cc691bc7` on `fix/non-vorp-replacement-zeroing`; pushed only to that feature branch.
+- Implementation commit: `7d86b2d3ca079434cf87315cc43ced1149cc4999` on `fix/non-vorp-replacement-zeroing`; pushed only to that feature branch.
 - Review-only PR: <https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/13> targeting `main`.
 - Exact Azure environment obtained from `az staticwebapp environment list --name guillotine-companion`: <https://nice-moss-07ec56310-13.centralus.7.azurestaticapps.net> (`buildId=13`, source branch `fix/non-vorp-replacement-zeroing`, `Ready`).
-- GitHub CI `build` and Azure `Build and Deploy` passed. PR was mergeable before the final documentation-only evidence commit; recheck final CI/merge state after that commit.
+- GitHub CI `build` and Azure `Build and Deploy` passed; PR #13 was independently confirmed open, mergeable, and `CLEAN` after the verification evidence update.
 - Orchestrator independently reran focused waiver/ranking tests (**42 passed**), full frontend (**25 files / 173 tests**), API (**36 passed**), lint (0 errors; one pre-existing badge warning), typecheck, production build, live analysis/report guards, `git diff --check`, and changed-line secret scan — all passed.
 - Hosted real SeaMex desktop QA at 1440×900: all four strategies switched correctly; with rostered players shown, Safe rendered **192 positive / 253 zero**, Weeks-as-Starter **181 / 264**, Aggressive **181 / 264** (top `$203`), and Max VORP rendered meaningful cards. Hiding rostered players reduced the UI from 445 to 37 displayed cards, all naturally `$0` in this deep current league.
 - Hosted 390×844 QA: Max VORP, Safe, Weeks-as-Starter, and Aggressive controls all remained usable; rostered expansion showed 445 cards and Aggressive **181 positive / 264 zero**; page width was 384px with 384px content width (no horizontal overflow), the first card fit within the viewport, and the browser console had zero errors. Toggling rostered players off restored 37 `$0` available cards.
@@ -86,7 +86,7 @@ The report labels the frozen baseline versus live capture explicitly; future Sle
 
 ## Delivery / caveats
 
-- Implementation commit `e36927502b99dce12dfac3b3970115f6cc691bc7` was pushed to `origin/fix/non-vorp-replacement-zeroing`; PR #13 and exact preview are recorded in the final independent-verification section above.
+- Implementation commit `7d86b2d3ca079434cf87315cc43ced1149cc4999` was pushed to `origin/fix/non-vorp-replacement-zeroing`; PR #13 and exact preview are recorded in the final independent-verification section above.
 - PR remains open and review-only; no merge, production deploy/manual workflow dispatch, or Supabase/production-data mutation occurred.
 - The first attempted API command used Vitest against Node test-runner files, so TAP bodies ran but Vitest reported `no suite found`; root cause was runner mismatch. The correct `node --test api/test/*.test.js` command passed all 36 tests.
 
