@@ -34,15 +34,15 @@ describe('owner-facing bidding analysis presentation', () => {
       seriousWins: { length: 29 },
       managerRows: { length: 133 },
       managerWinRows: { length: 27 },
-      sampleWinner: { label: 'Aggressive' },
-      seriousSampleWinner: { label: 'Aggressive' },
-      robustLeaders: ['Aggressive', 'Max VORP', 'Max VORP'],
+      sampleWinner: { label: 'Corrected Safe (PR #13)' },
+      seriousSampleWinner: { label: 'Legacy Aggressive' },
+      robustLeaders: ['Corrected Safe (PR #13)', 'Corrected Safe (PR #13)', 'Corrected Safe (PR #13)'],
     });
-    expect(model.sampleWinner.metrics.mae).toBeCloseTo(26.4468085, 7);
-    expect(model.sampleWinner.interval?.[0]).toBeCloseTo(17.1914894, 7);
-    expect(model.sampleWinner.interval?.[1]).toBeCloseTo(37.575, 7);
+    expect(model.sampleWinner.metrics.mae).toBeCloseTo(25.7021277, 7);
+    expect(model.sampleWinner.interval?.[0]).toBeCloseTo(14.4037234, 7);
+    expect(model.sampleWinner.interval?.[1]).toBeCloseTo(40.4707447, 7);
     expect(model.seriousSampleWinner.metrics.mae).toBeCloseTo(38.4827586, 7);
-    expect(model.allMetrics.find((row) => row.label === 'VoRP')?.metrics.mae).toBeCloseTo(24.4476987, 7);
+    expect(model.allMetrics.find((row) => row.label === 'Current-team VoRP')?.metrics.mae).toBeCloseTo(24.4476987, 7);
     expect(model.managerMetrics.mae).toBeCloseTo(28.0300752, 7);
     expect(model.managerWinMetrics.mae).toBeCloseTo(22.8888889, 7);
   });
@@ -57,8 +57,12 @@ describe('owner-facing bidding analysis presentation', () => {
   it('renders byte-deterministically with required caveats and no external runtime', () => {
     expect(renderBiddingPresentation(model)).toBe(html);
     expect(model.weeklyBullets).toHaveLength(5);
-    expect(model.weeklyAnalysis.ownerDirected.marketMetrics[0].closest).toBe('VoRP');
+    expect(model.weeklyAnalysis.ownerDirected.marketMetrics[0].closest).toBe('Current-team VoRP');
     expect(html.indexOf('Five-bullet answer')).toBeLessThan(html.indexOf('Prior accuracy study'));
+    expect(html).toContain('Middle VORP stays analysis-only');
+    expect(html).toContain('Recommendation: retain analysis-only');
+    expect(html).toContain('Current-state dollar distributions');
+    expect(html).toContain('Prior-week-fitted held-out scale');
     expect(html).toContain('Weekly top-three winning multipliers');
     expect(html).toContain('Exact weekly top-three multipliers');
     expect(html).toContain('Median-market fit: overall, by week, and all-bid sensitivity');

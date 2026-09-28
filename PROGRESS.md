@@ -1,5 +1,19 @@
 # Guillotine Companion — Progress
 
+## 🧪 P1 — Evaluate Middle VORP as a potential default (John, 2026-09-27)
+
+**Owner hypothesis:** A single future-looking replacement horizon at roughly half the current survivor count may be a better default than current-team VORP or player-specific Max VORP. Example: with 28 active teams, Middle VORP uses the 14-team VORP calibration.
+
+- [x] Defined deterministic **Middle VORP** semantics: primary target `max(4, ceil(teamsRemaining / 2))`; one common horizon for all players, with explicit odd-count floor/ceil tests (27→14 versus 13).
+- [x] Treated 50% as a hypothesis and evaluated 67% / 50% / 33% common-horizon sensitivity in analysis only; no sensitivity became a selectable product strategy.
+- [x] Added Middle VORP only to the reproducible offline analysis and compared it with Max VORP, current-team VORP, legacy curves, and analytical reproductions of PR #13’s corrected Safe/Weeks curves without merging or cherry-picking product code.
+- [x] Reported the latest reproducible SeaMex W3 ordering, dollar distributions, positive counts, positional cutoffs, top prices, rank correlations, and privacy-safe divergence examples with Max VORP’s selected stage.
+- [x] Backtested canonical wins and serious-market medians by week with n, MAE, bias, Spearman ρ, raw unfitted prediction R², weekly/season arithmetic/geometric/median multipliers, all-bid and owner-directed sensitivity, and strict W2-fit→W3-score median-scale results.
+- [x] Kept W1–W3 provenance explicitly reconstructed and W4 exact explicitly absent. Middle VORP is now part of the reproducible weekly calibration methodology in analysis/report code only; no scheduler or cron changed.
+- [x] Recommendation: **retain analysis-only**. The two completed reconstructed decision weeks are insufficient to prove a default; W4+ exact prospective evidence must confirm held-out error/bias/rank quality and 33%/50%/67% stability before confidence changes.
+
+**Result (2026-09-27):** Current W3 uses 28→14 teams. Middle prices 93/445 players positively (mean $7.7, max $123) versus Max/current 191/445 (means $15.4/$13.9; maxima $232/$109); ρ is 0.780 against each. On serious-market medians, Middle has overall n=9, MAE $20.8, bias −$12.6, raw prediction R² −0.15, ρ=0.44, versus current-team VoRP n=21, MAE $11.0, bias −$1.0, R² 0.63, ρ=0.78. W2→W3 median-scale Middle remains weak (serious n=5, MAE $44.9, bias +$44.9, raw held-out R² −9.69). See deterministic Markdown/HTML/PDF artifacts under `docs/analysis/`.
+
 ## 📅 Recurring Wednesday bidding-strategy calibration (John, 2026-09-27)
 
 - [x] Immediate clarity fix: relabeled every owner-facing R² as **raw/unfitted prediction R²**, added a prominent warning that it is not fitted-regression goodness-of-fit, and explained why negative values are possible without implying negative correlation. Added regression guards so ambiguous standalone table labels do not return.

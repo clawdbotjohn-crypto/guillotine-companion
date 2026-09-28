@@ -30,6 +30,12 @@ import {
 } from './bidding-strategy-analysis.ts';
 import { buildWeeklyMarketAnalysis } from './weekly-market-analysis.ts';
 import { renderWeeklyMarketMarkdown } from './weekly-market-report.ts';
+import {
+  buildOfflinePlayerValues,
+  commonHorizonTeamCount,
+  rankCorrelation,
+  summarizeDistribution,
+} from './middle-vorp-analysis.ts';
 
 const FIXTURE_VERSION = 1;
 const SEASON = 2026;
@@ -39,10 +45,13 @@ const REPORT_PATH = 'docs/analysis/bidding-strategy-accuracy-seamex-2026.md';
 const API = 'https://api.sleeper.app/v1';
 export const STRATEGIES = [
   ['max-vorp', 'Max VORP'],
-  ['vorp', 'VoRP'],
-  ['safe', 'Safe'],
-  ['aggressive', 'Aggressive'],
-  ['weeks-starter', 'Weeks as Starter'],
+  ['middle-vorp', 'Middle VORP'],
+  ['vorp', 'Current-team VoRP'],
+  ['corrected-safe', 'Corrected Safe (PR #13)'],
+  ['corrected-weeks-starter', 'Corrected Weeks as Starter (PR #13)'],
+  ['safe', 'Legacy Safe'],
+  ['aggressive', 'Legacy Aggressive'],
+  ['weeks-starter', 'Legacy Weeks as Starter'],
 ] as const;
 
 export type StrategyId = typeof STRATEGIES[number][0];
@@ -54,7 +63,7 @@ interface FixtureProjection {
   pointsPerWeek: number;
 }
 
-interface SnapshotFixture {
+export interface SnapshotFixture {
   requestedDecisionWeek: number;
   available: boolean;
   exclusionReason?: string;
@@ -118,6 +127,7 @@ export interface EnrichedEvent extends EventFixture {
   activeTeams: number;
   snapshotProvenance: 'exact' | 'reconstructed';
   suggestions: Record<StrategyId, number>;
+  middleSensitivity: { horizon67: number; horizon50Floor: number; horizon33: number };
   token: boolean;
   playerTier: string;
   capState: string;
@@ -354,7 +364,7 @@ function table(headers: string[], rows: Array<Array<string | number>>): string {
   return [`| ${headers.join(' | ')} |`, `| ${headers.map(() => '---').join(' | ')} |`, ...rows.map((row) => `| ${row.join(' | ')} |`)].join('\n');
 }
 
-function contextFor(fixture: AnalysisFixture, decisionWeek: number): LeagueContext {
+export function contextFor(fixture: AnalysisFixture, decisionWeek: number): LeagueContext {
   const teamsRemaining = estimateRemainingTeamsAtDecisionWeek(fixture.league.totalTeams, decisionWeek);
   const elimsPerWeek = teamsRemaining > 16 ? 2 : 1;
   return {
@@ -366,7 +376,7 @@ function contextFor(fixture: AnalysisFixture, decisionWeek: number): LeagueConte
   };
 }
 
-function fixtureProjections(snapshot: SnapshotFixture): Map<string, RosPlayerProjection> {
+export function fixtureProjections(snapshot: SnapshotFixture): Map<string, RosPlayerProjection> {
   return new Map((snapshot.projections ?? []).map((row) => [row.player, {
     playerId: row.player,
     position: row.position,
@@ -419,25 +429,45 @@ export function enrichEvents(fixture: AnalysisFixture): { usable: EnrichedEvent[
     if (snapshot.provenance !== 'exact' && snapshot.provenance !== 'reconstructed') { for (const _event of events) increment('snapshot-provenance-invalid'); continue; }
     const projections = fixtureProjections(snapshot);
     const ctx = contextFor(fixture, snapshot.requestedDecisionWeek);
+    const board = buildWaiverBoard([...projections.keys()], projections, ctx, [], (id) => id, {
+      maxPerPos: Number.POSITIVE_INFINITY,
+      sleeperRosProjections: projections,
+      replacementTeamCount: ctx.teamsRemaining,
+    });
+    const boardByPlayer = new Map(board.map((row) => [row.playerId, row]));
+    const legacyByPlayer = new Map(board.map((row) => [row.playerId, {
+      safe: row.suggestions.find((item) => item.strategy === 'safe')?.value ?? null,
+      weeksStarter: row.suggestions.find((item) => item.strategy === 'weeks-starter')?.value ?? null,
+    }]));
+    const offlineByPlayer = new Map(buildOfflinePlayerValues(projections, ctx, legacyByPlayer).map((row) => [row.playerId, row]));
     for (const event of events) {
-      const board = buildWaiverBoard([event.player], projections, ctx, [], (id) => id, {
-        maxPerPos: Number.POSITIVE_INFINITY,
-        sleeperRosProjections: projections,
-        replacementTeamCount: ctx.teamsRemaining,
-      });
-      const row = board[0];
-      if (!row) { increment('target-missing-supported-position-projection'); continue; }
-      const suggestions = Object.fromEntries(STRATEGIES.map(([id]) => [id, row.suggestions.find((item) => item.strategy === id)?.value])) as Record<StrategyId, number | null>;
-      if (Object.values(suggestions).some((value) => value == null || !Number.isFinite(value))) { increment('one-or-more-production-strategies-unavailable'); continue; }
-      const completeSuggestions = suggestions as Record<StrategyId, number>;
-      suggestionByEvent.set(event.event, completeSuggestions);
+      const row = boardByPlayer.get(event.player);
+      const offline = offlineByPlayer.get(event.player);
+      if (!row || !offline) { increment('target-missing-supported-position-projection'); continue; }
+      const suggestions: Record<StrategyId, number> = {
+        'max-vorp': offline.maxVorp,
+        'middle-vorp': offline.middleVorp,
+        vorp: offline.currentVorp,
+        'corrected-safe': offline.correctedSafe,
+        'corrected-weeks-starter': offline.correctedWeeksStarter,
+        safe: offline.legacySafe ?? 0,
+        aggressive: row.suggestions.find((item) => item.strategy === 'aggressive')?.value ?? 0,
+        'weeks-starter': offline.legacyWeeksStarter ?? 0,
+      };
+      if (Object.values(suggestions).some((value) => !Number.isFinite(value))) { increment('one-or-more-analysis-strategies-unavailable'); continue; }
+      suggestionByEvent.set(event.event, suggestions);
       usable.push({
         ...event,
         position: row.position,
-        posRank: row.posRank,
+        posRank: offline.positionRank,
         activeTeams: ctx.teamsRemaining,
         snapshotProvenance: snapshot.provenance,
-        suggestions: completeSuggestions,
+        suggestions,
+        middleSensitivity: {
+          horizon67: offline.horizon67,
+          horizon50Floor: offline.horizon50Floor,
+          horizon33: offline.horizon33,
+        },
         token: isTokenBid(event.actualBid, fixture.league.initialFaab),
         playerTier: '',
         capState: event.actualBid >= event.preBidFaab * 0.9 ? 'at-least-90%-prebid' : 'below-90%-prebid',
@@ -508,9 +538,105 @@ function bestByMae(events: EnrichedEvent[], originalFaab: number): string {
   return `${ranked[0].label} (${round(ranked[0].mae, 1)})`;
 }
 
+function renderMiddleVorpEvaluation(fixture: AnalysisFixture, events: EnrichedEvent[]): string {
+  const snapshot = [...fixture.snapshots]
+    .filter((row) => row.available && row.projections?.length)
+    .sort((a, b) => b.requestedDecisionWeek - a.requestedDecisionWeek)[0];
+  if (!snapshot) throw new Error('Middle VORP current-state analysis requires an available projection snapshot');
+  const ctx = contextFor(fixture, snapshot.requestedDecisionWeek);
+  const projections = fixtureProjections(snapshot);
+  const board = buildWaiverBoard([...projections.keys()], projections, ctx, [], (id) => id, {
+    maxPerPos: Number.POSITIVE_INFINITY,
+    sleeperRosProjections: projections,
+    replacementTeamCount: ctx.teamsRemaining,
+  });
+  const legacy = new Map(board.map((row) => [row.playerId, {
+    safe: row.suggestions.find((item) => item.strategy === 'safe')?.value ?? null,
+    weeksStarter: row.suggestions.find((item) => item.strategy === 'weeks-starter')?.value ?? null,
+  }]));
+  const rows = buildOfflinePlayerValues(projections, ctx, legacy);
+  const methods = [
+    ['maxVorp', 'Max VORP'],
+    ['middleVorp', 'Middle VORP'],
+    ['currentVorp', 'Current-team VoRP'],
+    ['correctedSafe', 'Corrected Safe'],
+    ['correctedWeeksStarter', 'Corrected Weeks as Starter'],
+    ['horizon67', '67% common horizon'],
+    ['horizon33', '33% common horizon'],
+  ] as const;
+  const order = (key: typeof methods[number][0], limit = 12) => [...rows]
+    .sort((a, b) => (b[key] as number) - (a[key] as number) || b.pointsPerWeek - a.pointsPerWeek || a.playerId.localeCompare(b.playerId))
+    .slice(0, limit)
+    .map((row) => `${row.playerId} (${row.position}${row.positionRank}, $${row[key]})`).join(', ');
+  const distributionRows = methods.map(([key, label]) => {
+    const summary = summarizeDistribution(rows.map((row) => row[key] as number));
+    return [label, summary.n, summary.positive, summary.zero, round(summary.min, 0), round(summary.p25, 1), round(summary.median, 1), round(summary.mean, 1), round(summary.p75, 1), round(summary.max, 0), round(summary.total, 0)];
+  });
+  const cutoffRows = methods.flatMap(([key, label]) => ['QB', 'RB', 'WR', 'TE'].map((position) => {
+    const positive = rows.filter((row) => row.position === position && (row[key] as number) > 0);
+    return [label, position, positive.length, positive.length ? Math.max(...positive.map((row) => row.positionRank)) : '—'];
+  }));
+  const correlationRows = methods.filter(([key]) => key !== 'middleVorp').map(([key, label]) => [
+    `Middle VORP vs ${label}`,
+    rankCorrelation(rows, 'middleVorp', key) == null ? '—' : round(rankCorrelation(rows, 'middleVorp', key)!, 3),
+  ]);
+  const ranked = (key: 'middleVorp' | 'maxVorp' | 'currentVorp') => new Map([...rows]
+    .sort((a, b) => b[key] - a[key] || b.pointsPerWeek - a.pointsPerWeek || a.playerId.localeCompare(b.playerId))
+    .map((row, index) => [row.playerId, index + 1]));
+  const middleRanks = ranked('middleVorp');
+  const maxRanks = ranked('maxVorp');
+  const currentRanks = ranked('currentVorp');
+  const divergence = [...rows].filter((row) => row.middleVorp > 0 && row.maxVorp !== row.middleVorp && row.currentVorp !== row.middleVorp)
+    .sort((a, b) => {
+      const aGap = Math.max(Math.abs(middleRanks.get(a.playerId)! - maxRanks.get(a.playerId)!), Math.abs(middleRanks.get(a.playerId)! - currentRanks.get(a.playerId)!));
+      const bGap = Math.max(Math.abs(middleRanks.get(b.playerId)! - maxRanks.get(b.playerId)!), Math.abs(middleRanks.get(b.playerId)! - currentRanks.get(b.playerId)!));
+      return bGap - aGap || a.playerId.localeCompare(b.playerId);
+    }).slice(0, 10);
+  const divergenceRows = divergence.map((row) => [
+    `${row.playerId} (${row.position}${row.positionRank})`,
+    `$${row.middleVorp} / #${middleRanks.get(row.playerId)}`,
+    `$${row.maxVorp} / #${maxRanks.get(row.playerId)}`,
+    row.maxVorpStage == null ? '—' : `${row.maxVorpStage} teams`,
+    `$${row.currentVorp} / #${currentRanks.get(row.playerId)}`,
+    `Max selected its largest unrounded value at the ${row.maxVorpStage ?? 'unavailable'}-team reachable stage; Middle fixes one ${commonHorizonTeamCount(ctx.teamsRemaining)}-team stage for every player.`,
+  ]);
+  const sensitivityRows = [
+    ['67%', commonHorizonTeamCount(ctx.teamsRemaining, 0.67), 'horizon67'],
+    ['50% (primary, ceil)', commonHorizonTeamCount(ctx.teamsRemaining, 0.5, 'ceil'), 'middleVorp'],
+    ['50% (floor)', commonHorizonTeamCount(ctx.teamsRemaining, 0.5, 'floor'), 'horizon50Floor'],
+    ['33%', commonHorizonTeamCount(ctx.teamsRemaining, 0.33), 'horizon33'],
+  ] as const;
+  const currentSensitivity = sensitivityRows.map(([label, teams, key]) => [label, teams, summarizeDistribution(rows.map((row) => row[key])).positive, round(rankCorrelation(rows, 'middleVorp', key) ?? 1, 3)]);
+  const primaryWins = events.filter((event) => event.outcome === 'won' && !(event.decisionWeek === 3 && event.actualBid === 234));
+  const historicalSensitivity = sensitivityRows.map(([label, _teams, key]) => {
+    const evaluated: EvaluatedBid[] = primaryWins.flatMap((event) => {
+      const predicted = key === 'middleVorp' ? event.suggestions['middle-vorp'] : event.middleSensitivity[key];
+      return predicted > 0 ? [{ eventId: event.event, clusterId: event.batch, strategy: key, actual: event.actualBid, predicted, originalFaab: fixture.league.initialFaab, preBidFaab: event.preBidFaab }] : [];
+    });
+    const metrics = computeErrorMetrics(evaluated);
+    return [label, metrics?.n ?? 0, metrics ? round(metrics.mae, 1) : '—', metrics ? round(metrics.signedBias, 1) : '—', metrics?.spearman == null ? '—' : round(metrics.spearman, 3)];
+  });
+  return `## Middle VORP candidate evaluation\n\n` +
+    `**Candidate:** use one common replacement horizon for the entire league state: \`targetTeams = max(4, ceil(teamsRemaining / 2))\`. This gives 28→14, 27→14, and 5→4. Unlike Max VORP, it never chooses a different future stage per player. Unlike current-team VoRP, it prices scarcity at a deliberately forward-looking but shared stage. The 50% horizon is a hypothesis, not a fitted constant.\n\n` +
+    `**Recommendation: retain analysis-only.** Middle VORP is conceptually cleaner than per-player maximization and materially different from current-team VoRP, but only W2 and W3 completed decision weeks are evaluable and both projection inputs are reconstructed. That cannot establish a new default. A preregistered W4+ sequence using exact pre-waiver captures would raise confidence if Middle preserves rank quality, has lower held-out MAE/bias after prior-only scaling, and remains stable across 33%/50%/67% horizons and outlier/all-bid filters; persistent underperformance or horizon instability would lower it.\n\n` +
+    `### Latest reproducible SeaMex state\n\n` +
+    `The latest available deterministic input is the privacy-safe reconstructed **W${snapshot.requestedDecisionWeek}** projection snapshot (content hash \`${snapshot.contentHash}\`, ${snapshot.projectionCount} stored projection rows; ${rows.length} supported QB/RB/WR/TE players), with ${ctx.teamsRemaining} teams, $${ctx.budget} common budget, and no roster/manager/league identifiers. Player labels are fixture aliases, not identities. It is the latest reproducible analysis state—not a claim that an exact W4 pre-waiver capture exists.\n\n` +
+    `#### Player ordering (top 12)\n\n${methods.map(([key, label]) => `- **${label}:** ${order(key)}`).join('\n')}\n\n` +
+    `#### Dollar distributions and positive counts\n\n${table(['Method', 'n', 'Positive', 'Zero', 'Min', 'P25', 'Median', 'Mean', 'P75', 'Max', 'Total $'], distributionRows)}\n\n` +
+    `#### Positional positive-price cutoffs\n\n${table(['Method', 'Position', 'Positive count', 'Deepest positive position rank'], cutoffRows)}\n\n` +
+    `#### Rank correlations\n\n${table(['Pair', 'Spearman ρ'], correlationRows)}\n\n` +
+    `#### Concrete Middle/Max/current-team divergences\n\n${table(['Privacy-safe player', 'Middle $ / rank', 'Max $ / rank', 'Max-selected stage', 'Current $ / rank', 'Why'], divergenceRows)}\n\n` +
+    `### Common-horizon sensitivity\n\n${table(['Horizon', 'Current-state target teams', 'Positive prices', 'Spearman vs primary 50%'], currentSensitivity)}\n\n` +
+    `${table(['Horizon', 'Historical canonical-win n', 'MAE', 'Bias', 'Spearman ρ'], historicalSensitivity)}\n\n` +
+    `The observed W2/W3 team counts are even (30 and 28), so floor and ceil produce identical empirical bids and **do not change the conclusions**. The explicit odd-state unit case differs as intended (27→14 with ceil versus 27→13 with floor); future odd-team observations must keep this sensitivity live.\n\n` +
+    `### Corrected non-VORP context\n\n` +
+    `Corrected Safe and Weeks-as-Starter are reproduced in the offline layer from PR #13 implementation commit \`7d86b2d\`: direct slots are allocated first, then FLEX and SUPER_FLEX from remaining eligible players, and unsupported replacement depth maps to zero rather than an artificial premium. No PR #13 product code is merged or cherry-picked. Legacy curves remain separately labeled in the broader report so historical comparisons are not silently rewritten.\n`;
+}
+
 function renderReport(fixture: AnalysisFixture): string {
   const { usable, exclusions } = enrichEvents(fixture);
   const weeklyAppendix = renderWeeklyMarketMarkdown(buildWeeklyMarketAnalysis(usable));
+  const middleVorpEvaluation = renderMiddleVorpEvaluation(fixture, usable);
   const budget = fixture.league.initialFaab;
   const wins = usable.filter((event) => event.outcome === 'won');
   const serious = usable.filter((event) => !event.token);
@@ -641,10 +767,11 @@ function renderReport(fixture: AnalysisFixture): string {
 
   return `# SeaMex 2026 bidding-strategy accuracy analysis\n\n` +
 `Deterministic offline report generated from anonymized fixture version ${fixture.fixtureVersion}. Data are complete through **${fixture.source.dataThrough}**; there is no wall-clock generation timestamp. Regenerate byte-for-byte with \`npm run analyze:bidding\`.\n\n` +
+`${middleVorpEvaluation}\n\n` +
 `${weeklyAppendix}\n\n` +
 `## Executive result\n\n` +
 `Among ${wins.length} usable winning bids, **${bestAllWins.label}** has the lowest in-sample MAE (${round(bestAllWins.mae, 1)}). After the predeclared token rule, **${bestSeriousWins.label}** is lowest (${round(bestSeriousWins.mae, 1)}). Robust-filter leaders are ${robustLeaders.join('; ')}; the serious-bid leader is ${robustlyStable ? '' : '**not** '}stable across them. This is descriptive evidence from one 32-team league, ${usableDecisionWeeks.length} reconstructed decision weeks, not a universal strategy ranking. Do **not** change the production default from this study alone.\n\n` +
-`The executable comparison uses the five strategies that actually exist in the registry: Max VORP, VoRP, Safe, Aggressive, and Weeks-as-Starter. The P0 label “Weekly” is **not** silently mapped to VoRP; the naming audit below establishes why it is excluded as undefined.\n\n` +
+`The executable comparison preserves the five production-registry strategies, adds **Middle VORP only in this offline analysis**, and separately labels the corrected PR #13 Safe/Weeks curves versus legacy branch outputs. The P0 label “Weekly” is **not** silently mapped to VoRP; the naming audit below establishes why it is excluded as undefined. No production registry, default, or UI behavior is changed.\n\n` +
 `## Naming audit: requested “Weekly” is not an implemented strategy\n\n` +
 `| Evidence | Authoritative finding |\n| --- | --- |\n| Initial strategy implementation \`c331281\` (2026-09-21) | Registry keys were \`safe\`, \`exponential\`, \`weeks-starter\`, and \`vorp\`; UI label for \`vorp\` was “VoRP.” |\n| Rename \`1656925\` (2026-09-23) | \`exponential\` became \`aggressive\`; no Weekly strategy was introduced. |\n| Max-VORP addition \`7c32a1f\` (2026-09-25) | Added \`max-vorp\`; the other keys remained \`weeks-starter\`, \`safe\`, \`aggressive\`, and \`vorp\`. |\n| Exhaustive local history/ref search | No commit, branch, registry, type, or UI label defines a \`weekly\` strategy or an alias from Weekly to \`vorp\`. |\n| PR #10 terminology | “historicalWeeklyBaseline” is explicitly documented as reusing the existing **Weeks-as-Starter** formula, and the implementation selected \`weeks-starter\`. It is a time-indexed baseline description, not a separate strategy and not a VoRP alias. |\n\n` +
 `**Resolution:** there is no authoritative basis to rename \`vorp\` to Weekly, and treating “weekly baseline” as a separate strategy would merely duplicate Weeks-as-Starter, which P0 already lists separately. Therefore requested **Weekly is excluded with reason \`no-authoritative-formula-or-key\`**, while the current registry's \`vorp\` output is analyzed under its real label, **VoRP**. If John intended a sixth/distinct Weekly formula, its definition must be supplied before it can be replayed without fabrication.\n\n` +
@@ -668,7 +795,7 @@ function renderReport(fixture: AnalysisFixture): string {
 `- **IQR isolated top:** cluster n≥4, normalized top > Q3 + ${ANALYSIS_POLICY.iqrMultiplier}×IQR, plus the same minimum gap.\n` +
 `Flags (not deletions): ratio-gap=${outliers.ratioGap.size}, MAD=${outliers.mad.size}, IQR=${outliers.iqr.size}. Rules are applied independently and are not selected based on which strategy wins.\n\n` +
 `## Production formulas replayed\n\n` +
-`All values come from \`buildWaiverBoard\` using the shared production implementation and each event's reconstructed context. Max VORP maximizes unrounded championship-calibrated VORP dollars across every reachable active-team stage. VoRP uses the event's active-team replacement stage. Safe starts at $200/$1000, applies position weight and rank premium, then scales to original FAAB. Weeks-as-Starter multiplies Safe by projected starter weeks / remaining weeks. Aggressive is \`round(WeeksAsStarter × 2 × (1 − (decisionWeek−1)/16))\`. Intrinsic suggestions are **not** capped by manager FAAB; pre-bid normalization is reported separately. No Weekly value is computed because no authoritative production or historical formula exists.\n\n` +
+`Production-registry values come from \`buildWaiverBoard\` using the shared implementation and each event's reconstructed context. Max VORP maximizes unrounded championship-calibrated VORP dollars across every reachable active-team stage. Current-team VoRP uses the event's active-team replacement stage. Middle VORP is analysis-only and uses the same VoRP calibration at one shared \`max(4, ceil(teamsRemaining/2))\` stage. Corrected Safe/Weeks reproduce PR #13 commit \`7d86b2d\` in the offline layer; legacy branch outputs remain separately labeled. Legacy Aggressive is \`round(WeeksAsStarter × 2 × (1 − (decisionWeek−1)/16))\`. Intrinsic suggestions are **not** capped by manager FAAB; pre-bid normalization is reported separately. No Weekly value is computed because no authoritative production or historical formula exists.\n\n` +
 metricTables + `\n\n` +
 `## Sensitivity of winning-bid MAE\n\n${sensitivityTable}\n\n` +
 `95% intervals are deterministic ${ANALYSIS_POLICY.bootstrapIterations}-replicate cluster bootstraps (seed ${ANALYSIS_POLICY.bootstrapSeed}); resampling the player/batch cluster keeps correlated win/loss bids together. They quantify sampling variation in this observed set, not projection-history error.\n\n` +
@@ -686,7 +813,7 @@ metricTables + `\n\n` +
 }))}\n\n` +
 `Because every underlying historical projection is reconstructed, these forecasts are exploratory, not historically exact. Missing forecasts are explicit prior-evidence exclusions, not zero predictions.\n\n` +
 `## Validation, limitations, and recommendation\n\n` +
-`- Leave-week-out fitting is not statistically supported: only ${usableDecisionWeeks.length} usable decision weeks (${usableDecisionWeeks.map((week) => `W${week}`).join(', ')}) exist and all are reconstructed. The five intrinsic formulas have no fitted parameters here. Manager forecasts therefore use strict chronological walk-forward validation instead.\n` +
+`- Leave-week-out fitting is not statistically supported: only ${usableDecisionWeeks.length} usable decision weeks (${usableDecisionWeeks.map((week) => `W${week}`).join(', ')}) exist and all are reconstructed. The compared intrinsic formulas have no fitted parameters here. Manager forecasts therefore use strict chronological walk-forward validation instead.\n` +
 `- Sleeper's transaction API reveals failed private amounts only for returned failed records. The classifier retains only failures proven by a different same-player winner in the identical processing batch; it makes no claim about unsupported or absent private bids.\n` +
 `- Reconstructed snapshots were captured after their canonical cutoffs. Historical player ranks and values may differ from what managers saw. No current projection is substituted for an absent decision week.\n` +
 `- Historical roster ownership is not required by these formulas for a known claimed target, but league settings are only observed current-season state. Active-team counts are formula-derived progression estimates.\n` +

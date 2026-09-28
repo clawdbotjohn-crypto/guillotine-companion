@@ -1,3 +1,54 @@
+## 2026-09-27 — Middle VORP review-only evaluation complete (PR #12)
+
+### Scope and branch safety
+- Worked only in `/home/john/guillotine-bid-analysis-work` on `analysis/bidding-strategy-accuracy`.
+- Added Middle VORP only to offline analysis/report code. No production strategy registry, default, UI behavior, scheduler, workflow, Supabase, or deployment change.
+- Inspected PR #13 at `origin/fix/non-vorp-replacement-zeroing` / implementation `7d86b2d` read-only. Its corrected allocation/zeroing semantics are reproduced analytically and labeled in the report; no product code was merged or cherry-picked.
+
+### Candidate and conceptual result
+- Primary: `targetTeams = max(4, ceil(teamsRemaining / 2))`; one common target for every player in the state (28→14, 27→14, 5→4), never per-player maximization.
+- 50% is explicitly a hypothesis. Analysis also runs 67%/50%/33% common horizons and floor-vs-ceil sensitivity.
+- Conceptually, Middle is easier to explain than Max VORP because all players share one forward horizon, but it is much narrower than Max/current and does not win the limited reconstructed historical comparison.
+- **Recommendation: retain analysis-only.** Do not promote from two completed reconstructed decision weeks. W4+ exact pre-waiver captures should change confidence only if prospective prior-only scaling shows stable MAE/bias/rank quality and conclusions remain stable across 33%/50%/67%, owner-directed, and all-bid filters.
+
+### Exact latest reproducible SeaMex findings
+- Input: reconstructed decision-W3 fixture snapshot, 445 supported projections, 28 teams, common budget $500, privacy aliases only; Middle target is 14 teams. This is the latest reproducible state, not an exact W4 capture.
+- Positive/mean/max/total dollars: Max 191 / $15.4 / $232 / $6,843; Middle 93 / $7.7 / $123 / $3,412; current-team VoRP 191 / $13.9 / $109 / $6,196; corrected Safe 192 / $22.9 / $125 / $10,199; corrected Weeks 183 / $16.2 / $125 / $7,198.
+- Middle rank correlations: Max ρ=0.780, current 0.780, corrected Safe 0.785, corrected Weeks 0.796; 67% 0.880; 33% 0.861.
+- Middle positive cutoffs: QB13/RB28/WR39/TE13. Max/current: QB27/RB55/WR80/TE29.
+- Top Middle prices: P1104 RB1 $123, P1116 WR1 $108, P1117 WR2 $106, P1125 RB2 $99, P0838 RB3 $98, P0901 WR3 $95, P0632 RB4 $85, P1133 WR4 $84, P0993 WR5 $78, P0904 WR6 $77, P1107 RB5 $76, P0984 TE1 $75.
+- Concrete stage divergences are in all artifacts. Examples: P0984 TE1 Middle $75 / Max $178 / current $70, where Max selected the 4-team stage; P1104 RB1 $123 / $232 / $109 at Max’s 4-team stage; P0690 QB1 $69 / $121 / $61 at 4 teams; P1116 WR1 $108 / $156 / $91 at 4 teams.
+
+### Exact completed-week findings
+- Owner-directed view retains the marked $234 W3 event in raw evidence but excludes it only in the labeled primary sensitivity. W2 and W3 projection inputs are reconstructed; W4 exact is absent.
+- Serious-market medians overall: Middle n=9, MAE $20.8, median AE $17.5, bias −$12.6, raw unfitted prediction R² −0.15, ρ=0.44. Comparators: Max n=21/MAE $12.5/bias +$1.5/R² 0.56/ρ 0.79; current n=21/$11.0/−$1.0/0.63/0.78; corrected Safe n=21/$21.7/+$19.3/−0.42/0.82; corrected Weeks n=20/$17.8/+$6.0/0.13/0.78.
+- Serious medians by week: W2 Middle n=4, MAE $34.3, bias −$24.5, R² −0.74, ρ=0.63 (Max is closest at $14.9); W3 Middle n=5, MAE $10.0, bias −$3.0, R² 0.64, ρ=1.00 (current is closest at $6.6).
+- Canonical winners overall: Middle n=9, MAE $95.3, median AE $75.0, bias −$94.7, raw R² −1.08, ρ=0.71. Corrected Safe is closest among compared primary curves (n=25, MAE $31.9).
+- Middle season multipliers (defined/45): canonical winning 9, arithmetic/geometric/median 3.62/3.18/3.84; serious median 9, 1.50/1.33/1.63. W2: winning 4.12/3.29/4.31, serious 1.76/1.46/2.14. W3: winning 3.23/3.10/3.30, serious 1.28/1.23/1.18.
+- Strict prior-only median scaling: fit W2 and score W3. Middle canonical winners n=5, multiplier 4.313, MAE $60.1, bias +$55.7, raw held-out R² −0.50, ρ=0.90. Middle serious medians n=5, multiplier 2.140, MAE $44.9, bias +$44.9, raw held-out R² −9.69, ρ=1.00. No fit/scoring overlap.
+- All-bid sensitivity keeps current-team VoRP closest overall (Middle n=9, MAE $19.4, bias −$11.1, R² −0.02, ρ=0.60). Including the owner-directed event does not change the closest serious-median strategy.
+
+### Horizon sensitivity
+- Current 28-team state: 67%=19 teams/129 positive/ρ 0.880 vs primary; 50%=14/93/1.000; 33%=10/65/0.861. Historical canonical-win MAE: 67% $71.4 (n=13), 50% $95.3 (n=9), 33% $106.0 (n=8); all underpredict.
+- Observed W2/W3 counts are even (30/28), so floor and ceil are identical and do not change conclusions. Unit tests explicitly verify odd 27-team sensitivity: ceil→14, floor→13.
+- Sparse Middle n is a substantive coverage result: zero intrinsic suggestions are omitted strategy-by-strategy and all denominators are displayed.
+
+### Files and artifacts
+- New: `scripts/middle-vorp-analysis.ts`, `scripts/__tests__/middle-vorp-analysis.test.ts`.
+- Updated analysis: `scripts/analyze-bidding-strategies.ts`, `scripts/weekly-market-analysis.ts`, `scripts/weekly-market-report.ts`, `scripts/generate-bidding-analysis-presentation.ts`.
+- Updated tests/docs: `scripts/__tests__/weekly-market-analysis.test.ts`, `scripts/__tests__/bidding-analysis-presentation.test.ts`, `PROGRESS.md`, and the generated Markdown/HTML/PDF.
+- Artifacts: `docs/analysis/bidding-strategy-accuracy-seamex-2026.{md,html,pdf}`.
+- Deterministic SHA-256 after two complete regenerations: Markdown `b7c88d874dee5b3934e8cedca95f3c0961534d57f371ba5b49bd5b4cae59b3b6`; HTML `0cb860422112af05531c19a5a0b346b12d4ca92e1698d4c2d9f67bff81af721d`; PDF `ca361f29aaf0c53e94edb2599ef91b67e7cbb92b5e4a99a115c66a45aaa3f296`.
+
+### Validation
+- Focused: 4 files / 19 tests passed. Full frontend/analysis: 28 files / 181 tests passed. API: 36/36 passed.
+- `npm run lint` passed with one pre-existing `react(set-state-in-effect)` warning in `ManagerBiddingProfiles.tsx`; zero errors. `npm run typecheck` and `npm run build` passed.
+- `git diff --check` passed. HTML browser audit: 7 sections, 18 tables, 9 SVGs, zero empty tables, no horizontal section overflow. PDF parsed/rendered successfully at 19 letter-size pages; sampled pages rendered to PNG.
+- Changed-file secret/privacy scan found no credential, key-material, token, private ID, raw payload, or newly added identity. The existing source file’s server-only project-ref constant was not introduced by this work and is not emitted to artifacts.
+- No merge, deploy, workflow dispatch, Supabase mutation, scheduler/cron edit, production-registry/default/UI change, or Discord post.
+
+---
+
 # Handoff — weekly top-three + median-market P0 (2026-09-27)
 
 Status: implementation `ccb5eca` and verification closure `06101fa` were pushed to review-only PR #12 on `analysis/bidding-strategy-accuracy`. No product/default behavior changed.

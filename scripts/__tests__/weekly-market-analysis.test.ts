@@ -33,25 +33,35 @@ describe('weekly top-three and median-market analysis', () => {
     const [week2, week3] = analysis.ownerDirected.topThree;
     expect(week2.winnerMultipliers['max-vorp'].arithmeticMean).toBeCloseTo(3.3402014652, 9);
     expect(week2.winnerMultipliers.vorp.geometricMean).toBeCloseTo(3.2431277708, 9);
-    expect(week2.marketMultipliers.safe.median).toBeCloseTo(0.9444444444, 9);
+    expect(week2.marketMultipliers['corrected-safe'].median).toBeCloseTo(0.9868421053, 9);
     expect(week3.winnerMultipliers['max-vorp'].arithmeticMean).toBeCloseTo(2.3489010989, 9);
     expect(week3.winnerMultipliers.vorp.median).toBeCloseTo(2.4285714286, 9);
-    expect(week3.marketMultipliers['weeks-starter'].geometricMean).toBeCloseTo(0.9760096884, 9);
+    expect(week3.marketMultipliers['corrected-weeks-starter'].geometricMean).toBeCloseTo(0.6457685686, 9);
     expect(week2.rows.map((row) => row.seriousMedianBid)).toEqual([85, 75, 56.5]);
     expect(week3.rows.map((row) => row.seriousMedianBid)).toEqual([56, 66.5, 54.5]);
   });
 
-  it('finds VoRP closest overall, Max VORP in W2, and VoRP in W3', () => {
+  it('finds current-team VoRP closest overall, Max VORP in W2, and current-team VoRP in W3', () => {
     const [overall, week2, week3] = analysis.ownerDirected.marketMetrics;
     expect([overall.week, week2.week, week3.week]).toEqual([null, 2, 3]);
-    expect(overall).toMatchObject({ seriousMedianClusters: 28, closest: 'VoRP', closestAllBid: 'VoRP' });
+    expect(overall).toMatchObject({ seriousMedianClusters: 28, closest: 'Current-team VoRP', closestWinning: 'Corrected Safe', closestAllBid: 'Current-team VoRP' });
     expect(week2).toMatchObject({ seriousMedianClusters: 13, closest: 'Max VORP' });
-    expect(week3).toMatchObject({ seriousMedianClusters: 15, closest: 'VoRP' });
-    expect(overall.metrics.find((row) => row.id === 'vorp')?.mae).toBeCloseTo(10.9761904762, 9);
+    expect(week3).toMatchObject({ seriousMedianClusters: 15, closest: 'Current-team VoRP' });
+    expect(overall.metrics.find((row) => row.id === 'middle-vorp')?.mae).toBeCloseTo(20.7777777778, 9);
     expect(week2.metrics.find((row) => row.id === 'max-vorp')?.mae).toBeCloseTo(14.8636363636, 9);
     expect(week3.metrics.find((row) => row.id === 'vorp')?.mae).toBeCloseTo(6.6, 9);
     expect(analysis.withExcludedTarget.marketMetrics[0].seriousMedianClusters).toBe(29);
-    expect(analysis.withExcludedTarget.marketMetrics[0].closest).toBe('VoRP');
+    expect(analysis.withExcludedTarget.marketMetrics[0].closest).toBe('Current-team VoRP');
+  });
+
+  it('fits W2 scale only and scores it held-out on W3', () => {
+    const middleWinner = analysis.ownerDirected.heldOutScaleMetrics.winning.find((row) => row.id === 'middle-vorp')!;
+    const middleMarket = analysis.ownerDirected.heldOutScaleMetrics.seriousMedian.find((row) => row.id === 'middle-vorp')!;
+    expect(middleWinner).toMatchObject({ fitWeek: 2, testWeek: 3, n: 5, scaleEstimator: 'median' });
+    expect(middleWinner.fittedMultiplier).toBeCloseTo(4.3125, 9);
+    expect(middleWinner.mae).toBeCloseTo(60.15, 9);
+    expect(middleMarket.fittedMultiplier).toBeCloseTo(2.1395265423, 9);
+    expect(middleMarket.mae).toBeCloseTo(44.8601147776, 9);
   });
 
   it('guards zero denominators, reports coverage, and treats R² as an unfitted diagnostic', () => {
@@ -67,7 +77,7 @@ describe('weekly top-three and median-market analysis', () => {
     expect(bullets).toHaveLength(5);
     expect(bullets[1]).toContain('W2');
     expect(bullets[2]).toContain('W3');
-    expect(bullets.join('\n')).toContain('closest overall serious-median strategy is VoRP');
+    expect(bullets.join('\n')).toContain('closest overall serious-median strategy is Current-team VoRP');
     expect(markdown.indexOf('## Five-bullet answer')).toBeLessThan(markdown.indexOf('## Weekly top-three'));
     expect(markdown).toContain('Max VORP 3.34×');
     expect(markdown).toContain('VoRP 3.00×');

@@ -1,5 +1,6 @@
 import {
   MARKET_STRATEGIES,
+  type HeldOutScaleMetric,
   type MarketMetric,
   type MarketMetricGroup,
   type MarketStrategyId,
@@ -66,6 +67,20 @@ function metricSummary(metrics: MarketMetric[]): string {
   return metrics.map((row) => `${row.label} MAE ${number(row.mae, 1)}`).join('; ');
 }
 
+function heldOutRows(metrics: HeldOutScaleMetric[]): Array<Array<string | number>> {
+  return metrics.map((row) => [
+    row.label,
+    `${row.fitWeek}→${row.testWeek}`,
+    number(row.fittedMultiplier, 3),
+    row.n,
+    number(row.mae, 1),
+    number(row.medianAbsoluteError, 1),
+    `${row.signedBias > 0 ? '+' : ''}${number(row.signedBias, 1)}`,
+    number(row.rSquared, 2),
+    number(row.spearman, 2),
+  ]);
+}
+
 function sensitivityLine(analysis: WeeklyMarketAnalysis): string {
   const without = analysis.ownerDirected.marketMetrics.find((row) => row.week == null)!;
   const withTarget = analysis.withExcludedTarget.marketMetrics.find((row) => row.week == null)!;
@@ -101,20 +116,40 @@ export function renderWeeklyMarketMarkdown(analysis: WeeklyMarketAnalysis): stri
   const marketSections = view.marketMetrics.map((group) => {
     const label = group.week == null ? 'Overall' : `W${group.week}`;
     return `### ${label}\n\n` +
-      `Serious median clusters: ${group.seriousMedianClusters}/${group.clusters}; closest=${group.closest}. Undefined strategy zeros are omitted strategy-by-strategy, so n is visible.\n\n` +
+      `Canonical winning-bid clusters: ${group.clusters}; closest=${group.closestWinning}. Undefined strategy zeros are omitted strategy-by-strategy, so n is visible.\n\n` +
+      markdownTable(['Strategy', 'n', 'MAE', 'Median AE', 'Bias (intrinsic−winning)', 'Raw prediction R²*', 'Spearman ρ'], group.winningMetrics.map((row) => [
+        row.label, row.n, number(row.mae, 1), number(row.medianAbsoluteError, 1), `${row.signedBias > 0 ? '+' : ''}${number(row.signedBias, 1)}`, number(row.rSquared, 2), number(row.spearman, 2),
+      ])) +
+      `\n\nSerious median clusters: ${group.seriousMedianClusters}/${group.clusters}; closest=${group.closest}.\n\n` +
       markdownTable(['Strategy', 'n', 'MAE', 'Median AE', 'Bias (intrinsic−market)', 'Raw prediction R²*', 'Spearman ρ'], metricRows(group)) +
       `\n\n**All-bid-median sensitivity** (${group.materiallyDifferentClusters} materially changed clusters; closest=${group.closestAllBid}):\n\n` +
       markdownTable(['Strategy', 'n', 'MAE', 'Median AE', 'Bias (intrinsic−market)', 'Raw prediction R²*', 'Spearman ρ'], metricRows(group, true));
   }).join('\n\n');
+  const multiplierSections = view.clusterMultipliers.map((group) => {
+    const scope = group.week == null ? 'Season aggregate' : `W${group.week}`;
+    return `### ${scope} — ${group.observed}\n\n${markdownTable(
+      ['Strategy', 'Defined/total', 'Arithmetic mean ×', 'Geometric mean ×', 'Median ×'],
+      MARKET_STRATEGIES.map(([id, label]) => {
+        const summary = group.summaries[id];
+        return [label, `${summary.defined}/${summary.total}`, number(summary.arithmeticMean), number(summary.geometricMean), number(summary.median)];
+      }),
+    )}`;
+  }).join('\n\n');
+  const heldOut = `### Prior-week-fitted held-out scale — canonical winners\n\n` +
+    markdownTable(['Strategy', 'Fit→test week', 'W2 median multiplier', 'W3 n', 'MAE', 'Median AE', 'Bias', 'Raw held-out R²*', 'Spearman ρ'], heldOutRows(view.heldOutScaleMetrics.winning)) +
+    `\n\n### Prior-week-fitted held-out scale — serious medians\n\n` +
+    markdownTable(['Strategy', 'Fit→test week', 'W2 median multiplier', 'W3 n', 'MAE', 'Median AE', 'Bias', 'Raw held-out R²*', 'Spearman ρ'], heldOutRows(view.heldOutScaleMetrics.seriousMedian));
   return `## Five-bullet answer: weekly price multipliers\n\n${bullets}\n\n` +
 `## Weekly top-three and median-market appendix\n\n` +
-`This owner-directed view compares only **Max VORP, VoRP, Safe, and Weeks as Starter**. Aggressive is excluded because it is derived from Safe. Only events with an exact decision-week snapshot join are eligible; W4 is absent because only a W3 fallback existed. “Serious” is strictly **bid > $5**. Ratios are **observed/intrinsic**, not intrinsic/observed. A zero intrinsic denominator is undefined, excluded from arithmetic/geometric/median aggregation, and counted in coverage. A winning or competing bid at its reconstructed pre-bid FAAB is marked as FAAB-censored because latent willingness may be higher.\n\n` +
+`This owner-directed view compares **Max VORP, Middle VORP, current-team VoRP, and the corrected PR #13 Safe and Weeks-as-Starter curves**. Legacy Aggressive is excluded because it is derived from legacy Safe. Only events with an exact or explicitly reconstructed same-decision-week snapshot join are eligible; W4 is absent because only a W3 fallback existed. “Serious” is strictly **bid > $5**. Ratios are **observed/intrinsic**, not intrinsic/observed. A zero intrinsic denominator is undefined, excluded from arithmetic/geometric/median aggregation, and counted in coverage. A winning or competing bid at its reconstructed pre-bid FAAB is marked as FAAB-censored because latent willingness may be higher.\n\n` +
 `${topSections}\n\n` +
 `## Analysis B: median serious market versus intrinsic strategy\n\n` +
 `Each player/week cluster selects its highest canonical completed winner, then includes only legitimate failed competing claims proven against that winner in the same processing batch. Metrics use one median observation per eligible player/week, avoiding duplicate weight from contingency/drop paths or a second clearing cycle. **Raw prediction R²*** is the standard predictive score against the observed-mean baseline, but it is **not the R² from a fitted regression**: strategy dollars are held fixed on the identity line rather than refit to bids. It may be negative when fixed predictions are worse than the mean-only baseline; that does not mean negative correlation. R² and Spearman are shown only when at least two non-constant observations make them meaningful.\n\n` +
 `${marketSections}\n\n` +
+`## Weekly and season multiplier summaries\n\n${multiplierSections}\n\n` +
+`## Prior-week-fitted held-out scale check\n\nThe multiplier is fit **only** as the W2 median observed/intrinsic ratio, then applied without refitting to W3. It is never fit and scored on the same observations. Raw held-out R²* retains the same prediction-score meaning.\n\n${heldOut}\n\n` +
 `## Owner-directed exclusion sensitivity\n\n` +
 `The underlying canonical evidence is retained. The primary view excludes only the deterministic anonymized marker **${analysis.exclusion.marker}**, established by ${analysis.exclusion.proof}; no private name or identifier is stored or printed. ${sensitivityLine(analysis)}\n\n` +
 `## Shape × scale interpretation\n\n` +
-`The four intrinsic strategies describe **target shape**—which players should cost relatively more—while the observed/intrinsic multipliers estimate a separate **market scale** for each week. The rank and error results can motivate a future model that combines strategy shape with a pooled week/market scale. They do **not** identify an individual manager style: two reconstructed weeks and sparse manager histories are insufficient for that claim.\n`;
+`The five primary intrinsic strategies describe **target shape**—which players should cost relatively more—while the observed/intrinsic multipliers estimate a separate **market scale** for each week. The rank and error results can motivate a future model that combines strategy shape with a pooled week/market scale. They do **not** identify an individual manager style: two reconstructed weeks and sparse manager histories are insufficient for that claim.\n`;
 }

@@ -5,8 +5,10 @@ import { basename, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
   STRATEGIES,
+  contextFor,
   enrichEvents,
   evaluationRows,
+  fixtureProjections,
   type AnalysisFixture,
   type EnrichedEvent,
   type StrategyId,
@@ -25,6 +27,13 @@ import {
   type WeeklyMarketAnalysis,
 } from './weekly-market-analysis.ts';
 import { plainFiveBulletAnswer } from './weekly-market-report.ts';
+import {
+  buildOfflinePlayerValues,
+  commonHorizonTeamCount,
+  rankCorrelation,
+  summarizeDistribution,
+  type OfflinePlayerValues,
+} from './middle-vorp-analysis.ts';
 
 const FIXTURE_PATH = 'scripts/fixtures/bidding-strategy-seamex-2026.json';
 const HTML_PATH = 'docs/analysis/bidding-strategy-accuracy-seamex-2026.html';
@@ -32,7 +41,10 @@ const PDF_PATH = 'docs/analysis/bidding-strategy-accuracy-seamex-2026.pdf';
 
 const STYLES: Record<StrategyId, { color: string; dash: string; marker: string }> = {
   'max-vorp': { color: '#126e82', dash: '', marker: 'circle' },
+  'middle-vorp': { color: '#1f6a50', dash: '6 3', marker: 'hexagon' },
   vorp: { color: '#8a4f00', dash: '8 4', marker: 'square' },
+  'corrected-safe': { color: '#345995', dash: '3 3', marker: 'diamond' },
+  'corrected-weeks-starter': { color: '#7b2cbf', dash: '7 3', marker: 'triangle' },
   safe: { color: '#6941c6', dash: '2 4', marker: 'diamond' },
   aggressive: { color: '#c23831', dash: '10 3 2 3', marker: 'triangle' },
   'weeks-starter': { color: '#477a22', dash: '5 4', marker: 'cross' },
@@ -77,6 +89,14 @@ export interface PresentationModel {
   provenance: string;
   weeklyAnalysis: WeeklyMarketAnalysis;
   weeklyBullets: string[];
+  currentState: {
+    week: number;
+    teamsRemaining: number;
+    targetTeams: number;
+    contentHash: string;
+    projectionCount: number;
+    rows: OfflinePlayerValues[];
+  };
 }
 
 function escapeHtml(value: string | number): string {
@@ -165,6 +185,18 @@ export function buildPresentationModel(fixture: AnalysisFixture): PresentationMo
   const robustLeaders = sensitivity.slice(2).map((row) => lowest(row.metrics).label);
   const weeklyAnalysis = buildWeeklyMarketAnalysis(usable);
   const weeklyBullets = plainFiveBulletAnswer(weeklyAnalysis);
+  const latestSnapshot = [...fixture.snapshots].filter((snapshot) => snapshot.available && snapshot.projections?.length)
+    .sort((a, b) => b.requestedDecisionWeek - a.requestedDecisionWeek)[0];
+  if (!latestSnapshot) throw new Error('Presentation requires a latest available projection snapshot');
+  const latestContext = contextFor(fixture, latestSnapshot.requestedDecisionWeek);
+  const currentState = {
+    week: latestSnapshot.requestedDecisionWeek,
+    teamsRemaining: latestContext.teamsRemaining,
+    targetTeams: commonHorizonTeamCount(latestContext.teamsRemaining),
+    contentHash: latestSnapshot.contentHash ?? 'missing-content-hash',
+    projectionCount: latestSnapshot.projectionCount ?? latestSnapshot.projections!.length,
+    rows: buildOfflinePlayerValues(fixtureProjections(latestSnapshot), latestContext),
+  };
   return {
     fixtureLabel: fixture.competitionLabel,
     dataThrough: fixture.source.dataThrough,
@@ -190,6 +222,7 @@ export function buildPresentationModel(fixture: AnalysisFixture): PresentationMo
     provenance: `Reconstructed W${snapshotWeeks.join('–W')} projection snapshots • transaction-ledger FAAB • anonymized fixture v${fixture.fixtureVersion}`,
     weeklyAnalysis,
     weeklyBullets,
+    currentState,
   };
 }
 
@@ -278,8 +311,8 @@ function sensitivityChart(model: PresentationModel): string {
     return `<path d="${points.map((point, index) => `${index ? 'L' : 'M'}${point.x} ${point.y}`).join(' ')}" fill="none" stroke="${STYLES[id].color}" stroke-width="3" stroke-dasharray="${STYLES[id].dash}"/>${points.map((point) => marker(point.x, point.y, id, 4)).join('')}<text x="${points.at(-1)!.x - 3}" y="${points.at(-1)!.y - 9}" text-anchor="end" fill="${STYLES[id].color}" font-weight="700">${escapeHtml(label)}</text>`;
   }).join('');
   const labels = model.sensitivity.map((row, index) => `<text transform="translate(${x(index) + 4} ${height - bottom + 18}) rotate(32)" text-anchor="start"><tspan>${escapeHtml(row.shortLabel)}</tspan><tspan x="0" dy="15">n=${row.n}</tspan></text>`).join('');
-  const svg = `<svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="sensitivity-title sensitivity-desc"><title id="sensitivity-title">Winning-bid MAE sensitivity</title><desc id="sensitivity-desc">Line chart comparing strategy MAE after token and three independently defined outlier filters. Lower is better. Leader changes across rules.</desc>${grid}<text x="16" y="${top + plotHeight / 2}" transform="rotate(-90 16 ${top + plotHeight / 2})" text-anchor="middle">MAE ($) — lower is better</text>${lines}${labels}</svg>`;
-  return figure('Token and outlier sensitivity', `Winning subsets n=${model.sensitivity.map((row) => row.n).join('/')} in displayed order • ${model.provenance}`, svg, 'Aggressive leads the sample; Max VORP leads MAD/IQR-filtered views. No robust winner.');
+  const svg = `<svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="sensitivity-title sensitivity-desc"><title id="sensitivity-title">Winning-bid MAE sensitivity</title><desc id="sensitivity-desc">Line chart comparing strategy MAE after token and three independently defined outlier filters. Lower is better; leaders are reported from each filter.</desc>${grid}<text x="16" y="${top + plotHeight / 2}" transform="rotate(-90 16 ${top + plotHeight / 2})" text-anchor="middle">MAE ($) — lower is better</text>${lines}${labels}</svg>`;
+  return figure('Token and outlier sensitivity', `Winning subsets n=${model.sensitivity.map((row) => row.n).join('/')} in displayed order • ${model.provenance}`, svg, `Filter leaders in order: ${model.sensitivity.map((row) => lowest(row.metrics).label).join('; ')}. This is descriptive sensitivity, not default-selection proof.`);
 }
 
 function scatterPanel(title: string, rows: EvaluatedBid[], id: StrategyId | 'manager', maxValue: number, x0: number, y0: number, size: number): string {
@@ -293,10 +326,10 @@ function scatterPanel(title: string, rows: EvaluatedBid[], id: StrategyId | 'man
 }
 
 function smallMultiples(model: PresentationModel): string {
-  const size = 244, gap = 8, width = size * 3 + gap * 2, height = size * 2 + gap;
+  const size = 244, gap = 8, width = size * 3 + gap * 2, height = size * Math.ceil(STRATEGIES.length / 3) + gap * (Math.ceil(STRATEGIES.length / 3) - 1);
   const maxValue = 300;
   const panels = STRATEGIES.map(([id, label], index) => scatterPanel(label, evaluationRows(model.wins, id, model.budget), id, maxValue, (index % 3) * (size + gap), Math.floor(index / 3) * (size + gap), size)).join('');
-  const svg = `<svg class="chart scatter" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="scatter-title scatter-desc"><title id="scatter-title">Actual versus predicted winning bids by strategy</title><desc id="scatter-desc">Five small-multiple scatter plots. Dashed diagonal is perfect prediction. Points below it underpredict; points above overpredict.</desc>${panels}</svg>`;
+  const svg = `<svg class="chart scatter" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="scatter-title scatter-desc"><title id="scatter-title">Actual versus predicted winning bids by strategy</title><desc id="scatter-desc">Eight small-multiple scatter plots. Dashed diagonal is perfect prediction. Points below it underpredict; points above overpredict.</desc>${panels}</svg>`;
   return figure('Actual vs. predicted: where errors happen', `n=${model.wins.length} winning bids per strategy • reconstructed W${model.snapshotWeeks.join('–W')} • anonymized targets`, svg, '* Prediction R² is scored against the identity line with no regression refit. It is not fitted-regression R² and may be negative.');
 }
 
@@ -341,7 +374,7 @@ function weeklyMultiplierChart(model: PresentationModel, kind: 'winner' | 'marke
   const note = kind === 'winner'
     ? 'Arithmetic mean of winning/intrinsic ratios across each week\'s top-three unique winners.'
     : 'Arithmetic mean of serious-median/intrinsic ratios across each week\'s top-three unique winners.';
-  const svg = `<svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="${slug(title)}-title ${slug(title)}-desc"><title id="${slug(title)}-title">${escapeHtml(title)}</title><desc id="${slug(title)}-desc">Grouped bar chart for weekly arithmetic multipliers across four non-derived strategies.</desc>${grid}${legend}${bars}</svg>`;
+  const svg = `<svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="${slug(title)}-title ${slug(title)}-desc"><title id="${slug(title)}-title">${escapeHtml(title)}</title><desc id="${slug(title)}-desc">Grouped bar chart for weekly arithmetic multipliers across five primary analysis strategies.</desc>${grid}${legend}${bars}</svg>`;
   return figure(title, `Owner-directed view (${model.weeklyAnalysis.exclusion.marker} excluded); same-week snapshots only • ${model.provenance}`, svg, note);
 }
 
@@ -356,10 +389,28 @@ function weeklyMultiplierTable(model: PresentationModel): string {
 function weeklyMarketMetricTable(model: PresentationModel): string {
   const groups = model.weeklyAnalysis.ownerDirected.marketMetrics;
   const rows = groups.flatMap((group) => [
+    ...group.winningMetrics.map((metric) => ({ scope: group.week == null ? 'Overall' : `W${group.week}`, observation: 'Canonical winner', closest: group.closestWinning, metric })),
     ...group.metrics.map((metric) => ({ scope: group.week == null ? 'Overall' : `W${group.week}`, observation: 'Serious median', closest: group.closest, metric })),
     ...group.allBidMedianMetrics.map((metric) => ({ scope: group.week == null ? 'Overall' : `W${group.week}`, observation: 'All-bid sensitivity', closest: group.closestAllBid, metric })),
   ]).map(({ scope, observation, closest, metric }) => `<tr><th scope="row">${scope}</th><td>${observation}</td><td>${escapeHtml(metric.label)}${metric.label === closest ? ' ★' : ''}</td><td>${metric.n}</td><td>${number(metric.mae, 1)}</td><td>${number(metric.medianAbsoluteError, 1)}</td><td>${metric.signedBias > 0 ? '+' : ''}${number(metric.signedBias, 1)}</td><td>${number(metric.rSquared, 2)}</td><td>${number(metric.spearman, 2)}</td></tr>`).join('');
   return `<div class="table-wrap"><table><caption><strong>Median-market fit: overall, by week, and all-bid sensitivity</strong><span>★ lowest MAE within scope; bias = intrinsic − observed. Raw prediction R²* uses fixed strategy dollars with no regression refit.</span></caption><thead><tr><th scope="col">Scope</th><th scope="col">Observation</th><th scope="col">Strategy</th><th scope="col">n</th><th scope="col">MAE</th><th scope="col">Median AE</th><th scope="col">Bias</th><th scope="col">Raw prediction R²*</th><th scope="col">Spearman ρ</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function clusterMultiplierTable(model: PresentationModel): string {
+  const rows = model.weeklyAnalysis.ownerDirected.clusterMultipliers.flatMap((group) => MARKET_STRATEGIES.map(([id, label]) => {
+    const summary = group.summaries[id];
+    return `<tr><th scope="row">${group.week == null ? 'Season' : `W${group.week}`}</th><td>${group.observed === 'winning' ? 'Canonical winner' : 'Serious median'}</td><td>${escapeHtml(label)}</td><td>${summary.defined}/${summary.total}</td><td>${number(summary.arithmeticMean, 3)}</td><td>${number(summary.geometricMean, 3)}</td><td>${number(summary.median, 3)}</td></tr>`;
+  })).join('');
+  return `<div class="table-wrap"><table><caption><strong>Weekly and season multipliers</strong><span>Observed bid divided by intrinsic suggestion; arithmetic, geometric, and median summaries are all shown.</span></caption><thead><tr><th>Scope</th><th>Observation</th><th>Strategy</th><th>Defined/total</th><th>Arithmetic ×</th><th>Geometric ×</th><th>Median ×</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function heldOutScaleTable(model: PresentationModel): string {
+  const groups = [
+    ['Canonical winner', model.weeklyAnalysis.ownerDirected.heldOutScaleMetrics.winning],
+    ['Serious median', model.weeklyAnalysis.ownerDirected.heldOutScaleMetrics.seriousMedian],
+  ] as const;
+  const rows = groups.flatMap(([observation, metrics]) => metrics.map((metric) => `<tr><th scope="row">${observation}</th><td>${escapeHtml(metric.label)}</td><td>W${metric.fitWeek}→W${metric.testWeek}</td><td>${number(metric.fittedMultiplier, 3)}×</td><td>${metric.n}</td><td>${number(metric.mae, 1)}</td><td>${metric.signedBias > 0 ? '+' : ''}${number(metric.signedBias, 1)}</td><td>${number(metric.rSquared, 2)}</td><td>${number(metric.spearman, 2)}</td></tr>`)).join('');
+  return `<div class="table-wrap"><table><caption><strong>Prior-week-fitted held-out scale</strong><span>W2 median multiplier fit once, then applied to W3 without refitting. Raw held-out R²* remains an unfitted prediction score.</span></caption><thead><tr><th>Observation</th><th>Strategy</th><th>Fit→test</th><th>Multiplier</th><th>n</th><th>MAE</th><th>Bias</th><th>Raw R²*</th><th>ρ</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 function exclusionSensitivity(model: PresentationModel): string {
@@ -390,20 +441,76 @@ function css(): string {
 `;
 }
 
+function middleVorpSection(model: PresentationModel): string {
+  const rows = model.currentState.rows;
+  const methods = [
+    ['maxVorp', 'Max VORP'],
+    ['middleVorp', 'Middle VORP'],
+    ['currentVorp', 'Current-team VoRP'],
+    ['correctedSafe', 'Corrected Safe'],
+    ['correctedWeeksStarter', 'Corrected Weeks as Starter'],
+  ] as const;
+  const distributions = methods.map(([key, label]) => {
+    const summary = summarizeDistribution(rows.map((row) => row[key]));
+    return `<tr><th scope="row">${label}</th><td>${summary.n}</td><td>${summary.positive}</td><td>${number(summary.mean)}</td><td>${number(summary.median)}</td><td>${number(summary.p75)}</td><td>$${number(summary.max, 0)}</td><td>$${number(summary.total, 0)}</td></tr>`;
+  }).join('');
+  const ordering = (key: 'maxVorp' | 'middleVorp' | 'currentVorp') => [...rows].sort((a, b) => b[key] - a[key] || a.playerId.localeCompare(b.playerId)).slice(0, 12).map((row) => `${row.playerId} (${row.position}${row.positionRank}, $${row[key]})`).join(', ');
+  const top = [...rows].sort((a, b) => b.middleVorp - a.middleVorp || a.playerId.localeCompare(b.playerId)).slice(0, 12)
+    .map((row) => `<tr><th scope="row">${row.playerId} (${row.position}${row.positionRank})</th><td>$${row.middleVorp}</td><td>$${row.maxVorp}</td><td>${row.maxVorpStage ?? '—'} teams</td><td>$${row.currentVorp}</td><td>$${row.correctedSafe}</td><td>$${row.correctedWeeksStarter}</td></tr>`).join('');
+  const divergence = [...rows].filter((row) => row.middleVorp > 0 && row.maxVorp !== row.middleVorp && row.currentVorp !== row.middleVorp)
+    .sort((a, b) => Math.max(Math.abs(b.middleVorp - b.maxVorp), Math.abs(b.middleVorp - b.currentVorp)) - Math.max(Math.abs(a.middleVorp - a.maxVorp), Math.abs(a.middleVorp - a.currentVorp)) || a.playerId.localeCompare(b.playerId))
+    .slice(0, 8).map((row) => `<tr><th scope="row">${row.playerId} (${row.position}${row.positionRank})</th><td>$${row.middleVorp}</td><td>$${row.maxVorp}</td><td>${row.maxVorpStage ?? '—'} teams</td><td>$${row.currentVorp}</td></tr>`).join('');
+  const cutoffs = methods.flatMap(([key, label]) => ['QB', 'RB', 'WR', 'TE'].map((position) => {
+    const positive = rows.filter((row) => row.position === position && row[key] > 0);
+    return `<tr><th scope="row">${label}</th><td>${position}</td><td>${positive.length}</td><td>${positive.length ? Math.max(...positive.map((row) => row.positionRank)) : '—'}</td></tr>`;
+  })).join('');
+  const correlations = [
+    ['Max VORP', rankCorrelation(rows, 'middleVorp', 'maxVorp')],
+    ['Current-team VoRP', rankCorrelation(rows, 'middleVorp', 'currentVorp')],
+    ['Corrected Safe', rankCorrelation(rows, 'middleVorp', 'correctedSafe')],
+    ['Corrected Weeks as Starter', rankCorrelation(rows, 'middleVorp', 'correctedWeeksStarter')],
+    ['67% horizon', rankCorrelation(rows, 'middleVorp', 'horizon67')],
+    ['33% horizon', rankCorrelation(rows, 'middleVorp', 'horizon33')],
+  ].map(([label, value]) => `<tr><th scope="row">Middle vs ${label}</th><td>${number(value as number, 3)}</td></tr>`).join('');
+  const horizon = [
+    ['67%', Math.max(4, Math.ceil(model.currentState.teamsRemaining * 0.67)), 'horizon67'],
+    ['50% ceil', model.currentState.targetTeams, 'middleVorp'],
+    ['50% floor', Math.max(4, Math.floor(model.currentState.teamsRemaining * 0.5)), 'horizon50Floor'],
+    ['33%', Math.max(4, Math.ceil(model.currentState.teamsRemaining * 0.33)), 'horizon33'],
+  ] as const;
+  const horizonRows = horizon.map(([label, teams, key]) => {
+    const summary = summarizeDistribution(rows.map((row) => row[key]));
+    return `<tr><th scope="row">${label}</th><td>${teams}</td><td>${summary.positive}</td><td>$${number(summary.mean)}</td><td>$${number(summary.max, 0)}</td><td>${number(rankCorrelation(rows, 'middleVorp', key) ?? 1, 3)}</td></tr>`;
+  }).join('');
+  const historicalRows = horizon.map(([label, _teams, key]) => {
+    const evaluated: EvaluatedBid[] = model.usable.filter((event) => event.outcome === 'won' && !(event.decisionWeek === 3 && event.actualBid === 234)).flatMap((event) => {
+      const predicted = key === 'middleVorp' ? event.suggestions['middle-vorp'] : event.middleSensitivity[key];
+      return predicted > 0 ? [{ eventId: event.event, clusterId: event.batch, strategy: key, actual: event.actualBid, predicted, originalFaab: model.budget, preBidFaab: event.preBidFaab }] : [];
+    });
+    const metrics = computeErrorMetrics(evaluated);
+    return `<tr><th scope="row">${label}</th><td>${metrics?.n ?? 0}</td><td>${metrics ? number(metrics.mae, 1) : '—'}</td><td>${metrics ? number(metrics.signedBias, 1) : '—'}</td><td>${metrics?.spearman == null ? '—' : number(metrics.spearman, 3)}</td></tr>`;
+  }).join('');
+  return `<section aria-labelledby="middle-title"><header class="section-head"><div><p class="kicker">00 · Candidate decision</p><h2 id="middle-title">Middle VORP stays analysis-only.</h2></div><p>One shared horizon: targetTeams = max(4, ceil(teamsRemaining / 2)). At the latest reproducible W${model.currentState.week} state, ${model.currentState.teamsRemaining} teams map to ${model.currentState.targetTeams}. It never maximizes a different stage per player.</p></header><div class="takeaways"><div><h2>Recommendation: retain analysis-only</h2><ul><li>Conceptually cleaner than per-player Max VORP stage selection.</li><li>Only W2/W3 are evaluable and both projection snapshots are reconstructed.</li><li>W4+ exact pre-waiver captures must confirm held-out error, bias, rank quality, and 33%/50%/67% stability before any default review.</li></ul></div><div class="warning"><strong>Privacy-safe current input</strong>W${model.currentState.week}, ${model.currentState.projectionCount} stored rows / ${model.currentState.rows.length} supported QB/RB/WR/TE players, hash ${model.currentState.contentHash.slice(0, 16)}…; aliases only, no league/manager identity or raw payload.</div></div><div class="table-wrap"><table><caption><strong>Current-state dollar distributions</strong><span>Full supported QB/RB/WR/TE projection population; positive counts make each method's support explicit.</span></caption><thead><tr><th>Method</th><th>n</th><th>Positive</th><th>Mean</th><th>Median</th><th>P75</th><th>Max</th><th>Total</th></tr></thead><tbody>${distributions}</tbody></table></div><div class="table-wrap"><table><caption><strong>Positional positive-price cutoffs</strong><span>Deepest positive rank by method and position.</span></caption><thead><tr><th>Method</th><th>Position</th><th>Positive</th><th>Deepest rank</th></tr></thead><tbody>${cutoffs}</tbody></table></div><div class="note"><strong>Top-12 ordering.</strong><br><strong>Max:</strong> ${ordering('maxVorp')}<br><strong>Middle:</strong> ${ordering('middleVorp')}<br><strong>Current:</strong> ${ordering('currentVorp')}</div><div class="table-wrap"><table><caption><strong>Middle VORP top 12 and exact prices</strong><span>Max-selected stage explains the per-player maximization contrast.</span></caption><thead><tr><th>Alias (position rank)</th><th>Middle</th><th>Max</th><th>Max stage</th><th>Current</th><th>Corrected Safe</th><th>Corrected Weeks</th></tr></thead><tbody>${top}</tbody></table></div><div class="table-wrap"><table><caption><strong>Concrete divergence examples</strong><span>Largest dollar gaps among players with positive Middle VORP.</span></caption><thead><tr><th>Alias</th><th>Middle</th><th>Max</th><th>Max-selected stage</th><th>Current</th></tr></thead><tbody>${divergence}</tbody></table></div><div class="chart-grid"><div class="table-wrap"><table><caption><strong>Rank correlations</strong></caption><thead><tr><th>Pair</th><th>ρ</th></tr></thead><tbody>${correlations}</tbody></table></div><div class="table-wrap"><table><caption><strong>Common-horizon sensitivity</strong><span>W2/W3 are even, so floor=ceil empirically; unit tests cover 27→14 versus 13.</span></caption><thead><tr><th>Horizon</th><th>Teams</th><th>Positive</th><th>Mean</th><th>Max</th><th>ρ vs 50%</th></tr></thead><tbody>${horizonRows}</tbody></table></div></div><div class="table-wrap"><table><caption><strong>Historical common-horizon sensitivity</strong><span>Canonical winning bids, owner-directed exclusion applied; floor and ceil are identical because observed W2/W3 team counts are even.</span></caption><thead><tr><th>Horizon</th><th>n</th><th>MAE</th><th>Bias</th><th>ρ</th></tr></thead><tbody>${historicalRows}</tbody></table></div></section>`;
+}
+
 export function renderBiddingPresentation(model: PresentationModel): string {
-  const winningBars = horizontalBars('Winning-bid error by strategy', model.winningMetrics.map((row) => ({ id: row.id, label: row.label, value: row.metrics.mae })), `n=${model.wins.length} usable winning bids • ${model.provenance}`, { note: 'Lower MAE is better. Aggressive is best in this observed sample—not a universal winner.' });
-  const allSeriousBars = horizontalBars('All-bid vs. serious-bid error', model.allMetrics.map((row) => ({ id: row.id, label: row.label, value: row.metrics.mae, secondary: model.seriousMetrics.find((item) => item.id === row.id)!.metrics.mae })), `All n=${model.usable.length}; serious/non-token n=${model.serious.length} • ${model.provenance}`, { primaryLabel: 'All valid bids', secondaryLabel: 'Serious bids (> $5)', note: 'VoRP has the lowest raw MAE in both broader bid subsets.' });
+  const winningBars = horizontalBars('Winning-bid error by strategy', model.winningMetrics.map((row) => ({ id: row.id, label: row.label, value: row.metrics.mae })), `n=${model.wins.length} usable winning bids • ${model.provenance}`, { note: `Lower MAE is better. ${model.sampleWinner.label} is best in this observed sample—not a universal winner.` });
+  const allWinner = lowest(model.allMetrics);
+  const seriousWinner = lowest(model.seriousMetrics);
+  const allSeriousBars = horizontalBars('All-bid vs. serious-bid error', model.allMetrics.map((row) => ({ id: row.id, label: row.label, value: row.metrics.mae, secondary: model.seriousMetrics.find((item) => item.id === row.id)!.metrics.mae })), `All n=${model.usable.length}; serious/non-token n=${model.serious.length} • ${model.provenance}`, { primaryLabel: 'All valid bids', secondaryLabel: 'Serious bids (> $5)', note: `${allWinner.label} has the lowest all-bid MAE; ${seriousWinner.label} has the lowest serious-bid MAE.` });
+  const stableRobustLeader = new Set(model.robustLeaders).size === 1 ? model.robustLeaders[0] : null;
   const managerR2 = rSquared(model.managerRows), managerWinR2 = rSquared(model.managerWinRows);
   const weeklyBullets = model.weeklyBullets.map((bullet) => `<li>${escapeHtml(bullet)}</li>`).join('');
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>${escapeHtml(model.fixtureLabel)} bidding strategy evidence</title><style>${css()}</style></head><body><main class="report">
-<section class="executive" aria-labelledby="report-title"><header class="masthead"><div><p class="kicker">Owner briefing · decision evidence</p><h1 id="report-title">What did real waiver bids tell us?</h1><p class="deck">A replay of five production strategies against ${model.usable.length} anonymized bids from ${model.fixtureLabel}. Useful signal, but not enough stable evidence to crown a default.</p></div><div class="stamp"><strong>Evidence window</strong>Reconstructed decision weeks W${model.snapshotWeeks.join(' and W')}<br><strong>Data through</strong>${escapeHtml(model.dataThrough)}<br><strong>Scope</strong>One 32-team league · $${model.budget} FAAB</div></header>
+<section class="executive" aria-labelledby="report-title"><header class="masthead"><div><p class="kicker">Owner briefing · decision evidence</p><h1 id="report-title">What did real waiver bids tell us?</h1><p class="deck">A replay of production strategies plus analysis-only Middle VORP and corrected PR #13 curves against ${model.usable.length} anonymized bids from ${model.fixtureLabel}. Useful signal, but not enough stable evidence to crown a default.</p></div><div class="stamp"><strong>Evidence window</strong>Reconstructed decision weeks W${model.snapshotWeeks.join(' and W')}<br><strong>Data through</strong>${escapeHtml(model.dataThrough)}<br><strong>Scope</strong>One 32-team league · $${model.budget} FAAB</div></header>
 <div class="takeaways"><div><h2>Five-bullet answer</h2><ul>${weeklyBullets}</ul></div><div class="warning"><strong>Scope guardrail</strong>Only W2 and W3 have like-for-like same-week reconstructed snapshots. W4 is explained as missing rather than backfilled. Aggressive is omitted here because it is derived from Safe.</div></div>
 <div class="verdict-grid"><article class="verdict sample"><p class="eyebrow">Closest median market</p><div class="big">${escapeHtml(model.weeklyAnalysis.ownerDirected.marketMetrics.find((row) => row.week == null)!.closest ?? '—')}</div><p>Lowest MAE across owner-directed player/week clusters; competing claims stay within the canonical winner's processing batch.</p></article><article class="verdict robust"><p class="eyebrow">Strategy × scale</p><div class="big">Separate them</div><p>Intrinsic formulas describe target shape; observed/intrinsic multipliers estimate weekly market scale.</p></article><article class="verdict action"><p class="eyebrow">Product decision</p><div class="big">Hold</div><p>Two reconstructed weeks do not support manager-style claims or a production default change.</p></article></div>
 </section><div class="page-break" aria-hidden="true"></div>
-<section aria-labelledby="weekly-title"><header class="section-head"><div><p class="kicker">01 · Weekly multiplier answer</p><h2 id="weekly-title">Shape is not scale.</h2></div><p>Top-three canonical winners and serious market medians use observed bid ÷ intrinsic same-week suggestion. Arithmetic mean is primary; geometric mean, median, and coverage expose ratio skew and zero denominators.</p></header><div class="warning"><strong>Important metric label</strong>Every value labeled <b>raw prediction R²*</b> keeps strategy dollar predictions fixed on the identity line. It is not the goodness-of-fit R² from a regression trained on these bids. Negative values are valid and mean the fixed predictions lose to the observed-mean baseline—not that correlation is negative.</div><div class="chart-grid">${weeklyMultiplierChart(model, 'winner')}${weeklyMultiplierChart(model, 'market')}</div>${weeklyMultiplierTable(model)}${weeklyTargetTable(model)}${weeklyMarketMetricTable(model)}${exclusionSensitivity(model)}<div class="method-note"><h3>Interpretation boundary</h3><p>The owner-directed marker is excluded only from this labeled analysis; raw canonical evidence remains in the sensitivity row. Serious means bid &gt; $5, failed claims must be legitimate same-target competitors, and FAAB-limited observations are marked censored. This supports a strategy-shape × market-scale hypothesis, not individual manager-style conclusions from two reconstructed weeks.</p></div></section>
+${middleVorpSection(model)}
+<section aria-labelledby="weekly-title"><header class="section-head"><div><p class="kicker">01 · Weekly multiplier answer</p><h2 id="weekly-title">Shape is not scale.</h2></div><p>Top-three canonical winners and serious market medians use observed bid ÷ intrinsic same-week suggestion. Arithmetic mean is primary; geometric mean, median, and coverage expose ratio skew and zero denominators.</p></header><div class="warning"><strong>Important metric label</strong>Every value labeled <b>raw prediction R²*</b> keeps strategy dollar predictions fixed on the identity line. It is not the goodness-of-fit R² from a regression trained on these bids. Negative values are valid and mean the fixed predictions lose to the observed-mean baseline—not that correlation is negative.</div><div class="chart-grid">${weeklyMultiplierChart(model, 'winner')}${weeklyMultiplierChart(model, 'market')}</div>${weeklyMultiplierTable(model)}${weeklyTargetTable(model)}${weeklyMarketMetricTable(model)}${clusterMultiplierTable(model)}${heldOutScaleTable(model)}${exclusionSensitivity(model)}<div class="method-note"><h3>Interpretation boundary</h3><p>The owner-directed marker is excluded only from this labeled analysis; raw canonical evidence remains in the sensitivity row. Serious means bid &gt; $5, failed claims must be legitimate same-target competitors, and FAAB-limited observations are marked censored. This supports a strategy-shape × market-scale hypothesis, not individual manager-style conclusions from two reconstructed weeks.</p></div></section>
 <section aria-labelledby="accuracy-title"><header class="section-head"><div><p class="kicker">02 · Prior accuracy study</p><h2 id="accuracy-title">Price fit depends on the question.</h2></div><p>Winning-bid error asks who best estimates the clearing price. All-bid error also includes failed claims and token bids. Lower MAE is better; bias shows direction.</p></header><div class="chart-grid">${winningBars}${allSeriousBars}${signedBiasChart(model)}${rankCoverageChart(model)}</div>${metricTable('Winning-bid scorecard', model.winningMetrics, `n=${model.wins.length}; subset=usable winning bids`, model.provenance)}${metricTable('All and serious scorecard — all bids', model.allMetrics, `n=${model.usable.length}; subset=all formula-usable bids`, model.provenance)}${metricTable('All and serious scorecard — serious bids', model.seriousMetrics, `n=${model.serious.length}; subset=non-token bids > $5`, model.provenance)}</section>
-<section aria-labelledby="robust-title"><header class="section-head"><div><p class="kicker">03 · Stability</p><h2 id="robust-title">The winner changes when extremes move.</h2></div><p>These filters were declared before inspecting winners and applied independently. They are sensitivity checks, not permission to delete inconvenient evidence.</p></header>${sensitivityChart(model)}<div class="callout-grid"><article class="callout"><h3>Token threshold</h3><p>Low intent means bid ≤ max($1, 1% of original FAAB) = $5. Tokens remain in the all-bid view and are separated here.</p></article><article class="callout"><h3>Three outlier lenses</h3><p>Ratio-gap flagged 1 isolated top; MAD flagged 3; IQR flagged 4. Different robust rules produce different leaders.</p></article><article class="callout"><h3>Honest conclusion</h3><p><strong>Aggressive is the sample winner.</strong> There is <strong>no robust winner</strong>. Treat this as a hypothesis, not a default-setting result.</p></article></div></section>
+<section aria-labelledby="robust-title"><header class="section-head"><div><p class="kicker">03 · Stability</p><h2 id="robust-title">Sensitivity stays explicit across filters.</h2></div><p>These filters were declared before inspecting winners and applied independently. They are sensitivity checks, not permission to delete inconvenient evidence.</p></header>${sensitivityChart(model)}<div class="callout-grid"><article class="callout"><h3>Token threshold</h3><p>Low intent means bid ≤ max($1, 1% of original FAAB) = $5. Tokens remain in the all-bid view and are separated here.</p></article><article class="callout"><h3>Three outlier lenses</h3><p>Ratio-gap flagged 1 isolated top; MAD flagged 3; IQR flagged 4. Independent robust rules test whether one extreme drives the conclusion.</p></article><article class="callout"><h3>Honest conclusion</h3><p><strong>${model.sampleWinner.label} is the sample winner.</strong> ${stableRobustLeader ? `<strong>${stableRobustLeader}</strong> also leads all three predeclared robust filters.` : 'No single strategy leads all three robust filters.'} Treat this as descriptive evidence, not a default-setting result.</p></article></div></section>
 <section aria-labelledby="behavior-title"><header class="section-head"><div><p class="kicker">04 · Behavior</p><h2 id="behavior-title">Identity lines expose the misses.</h2></div><p>Each dot is an anonymized winning target. A perfect forecast lies on the dashed diagonal; below it underpredicts. Extreme observed bids stretch beyond every intrinsic strategy; Aggressive reaches higher than the others, but still underpredicts the largest win.</p></header>${smallMultiples(model)}${managerChart(model)}<div class="table-wrap"><table><caption><strong>Manager-adjusted subset</strong><span>Strict prior-batch walk-forward • ${escapeHtml(model.provenance)} • smaller, non-comparable subset</span></caption><thead><tr><th scope="col">Forecast subset</th><th scope="col">n</th><th scope="col">MAE</th><th scope="col">Median AE</th><th scope="col">Bias</th><th scope="col">Spearman ρ</th><th scope="col">Prediction R²*</th><th scope="col">Within tolerance</th></tr></thead><tbody><tr><th scope="row">All forecastable bids</th><td>${model.managerMetrics.n}</td><td>${number(model.managerMetrics.mae)}</td><td>${number(model.managerMetrics.medianAbsoluteError)}</td><td>+${number(model.managerMetrics.signedBias)}</td><td>${number(model.managerMetrics.spearman ?? Number.NaN, 2)}</td><td>${number(managerR2 ?? Number.NaN, 2)}</td><td>${number(model.managerMetrics.withinToleranceRate * 100)}%</td></tr><tr><th scope="row">Forecastable wins</th><td>${model.managerWinMetrics.n}</td><td>${number(model.managerWinMetrics.mae)}</td><td>${number(model.managerWinMetrics.medianAbsoluteError)}</td><td>${number(model.managerWinMetrics.signedBias)}</td><td>${number(model.managerWinMetrics.spearman ?? Number.NaN, 2)}</td><td>${number(managerWinR2 ?? Number.NaN, 2)}</td><td>${number(model.managerWinMetrics.withinToleranceRate * 100)}%</td></tr></tbody></table></div></section>
 <section aria-labelledby="methods-title"><header class="section-head"><div><p class="kicker">05 · How to read the math</p><h2 id="methods-title">Measures, assumptions, and guardrails.</h2></div><p>All formulas are evaluated on dollars unless marked normalized. Predictions are intrinsic strategy values; manager forecasts are capped at reconstructed pre-bid FAAB.</p></header><div class="formula-grid"><article class="formula"><h3>MAE</h3><code>MAE = (1/n) Σ |predicted − actual|</code><p>Average dollar miss. Easy to interpret; extreme bids still matter.</p></article><article class="formula"><h3>Median absolute error</h3><code>Median AE = median(|predicted − actual|)</code><p>The typical dollar miss; less sensitive to a small number of extremes.</p></article><article class="formula"><h3>Signed bias</h3><code>Bias = (1/n) Σ (predicted − actual)</code><p>Negative means systematic underprediction; positive means overprediction.</p></article><article class="formula"><h3>Spearman rank correlation</h3><code>ρ = Pearson correlation(rank(actual), rank(predicted))</code><p>Tests whether expensive targets rank above cheap ones. Ties receive average ranks.</p></article><article class="formula"><h3>Prediction R² (unfitted)</h3><code>R² = 1 − SSE / SST</code><p>This is the standard predictive score against the observed-mean baseline, but <strong>not fitted-regression R²</strong>. Strategy dollars remain fixed on the identity line. A negative value means they are worse than predicting the observed mean; it does not mean negative correlation.</p></article><article class="formula"><h3>Normalized FAAB error</h3><code>mean(|predicted/FAAB − actual/FAAB|)</code><p>Reported against original $${model.budget} and reconstructed pre-bid manager FAAB. It compares budget share, not willingness.</p></article><article class="formula"><h3>Cluster-bootstrap interval</h3><code>2,000 resamples of player × processing-batch clusters</code><p>Fixed seed ${ANALYSIS_POLICY.bootstrapSeed}; percentile 2.5%–97.5%. Keeps correlated win/loss claims together. It does not repair snapshot-history error.</p></article><article class="formula"><h3>Coverage</h3><code>predicted ∈ [lowest serious loss, winning bid]</code><p>Computed on ${model.coverage[0].total} competitive player/batch clusters. It asks whether a strategy falls inside observed serious bidding range.</p></article><article class="formula"><h3>Outlier rules</h3><code>ratio ≥ 2× + $50 gap; MAD &gt; median + 3×1.4826×MAD; IQR &gt; Q3 + 1.5×IQR</code><p>MAD/IQR also require a $25 gap; minimum cluster sizes are 3 and 4. Flags are independent and never silently deleted.</p></article><article class="formula"><h3>Within tolerance</h3><code>|predicted − actual| ≤ max($5, 20% of actual)</code><p>A practical accuracy band shown alongside continuous error measures.</p></article></div><div class="method-note"><h3>Provenance boundary</h3><p>All ${model.usable.length} formula-usable events use same-week reconstructed W${model.snapshotWeeks.join('/W')} projection snapshots and transaction-ledger FAAB reconstruction. Reconstructed means captured after the canonical cutoff; it is not proof of what managers saw. W4 was excluded because only an earlier-week fallback existed. No identities, league identifier, player names/IDs, manager names/IDs, raw payload, or credentials appear in this artifact. Regenerate deterministically with <code>npm run analyze:bidding:presentation</code>.</p></div></section>
 <footer class="footer"><span>${escapeHtml(model.fixtureLabel)} · anonymized fixture · deterministic report</span><span>Generated with <code>npm run analyze:bidding:presentation</code></span></footer></main></body></html>`;

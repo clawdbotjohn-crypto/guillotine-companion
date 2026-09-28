@@ -7,9 +7,10 @@ import {
 
 export const MARKET_STRATEGIES = [
   ['max-vorp', 'Max VORP'],
-  ['vorp', 'VoRP'],
-  ['safe', 'Safe'],
-  ['weeks-starter', 'Weeks as Starter'],
+  ['middle-vorp', 'Middle VORP'],
+  ['vorp', 'Current-team VoRP'],
+  ['corrected-safe', 'Corrected Safe'],
+  ['corrected-weeks-starter', 'Corrected Weeks as Starter'],
 ] as const;
 
 export type MarketStrategyId = typeof MARKET_STRATEGIES[number][0];
@@ -85,10 +86,25 @@ export interface MarketMetricGroup {
   clusters: number;
   seriousMedianClusters: number;
   metrics: MarketMetric[];
+  winningMetrics: MarketMetric[];
   allBidMedianMetrics: MarketMetric[];
   closest: string | null;
+  closestWinning: string | null;
   closestAllBid: string | null;
   materiallyDifferentClusters: number;
+}
+
+export interface ClusterMultiplierGroup {
+  week: number | null;
+  observed: 'winning' | 'serious-median';
+  summaries: Record<MarketStrategyId, RatioSummary>;
+}
+
+export interface HeldOutScaleMetric extends MarketMetric {
+  fitWeek: number;
+  testWeek: number;
+  scaleEstimator: 'median';
+  fittedMultiplier: number;
 }
 
 export interface WeeklyMarketView {
@@ -96,6 +112,11 @@ export interface WeeklyMarketView {
   eligibleWeeks: number[];
   topThree: WeeklyTopThree[];
   marketMetrics: MarketMetricGroup[];
+  clusterMultipliers: ClusterMultiplierGroup[];
+  heldOutScaleMetrics: {
+    winning: HeldOutScaleMetric[];
+    seriousMedian: HeldOutScaleMetric[];
+  };
   marketClusterCount: number;
   seriousMedianClusterCount: number;
 }
@@ -213,17 +234,27 @@ function buildClusters(events: WeeklyAnalysisEvent[]): { clusters: Cluster[]; ow
   return { clusters, ownerMatchCount: ownerMatches.length };
 }
 
-function metricRows(clusters: Cluster[], observed: 'seriousMedian' | 'allMedian'): MarketMetric[] {
+function observedValue(cluster: Cluster, observed: 'winning' | 'seriousMedian' | 'allMedian'): number | null {
+  return observed === 'winning' ? cluster.winner.actualBid : cluster[observed];
+}
+
+function metricRows(
+  clusters: Cluster[],
+  observed: 'winning' | 'seriousMedian' | 'allMedian',
+  multipliers?: Partial<Record<MarketStrategyId, number>>,
+): MarketMetric[] {
   return MARKET_STRATEGIES.map(([id, label]) => {
     const rows: EvaluatedBid[] = clusters.flatMap((cluster) => {
-      const actual = cluster[observed];
-      if (actual == null || cluster.winner.suggestions[id] <= 0) return [];
+      const actual = observedValue(cluster, observed);
+      const intrinsic = cluster.winner.suggestions[id];
+      const predicted = intrinsic * (multipliers?.[id] ?? 1);
+      if (actual == null || intrinsic <= 0 || !Number.isFinite(predicted)) return [];
       return [{
         eventId: cluster.key,
         clusterId: cluster.key,
         strategy: id,
         actual,
-        predicted: cluster.winner.suggestions[id],
+        predicted,
         originalFaab: 1,
         preBidFaab: 1,
       }];
@@ -269,6 +300,41 @@ function targetRow(cluster: Cluster, index: number): TargetRatioRow {
   };
 }
 
+function clusterMultiplierGroup(
+  clusters: Cluster[],
+  week: number | null,
+  observed: 'winning' | 'serious-median',
+): ClusterMultiplierGroup {
+  const selected = week == null ? clusters : clusters.filter((cluster) => cluster.week === week);
+  return {
+    week,
+    observed,
+    summaries: Object.fromEntries(MARKET_STRATEGIES.map(([id]) => [id, summarizeRatios(selected.map((cluster) => {
+      const actual = observed === 'winning' ? cluster.winner.actualBid : cluster.seriousMedian;
+      return ratio(actual, cluster.winner.suggestions[id]);
+    }))])) as Record<MarketStrategyId, RatioSummary>,
+  };
+}
+
+function heldOutScaleMetrics(
+  clusters: Cluster[],
+  fitWeek: number,
+  testWeek: number,
+  observed: 'winning' | 'seriousMedian',
+): HeldOutScaleMetric[] {
+  const fitClusters = clusters.filter((cluster) => cluster.week === fitWeek && observedValue(cluster, observed) != null);
+  const testClusters = clusters.filter((cluster) => cluster.week === testWeek && observedValue(cluster, observed) != null);
+  const multipliers = Object.fromEntries(MARKET_STRATEGIES.map(([id]) => {
+    const summary = summarizeRatios(fitClusters.map((cluster) => ratio(observedValue(cluster, observed), cluster.winner.suggestions[id])));
+    return [id, summary.median];
+  })) as Record<MarketStrategyId, number | null>;
+  const validMultipliers = Object.fromEntries(Object.entries(multipliers).filter((entry): entry is [MarketStrategyId, number] => entry[1] != null));
+  return metricRows(testClusters, observed, validMultipliers).flatMap((row) => {
+    const fittedMultiplier = multipliers[row.id];
+    return fittedMultiplier == null ? [] : [{ ...row, fitWeek, testWeek, scaleEstimator: 'median' as const, fittedMultiplier }];
+  });
+}
+
 function buildView(allClusters: Cluster[], excludedOwnerDirected: boolean): WeeklyMarketView {
   const clusters = excludedOwnerDirected ? allClusters.filter((cluster) => !cluster.isOwnerDirected) : allClusters;
   const eligibleWeeks = [...new Set(clusters.map((cluster) => cluster.week))].sort((a, b) => a - b);
@@ -296,23 +362,37 @@ function buildView(allClusters: Cluster[], excludedOwnerDirected: boolean): Week
   const metricGroups = [null, ...eligibleWeeks].map((week): MarketMetricGroup => {
     const selected = week == null ? clusters : clusters.filter((cluster) => cluster.week === week);
     const metrics = metricRows(selected.filter((cluster) => cluster.seriousMedian != null), 'seriousMedian');
+    const winningMetrics = metricRows(selected, 'winning');
     const allBidMedianMetrics = metricRows(selected, 'allMedian');
     return {
       week,
       clusters: selected.length,
       seriousMedianClusters: selected.filter((cluster) => cluster.seriousMedian != null).length,
       metrics,
+      winningMetrics,
       allBidMedianMetrics,
       closest: closest(metrics),
+      closestWinning: closest(winningMetrics),
       closestAllBid: closest(allBidMedianMetrics),
       materiallyDifferentClusters: selected.filter((cluster) => cluster.materiallyDifferent).length,
     };
   });
+  const clusterMultipliers = [null, ...eligibleWeeks].flatMap((week) => [
+    clusterMultiplierGroup(clusters, week, 'winning'),
+    clusterMultiplierGroup(clusters, week, 'serious-median'),
+  ]);
+  const fitWeek = eligibleWeeks[0];
+  const testWeek = eligibleWeeks[1];
   return {
     excludedOwnerDirected,
     eligibleWeeks,
     topThree,
     marketMetrics: metricGroups,
+    clusterMultipliers,
+    heldOutScaleMetrics: {
+      winning: fitWeek != null && testWeek != null ? heldOutScaleMetrics(clusters, fitWeek, testWeek, 'winning') : [],
+      seriousMedian: fitWeek != null && testWeek != null ? heldOutScaleMetrics(clusters, fitWeek, testWeek, 'seriousMedian') : [],
+    },
     marketClusterCount: clusters.length,
     seriousMedianClusterCount: clusters.filter((cluster) => cluster.seriousMedian != null).length,
   };
