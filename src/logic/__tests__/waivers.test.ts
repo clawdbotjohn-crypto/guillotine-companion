@@ -8,6 +8,7 @@ import {
   buildVorpCalibration,
   buildLeagueContext,
   buildWaiverBoard,
+  buildWaiverBoardModel,
   calculateCalibratedVorpBid,
   calculateDollarsPerVorp,
   calculatePlayerVorp,
@@ -19,6 +20,7 @@ import {
   getReplacementTeamBounds,
   normalizeReplacementTeamTarget,
   predictedBidMultiplier,
+  resolveWaiverBoardModel,
   sortWaiverRowsByStrategy,
   type LeagueContext,
   type StrategyKey,
@@ -671,6 +673,125 @@ describe('buildWaiverBoard', () => {
     expect(rows[0].suggestions.map((item) => item.strategy)).toEqual([
       'max-vorp', 'weeks-starter', 'safe', 'aggressive', 'vorp',
     ]);
+  });
+});
+
+describe('waiver-board model reuse', () => {
+  function reusableFixture() {
+    const projections = new Map<string, RosPlayerProjection>();
+    for (const [position, start] of [['QB', 400], ['RB', 300], ['WR', 200], ['TE', 100]] as const) {
+      for (let rank = 1; rank <= 8; rank++) {
+        const playerId = `${position.toLowerCase()}-${String(rank).padStart(2, '0')}`;
+        projections.set(playerId, {
+          ...projection(playerId, position, start - rank, 3),
+          sourceValue: (start - rank) * 10,
+          sourceRank: rank,
+        });
+      }
+    }
+    const ctx: LeagueContext = {
+      ...context,
+      teamsRemaining: 4,
+      weeksRemaining: 3,
+      startersPerPos: { QB: 1, RB: 1, WR: 1, TE: 1, FLEX: 1, SUPER_FLEX: 1 },
+    };
+    const options = {
+      maxPerPos: Number.POSITIVE_INFINITY,
+      sleeperRosProjections: projections,
+      replacementTeamCount: 4,
+    };
+    return { projections, ctx, options };
+  }
+
+  it('reuses one exact-input model across sibling boards and matches independent builds', () => {
+    const { projections, ctx, options } = reusableFixture();
+    const allIds = [...projections.keys()].reverse();
+    const availableIds = ['qb-01', 'rb-02', 'wr-08', 'te-08'];
+    const boardModel = buildWaiverBoardModel(projections, ctx);
+
+    expect(resolveWaiverBoardModel(projections, ctx, boardModel)).toBe(boardModel);
+    expect(resolveWaiverBoardModel(projections, ctx, boardModel)).toBe(boardModel);
+
+    const reusedAvailable = buildWaiverBoard(
+      availableIds, projections, ctx, [], (id) => id, { ...options, boardModel },
+    );
+    const reusedAll = buildWaiverBoard(
+      allIds, projections, ctx, [], (id) => id, { ...options, boardModel },
+    );
+    const independentAvailable = buildWaiverBoard(
+      availableIds, projections, ctx, [], (id) => id, options,
+    );
+    const independentAll = buildWaiverBoard(
+      allIds, projections, ctx, [], (id) => id, options,
+    );
+
+    expect(reusedAvailable).toEqual(independentAvailable);
+    expect(reusedAll).toEqual(independentAll);
+    expect(reusedAvailable.map((row) => row.playerId))
+      .toEqual(independentAvailable.map((row) => row.playerId));
+
+    const top = reusedAvailable.find((row) => row.playerId === 'qb-01')!;
+    const deep = reusedAvailable.find((row) => row.playerId === 'te-08')!;
+    expect(top.sourceValue).toBe(3990);
+    expect(top.sourceRank).toBe(1);
+    expect(top.suggestions.find(({ strategy }) => strategy === 'max-vorp')?.value).not.toBeNull();
+    expect(top.suggestions.find(({ strategy }) => strategy === 'aggressive')?.value)
+      .toBe(top.predictedWinningBid);
+    expect(deep.suggestions.find(({ strategy }) => strategy === 'safe')?.value).toBe(0);
+    expect(deep.suggestions.find(({ strategy }) => strategy === 'weeks-starter')?.value).toBe(0);
+    expect(deep.suggestions.find(({ strategy }) => strategy === 'aggressive')?.value).toBe(0);
+    expect(deep.starterWeeks).toBe(0);
+  });
+
+  it('invalidates reuse for projection identity/data and every relevant league context change', () => {
+    const { projections, ctx } = reusableFixture();
+    const boardModel = buildWaiverBoardModel(projections, ctx);
+    const sameDataNewSource = new Map(projections);
+    const changedData = new Map(projections);
+    changedData.set('qb-01', projection('qb-01', 'QB', 1, 3));
+    const changedContexts: LeagueContext[] = [
+      { ...ctx },
+      { ...ctx, teamsRemaining: ctx.teamsRemaining - 1 },
+      { ...ctx, weeksRemaining: ctx.weeksRemaining - 1 },
+      { ...ctx, currentWeek: ctx.currentWeek + 1 },
+      { ...ctx, budget: ctx.budget / 2 },
+      { ...ctx, startersPerPos: { ...ctx.startersPerPos, FLEX: 0 } },
+    ];
+
+    expect(resolveWaiverBoardModel(sameDataNewSource, ctx, boardModel)).not.toBe(boardModel);
+    expect(resolveWaiverBoardModel(changedData, ctx, boardModel)).not.toBe(boardModel);
+    for (const changedContext of changedContexts) {
+      expect(resolveWaiverBoardModel(projections, changedContext, boardModel)).not.toBe(boardModel);
+    }
+  });
+
+  it('falls back safely when a stale candidate is supplied', () => {
+    const { projections, ctx, options } = reusableFixture();
+    const staleModel = buildWaiverBoardModel(projections, ctx);
+    const changedProjections = new Map(projections);
+    changedProjections.set('qb-01', projection('qb-01', 'QB', 1, 3));
+    const changedContext = { ...ctx, teamsRemaining: 3, weeksRemaining: 2 };
+    const ids = [...changedProjections.keys()];
+
+    const withStaleCandidate = buildWaiverBoard(
+      ids,
+      changedProjections,
+      changedContext,
+      [],
+      (id) => id,
+      { ...options, sleeperRosProjections: changedProjections, boardModel: staleModel },
+    );
+    const independent = buildWaiverBoard(
+      ids,
+      changedProjections,
+      changedContext,
+      [],
+      (id) => id,
+      { ...options, sleeperRosProjections: changedProjections },
+    );
+
+    expect(withStaleCandidate).toEqual(independent);
+    expect(withStaleCandidate.find((row) => row.playerId === 'qb-01')?.posRank).toBe(8);
   });
 });
 

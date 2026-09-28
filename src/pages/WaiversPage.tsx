@@ -42,6 +42,7 @@ import {
   buildMaxVorpCalibration,
   buildVorpCalibration,
   buildWaiverBoard,
+  buildWaiverBoardModel,
   calculateRemainingFaab,
   computeAvailablePlayers,
   computeRosteredPlayerOwners,
@@ -456,11 +457,13 @@ export function WaiversPage() {
         ctx.budget,
       )
       : null;
+    const boardModel = buildWaiverBoardModel(seasonValues, ctx);
     const boardOptions = {
       sleeperRosProjections: sleeperRosValues ?? undefined,
       replacementTeamCount: normalizedReplacementTarget,
       vorpCalibration,
       maxVorpCalibration,
+      boardModel,
     };
     const ownership = computeRosteredPlayerOwners(rosters, users!, elim);
     const allPositivePlayers = [...seasonValues.entries()]

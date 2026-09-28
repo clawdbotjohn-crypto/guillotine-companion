@@ -102,6 +102,8 @@ export interface BuildWaiverBoardOptions {
   replacementTeamCount?: number;
   vorpCalibration?: VorpCalibration | null;
   maxVorpCalibration?: MaxVorpCalibration | null;
+  /** Page-scoped model that can be shared by boards built from the exact same immutable inputs. */
+  boardModel?: WaiverBoardModel;
 }
 
 const VORP_WEIGHTS: Record<string, number> = { QB: 0.75, RB: 1.0, WR: 1.0, TE: 0.25, K: 0.1, DEF: 0.1 };
@@ -382,10 +384,20 @@ export function calculateMaxVorpBid(
   return calibration?.playerValues.get(playerId) ?? null;
 }
 
-interface NonVorpStarterModel {
+export interface NonVorpStarterModel {
   positionRanks: Map<string, number>;
   currentSelectedCountByPosition: Map<string, number>;
   selectedIdsByStage: Set<string>[];
+}
+
+/**
+ * Expensive selected-source starter math shared by sibling waiver-board projections.
+ * Input references are retained so reuse stays local, explicit, and safe for immutable page data.
+ */
+export interface WaiverBoardModel {
+  readonly displayProjections: Map<string, RosPlayerProjection>;
+  readonly leagueContext: LeagueContext;
+  readonly nonVorpStarterModel: NonVorpStarterModel;
 }
 
 function comparePointsPerWeek(a: RosPlayerProjection, b: RosPlayerProjection): number {
@@ -393,7 +405,7 @@ function comparePointsPerWeek(a: RosPlayerProjection, b: RosPlayerProjection): n
 }
 
 /** Build current and modeled-stage selected-source pools once for the whole waiver board. */
-function buildNonVorpStarterModel(
+export function buildNonVorpStarterModel(
   projections: Map<string, RosPlayerProjection>,
   ctx: LeagueContext,
 ): NonVorpStarterModel {
@@ -435,6 +447,30 @@ function buildNonVorpStarterModel(
   }
 
   return { positionRanks, currentSelectedCountByPosition, selectedIdsByStage };
+}
+
+export function buildWaiverBoardModel(
+  displayProjections: Map<string, RosPlayerProjection>,
+  leagueContext: LeagueContext,
+): WaiverBoardModel {
+  return {
+    displayProjections,
+    leagueContext,
+    nonVorpStarterModel: buildNonVorpStarterModel(displayProjections, leagueContext),
+  };
+}
+
+/** Reuse only the exact immutable projection/context pair; otherwise recompute a fresh model. */
+export function resolveWaiverBoardModel(
+  displayProjections: Map<string, RosPlayerProjection>,
+  leagueContext: LeagueContext,
+  candidate?: WaiverBoardModel,
+): WaiverBoardModel {
+  if (candidate?.displayProjections === displayProjections
+    && candidate.leagueContext === leagueContext) {
+    return candidate;
+  }
+  return buildWaiverBoardModel(displayProjections, leagueContext);
 }
 
 /** Selected-source positional-rank curve whose final selected starter is exactly replacement-level. */
@@ -518,7 +554,11 @@ export function buildWaiverBoard(
   getName: (id: string) => string,
   opts: BuildWaiverBoardOptions = {},
 ): WaiverPlayerRow[] {
-  const nonVorpModel = buildNonVorpStarterModel(displayProjections, ctx);
+  const nonVorpModel = resolveWaiverBoardModel(
+    displayProjections,
+    ctx,
+    opts.boardModel,
+  ).nonVorpStarterModel;
   const sleeperRos = opts.sleeperRosProjections;
   const replacementTeamCount = normalizeReplacementTeamTarget(
     opts.replacementTeamCount,
