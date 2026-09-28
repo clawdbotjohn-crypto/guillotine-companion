@@ -11,8 +11,8 @@
 - [x] Added focused boundary, shared-slot, edge/sparse, deterministic tie, arbitrary context, actual stage-membership, Aggressive derivation, and Sleeper/FantasyCalc/FantasyPros ownership tests.
 - [x] Added reproducible `npm run analyze:non-vorp` and `docs/analysis/non-vorp-seamex-2026.md` with source/context/stages, boundaries, cutoffs, actual available rows, and frozen BEFORE/current AFTER comparison.
 - [x] SeaMex current live AFTER: Safe **192** (QB27/RB55/WR80/TE30); Weeks and Aggressive **181** each (QB26/RB52/WR76/TE27). Boundaries in the final live capture: QB Geno Smith #28; RB Brian Robinson #56; WR Calvin Ridley #81; TE Colby Parkinson #31.
-- [x] Verified 173 frontend tests, 36 API tests, lint (one pre-existing unrelated warning), typecheck, production build, `git diff --check`, secret scan, report sanity, and desktop/mobile Waivers strategy switching.
-- [x] Feature branch committed and pushed only; no PR opened, merge, deploy, workflow dispatch, production/Supabase/data mutation.
+- [x] Independently verified 173 frontend tests, 36 API tests, focused waiver/ranking tests, lint (one pre-existing unrelated warning), typecheck, production build, `git diff --check`, secret scan, report sanity, and hosted desktop/mobile Waivers strategy switching.
+- [x] Review-only PR #13 is open with green CI and exact Azure preview `https://nice-moss-07ec56310-13.centralus.7.azurestaticapps.net`; branch is committed/pushed only. Not merged; no production deploy/workflow dispatch or production/Supabase/data mutation.
 
 **Out of scope:** Custom valuations remain the separate P2 below.
 
