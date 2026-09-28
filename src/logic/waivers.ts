@@ -154,23 +154,29 @@ function compareProjection(a: RosPlayerProjection, b: RosPlayerProjection): numb
   return b.totalPoints - a.totalPoints || a.playerId.localeCompare(b.playerId);
 }
 
-/**
- * Build an optimized N-team starter pool from actual lineup slots. Base positional slots are
- * selected first, then one shared remaining-player FLEX pool, then one shared SUPER_FLEX pool.
- */
-export function buildOptimizedStarterPool(
-  projections: Map<string, RosPlayerProjection>,
+interface AllocatablePlayer {
+  playerId: string;
+  position: string;
+}
+
+interface AllocatedStarterPool<T extends AllocatablePlayer> {
+  players: T[];
+  requiredSlots: number;
+  complete: boolean;
+}
+
+/** Generic slot allocation only: direct positions, then FLEX once, then SUPER_FLEX once. */
+function allocateOptimizedStarterPool<T extends AllocatablePlayer>(
+  eligiblePlayers: T[],
+  compare: (a: T, b: T) => number,
   startersPerPos: StarterPositionCounts,
   teamCount: number,
-): OptimizedStarterPool {
+): AllocatedStarterPool<T> {
   const teams = Math.max(0, Math.floor(teamCount));
-  const eligible = [...projections.values()]
-    .filter((player) => BASE_POSITIONS.includes(player.position as typeof BASE_POSITIONS[number])
-      && Number.isFinite(player.totalPoints))
-    .sort(compareProjection);
-  const selected: RosPlayerProjection[] = [];
+  const eligible = [...eligiblePlayers].sort(compare);
+  const selected: T[] = [];
   const selectedIds = new Set<string>();
-  const add = (players: RosPlayerProjection[]) => {
+  const add = (players: T[]) => {
     for (const player of players) {
       if (selectedIds.has(player.playerId)) continue;
       selectedIds.add(player.playerId);
@@ -191,13 +197,32 @@ export function buildOptimizedStarterPool(
   selectShared(FLEX_POSITIONS, Math.max(0, startersPerPos.FLEX) * teams);
   selectShared(SUPER_FLEX_POSITIONS, Math.max(0, startersPerPos.SUPER_FLEX) * teams);
 
-  selected.sort(compareProjection);
+  selected.sort(compare);
   const slotsPerTeam = BASE_POSITIONS.reduce(
     (sum, position) => sum + Math.max(0, startersPerPos[position]),
     Math.max(0, startersPerPos.FLEX) + Math.max(0, startersPerPos.SUPER_FLEX),
   );
   const requiredSlots = slotsPerTeam * teams;
   return { players: selected, requiredSlots, complete: selected.length === requiredSlots };
+}
+
+/**
+ * Build an optimized N-team starter pool from actual lineup slots. This public Max-VORP wrapper
+ * intentionally keeps finite totalPoints eligibility (including zero) and its exact comparator.
+ */
+export function buildOptimizedStarterPool(
+  projections: Map<string, RosPlayerProjection>,
+  startersPerPos: StarterPositionCounts,
+  teamCount: number,
+): OptimizedStarterPool {
+  return allocateOptimizedStarterPool(
+    [...projections.values()].filter((player) =>
+      BASE_POSITIONS.includes(player.position as typeof BASE_POSITIONS[number])
+      && Number.isFinite(player.totalPoints)),
+    compareProjection,
+    startersPerPos,
+    teamCount,
+  );
 }
 
 /** Last selected starter at each position in an already optimized pool. */
@@ -357,48 +382,89 @@ export function calculateMaxVorpBid(
   return calibration?.playerValues.get(playerId) ?? null;
 }
 
-/** Base safe value on a $1000 budget: ~$200/starter, $250 top, QB 0.75x. */
-function safeStrategy(row: { posRank: number; position: string }, ctx: LeagueContext): number {
+interface NonVorpStarterModel {
+  positionRanks: Map<string, number>;
+  currentSelectedCountByPosition: Map<string, number>;
+  selectedIdsByStage: Set<string>[];
+}
+
+function comparePointsPerWeek(a: RosPlayerProjection, b: RosPlayerProjection): number {
+  return b.pointsPerWeek - a.pointsPerWeek || a.playerId.localeCompare(b.playerId);
+}
+
+/** Build current and modeled-stage selected-source pools once for the whole waiver board. */
+function buildNonVorpStarterModel(
+  projections: Map<string, RosPlayerProjection>,
+  ctx: LeagueContext,
+): NonVorpStarterModel {
+  const eligible = [...projections.values()].filter((player) =>
+    BASE_POSITIONS.includes(player.position as typeof BASE_POSITIONS[number])
+    && Number.isFinite(player.pointsPerWeek)
+    && player.pointsPerWeek > 0);
+  const sorted = [...eligible].sort(comparePointsPerWeek);
+  const positionRanks = new Map<string, number>();
+  const nextRankByPosition = new Map<string, number>();
+  for (const player of sorted) {
+    const rank = (nextRankByPosition.get(player.position) ?? 0) + 1;
+    nextRankByPosition.set(player.position, rank);
+    positionRanks.set(player.playerId, rank);
+  }
+
+  const currentPool = allocateOptimizedStarterPool(
+    eligible,
+    comparePointsPerWeek,
+    ctx.startersPerPos,
+    ctx.teamsRemaining,
+  );
+  const currentSelectedCountByPosition = new Map<string, number>();
+  for (const player of currentPool.players) {
+    currentSelectedCountByPosition.set(
+      player.position,
+      (currentSelectedCountByPosition.get(player.position) ?? 0) + 1,
+    );
+  }
+
+  // Preserve the established fixed cadence and survivor progression exactly.
+  const eliminationsPerWeek = ctx.teamsRemaining > 16 ? 2 : 1;
+  const selectedIdsByStage: Set<string>[] = [];
+  let teams = ctx.teamsRemaining;
+  for (let week = 0; week < ctx.weeksRemaining && teams > 1; week++) {
+    const pool = allocateOptimizedStarterPool(eligible, comparePointsPerWeek, ctx.startersPerPos, teams);
+    selectedIdsByStage.push(new Set(pool.players.map((player) => player.playerId)));
+    teams = Math.max(1, teams - eliminationsPerWeek);
+  }
+
+  return { positionRanks, currentSelectedCountByPosition, selectedIdsByStage };
+}
+
+/** Selected-source positional-rank curve whose final selected starter is exactly replacement-level. */
+function safeStrategy(
+  row: { posRank: number; position: string },
+  ctx: LeagueContext,
+  replacementRank: number,
+): number {
+  const rank = row.posRank;
+  let premium = 0;
+  if (replacementRank > 1 && rank > 0 && rank < replacementRank) {
+    premium = rank === 1 ? 1.25 : 1.1 * (replacementRank - rank) / (replacementRank - 1);
+  }
   const base1000 = 200;
   const weight = VORP_WEIGHTS[row.position] ?? 1.0;
-  const startersAtPos = starterCountForPos(row.position, ctx);
-  const totalStarterSlots = Math.max(1, startersAtPos * ctx.teamsRemaining);
-  const premium = row.posRank <= 1 ? 1.25 : Math.max(0, 1.1 - (row.posRank / totalStarterSlots));
-  return scale(base1000 * weight * premium, ctx.budget);
+  const validBudget = Number.isFinite(ctx.budget) ? Math.max(0, ctx.budget) : 0;
+  return Math.max(0, Math.round((base1000 * weight * premium / 1000) * validBudget));
 }
 
-/** Estimate how many remaining guillotine weeks a player stays above the starter cutoff. */
-function projectedStarterWeeks(row: { posRank: number; position: string }, ctx: LeagueContext): number {
-  const startersAtPos = starterCountForPos(row.position, ctx);
-  const elimsPerWeek = ctx.teamsRemaining > 16 ? 2 : 1;
-  let weeks = 0;
-  let teams = ctx.teamsRemaining;
-  for (let w = 0; w < ctx.weeksRemaining && teams > 1; w++) {
-    if (row.posRank <= startersAtPos * teams) weeks++;
-    teams = Math.max(1, teams - elimsPerWeek);
-  }
-  return weeks;
+/** Count actual player-ID membership in each freshly optimized existing modeled stage. */
+function projectedStarterWeeks(playerId: string, model: NonVorpStarterModel): number {
+  return model.selectedIdsByStage.reduce(
+    (weeks, selectedIds) => weeks + (selectedIds.has(playerId) ? 1 : 0),
+    0,
+  );
 }
 
-function weeksStarterStrategy(row: { posRank: number; position: string }, ctx: LeagueContext): number {
-  const weeks = projectedStarterWeeks(row, ctx);
-  const frac = ctx.weeksRemaining > 0 ? weeks / ctx.weeksRemaining : 0;
-  return Math.round(safeStrategy(row, ctx) * frac);
-}
-
-function starterCountForPos(pos: string, ctx: LeagueContext): number {
-  const s = ctx.startersPerPos;
-  switch (pos) {
-    case 'QB': return s.QB + s.SUPER_FLEX;
-    case 'RB': return s.RB + s.FLEX;
-    case 'WR': return s.WR + s.FLEX;
-    case 'TE': return s.TE + s.FLEX;
-    default: return 1;
-  }
-}
-
-function scale(value1000: number, budget: number): number {
-  return Math.round((value1000 / 1000) * budget);
+function weeksStarterStrategy(safeValue: number, starterWeeks: number, ctx: LeagueContext): number {
+  const fraction = ctx.weeksRemaining > 0 ? starterWeeks / ctx.weeksRemaining : 0;
+  return Math.max(0, Math.round(safeValue * fraction));
 }
 
 /** Market-deflation curve for a standard 17-week fantasy season. */
@@ -452,7 +518,7 @@ export function buildWaiverBoard(
   getName: (id: string) => string,
   opts: BuildWaiverBoardOptions = {},
 ): WaiverPlayerRow[] {
-  const leagueWideRanks = computeLeagueWidePositionRanks(displayProjections);
+  const nonVorpModel = buildNonVorpStarterModel(displayProjections, ctx);
   const sleeperRos = opts.sleeperRosProjections;
   const replacementTeamCount = normalizeReplacementTeamTarget(
     opts.replacementTeamCount,
@@ -481,14 +547,20 @@ export function buildWaiverBoard(
   const rows: WaiverPlayerRow[] = [];
   const maxPerPos = opts.maxPerPos ?? 12;
   for (const [pos, arr] of byPos.entries()) {
-    arr.sort((a, b) => b.pointsPerWeek - a.pointsPerWeek || a.playerId.localeCompare(b.playerId));
+    arr.sort((a, b) => {
+      const aEligible = Number.isFinite(a.pointsPerWeek) && a.pointsPerWeek > 0;
+      const bEligible = Number.isFinite(b.pointsPerWeek) && b.pointsPerWeek > 0;
+      if (aEligible !== bEligible) return aEligible ? -1 : 1;
+      return (aEligible ? b.pointsPerWeek - a.pointsPerWeek : 0)
+        || a.playerId.localeCompare(b.playerId);
+    });
     arr.slice(0, maxPerPos).forEach((p) => {
-      const posRank = leagueWideRanks.get(p.playerId);
-      if (posRank == null) return;
+      const posRank = nonVorpModel.positionRanks.get(p.playerId) ?? 0;
+      const replacementRank = nonVorpModel.currentSelectedCountByPosition.get(pos) ?? 0;
       const base = { position: pos, posRank };
-      const safe = safeStrategy(base, ctx);
-      const starterWeeks = projectedStarterWeeks(base, ctx);
-      const weeks = weeksStarterStrategy(base, ctx);
+      const safe = safeStrategy(base, ctx, replacementRank);
+      const starterWeeks = projectedStarterWeeks(p.playerId, nonVorpModel);
+      const weeks = weeksStarterStrategy(safe, starterWeeks, ctx);
       const predictedWinningBid = predictWinningBid(weeks, ctx.currentWeek);
       const playerVorp = calibration
         ? calculatePlayerVorp(sleeperRos?.get(p.playerId), calibration.replacementByPosition)
@@ -552,26 +624,6 @@ function mk(
     value: normalized,
     pctOfBudget: budget > 0 ? (normalized / budget) * 100 : 0,
   };
-}
-
-/** League-wide positional ranks from every player in the selected display source. */
-function computeLeagueWidePositionRanks(
-  projections: Map<string, RosPlayerProjection>,
-): Map<string, number> {
-  const byPos = new Map<string, { playerId: string; pointsPerWeek: number }[]>();
-  for (const [playerId, projection] of projections.entries()) {
-    if (!BASE_POSITIONS.includes(projection.position as typeof BASE_POSITIONS[number])) continue;
-    const players = byPos.get(projection.position) ?? [];
-    players.push({ playerId, pointsPerWeek: projection.pointsPerWeek });
-    byPos.set(projection.position, players);
-  }
-  const ranks = new Map<string, number>();
-  for (const players of byPos.values()) {
-    players
-      .sort((a, b) => b.pointsPerWeek - a.pointsPerWeek || a.playerId.localeCompare(b.playerId))
-      .forEach((player, index) => ranks.set(player.playerId, index + 1));
-  }
-  return ranks;
 }
 
 /** Resolve current Sleeper ownership for display, including rosters eliminated by our model. */

@@ -300,6 +300,36 @@ describe('Max VORP', () => {
     expect(result.playerValues.get('RB1')?.teamCount).toBe(4);
   });
 
+  it('preserves exact mixed FLEX/SUPER_FLEX selected IDs including finite zero-point players', () => {
+    const players = new Map<string, RosPlayerProjection>([
+      ['qb-a', projection('qb-a', 'QB', 100, 1)],
+      ['qb-b', projection('qb-b', 'QB', 90, 1)],
+      ['qb-zero', projection('qb-zero', 'QB', 0, 1)],
+      ['rb-a', projection('rb-a', 'RB', 80, 1)],
+      ['rb-b', projection('rb-b', 'RB', 70, 1)],
+      ['wr-a', projection('wr-a', 'WR', 60, 1)],
+      ['wr-b', projection('wr-b', 'WR', 50, 1)],
+      ['te-a', projection('te-a', 'TE', 40, 1)],
+      ['te-b', projection('te-b', 'TE', 30, 1)],
+    ]);
+    const pool = buildOptimizedStarterPool(
+      players,
+      { QB: 1, RB: 1, WR: 1, TE: 1, FLEX: 1, SUPER_FLEX: 1 },
+      1,
+    );
+
+    expect(pool.requiredSlots).toBe(6);
+    expect(pool.complete).toBe(true);
+    expect(pool.players.map(({ playerId }) => playerId)).toEqual([
+      'qb-a', 'qb-b', 'rb-a', 'rb-b', 'wr-a', 'te-a',
+    ]);
+    expect(buildOptimizedStarterPool(
+      new Map([['qb-zero', players.get('qb-zero')!]]),
+      { QB: 1, RB: 0, WR: 0, TE: 0, FLEX: 0, SUPER_FLEX: 0 },
+      1,
+    ).players.map(({ playerId }) => playerId)).toEqual(['qb-zero']);
+  });
+
   it('floors replacement and negative values through VORP and handles missing/all-zero data', () => {
     const players = new Map<string, RosPlayerProjection>();
     for (let rank = 1; rank <= 8; rank++) players.set(`qb-${rank}`, projection(`qb-${rank}`, 'QB', 9 - rank, 1));
@@ -454,6 +484,9 @@ describe('buildWaiverBoard', () => {
     }
     projections.set('rb-25-available', projection('rb-25-available', 'RB', 15));
     projections.set('te-1-available', projection('te-1-available', 'TE', 30));
+    for (let rank = 2; rank <= 12; rank++) {
+      projections.set(`te-${rank}`, projection(`te-${rank}`, 'TE', 30 - rank));
+    }
 
     const rows = buildWaiverBoard(
       ['rb-25-available', 'te-1-available'],
@@ -622,6 +655,7 @@ describe('buildWaiverBoard', () => {
   it('preserves raw model values without any budget-floor clamp path', () => {
     const projections = new Map([
       ['available-qb', projection('available-qb', 'QB', 30)],
+      ['replacement-qb', projection('replacement-qb', 'QB', 20)],
     ]);
 
     const rows = buildWaiverBoard(
@@ -637,5 +671,201 @@ describe('buildWaiverBoard', () => {
     expect(rows[0].suggestions.map((item) => item.strategy)).toEqual([
       'max-vorp', 'weeks-starter', 'safe', 'aggressive', 'vorp',
     ]);
+  });
+});
+
+describe('non-VORP optimized replacement boundaries', () => {
+  const valueFor = (
+    rows: ReturnType<typeof buildWaiverBoard>,
+    playerId: string,
+    strategy: StrategyKey,
+  ) => rows.find((row) => row.playerId === playerId)!
+    .suggestions.find((suggestion) => suggestion.strategy === strategy)!.value;
+
+  function boardFor(
+    projections: Map<string, RosPlayerProjection>,
+    startersPerPos: LeagueContext['startersPerPos'],
+    overrides: Partial<LeagueContext> = {},
+  ) {
+    return buildWaiverBoard(
+      [...projections.keys()],
+      projections,
+      { ...context, teamsRemaining: 2, weeksRemaining: 2, budget: 1000, startersPerPos, ...overrides },
+      [],
+      (id) => id,
+      { maxPerPos: Number.POSITIVE_INFINITY },
+    );
+  }
+
+  function ranked(position: string, count: number, start = 100): Map<string, RosPlayerProjection> {
+    const result = new Map<string, RosPlayerProjection>();
+    for (let rank = 1; rank <= count; rank++) {
+      const playerId = `${position.toLowerCase()}-${String(rank).padStart(2, '0')}`;
+      result.set(playerId, projection(playerId, position, start - rank, 1));
+    }
+    return result;
+  }
+
+  it('makes the final actually selected player the zero boundary and keeps one-above positive', () => {
+    const players = new Map<string, RosPlayerProjection>();
+    for (const position of ['QB', 'RB', 'WR', 'TE']) {
+      for (const [id, player] of ranked(position, 5, 100)) players.set(id, player);
+    }
+    const rows = boardFor(
+      players,
+      { QB: 1, RB: 1, WR: 1, TE: 1, FLEX: 0, SUPER_FLEX: 0 },
+    );
+
+    for (const position of ['qb', 'rb', 'wr', 'te']) {
+      expect(valueFor(rows, `${position}-01`, 'safe')).toBe(
+        position === 'qb' ? 188 : position === 'te' ? 63 : 250,
+      );
+      expect(valueFor(rows, `${position}-01`, 'safe')).toBeGreaterThan(0);
+      expect(valueFor(rows, `${position}-02`, 'safe')).toBe(0);
+      for (const rank of [3, 4, 5]) {
+        const id = `${position}-${String(rank).padStart(2, '0')}`;
+        for (const strategy of ['safe', 'weeks-starter', 'aggressive'] as const) {
+          expect(valueFor(rows, id, strategy)).toBe(0);
+        }
+      }
+    }
+  });
+
+  it.each([
+    {
+      name: 'no shared slots',
+      slots: { QB: 1, RB: 1, WR: 1, TE: 1, FLEX: 0, SUPER_FLEX: 0 },
+      expectedBoundary: { QB: 2, RB: 2, WR: 2, TE: 2 },
+    },
+    {
+      name: 'multiple FLEX slots allocated once',
+      slots: { QB: 1, RB: 1, WR: 1, TE: 1, FLEX: 2, SUPER_FLEX: 0 },
+      expectedBoundary: { QB: 2, RB: 6, WR: 2, TE: 2 },
+    },
+    {
+      name: 'FLEX and SUPER_FLEX each allocated once',
+      slots: { QB: 1, RB: 1, WR: 1, TE: 1, FLEX: 1, SUPER_FLEX: 1 },
+      expectedBoundary: { QB: 4, RB: 4, WR: 2, TE: 2 },
+    },
+  ])('$name', ({ slots, expectedBoundary }) => {
+    const players = new Map<string, RosPlayerProjection>();
+    // Cross-position scores force FLEX to RB and SUPER_FLEX to QB.
+    for (const [position, start] of [['QB', 400], ['RB', 300], ['WR', 200], ['TE', 100]] as const) {
+      for (const [id, player] of ranked(position, 10, start)) players.set(id, player);
+    }
+    const rows = boardFor(players, slots);
+
+    for (const [position, boundary] of Object.entries(expectedBoundary)) {
+      const prefix = position.toLowerCase();
+      const boundaryId = `${prefix}-${String(boundary).padStart(2, '0')}`;
+      expect(valueFor(rows, boundaryId, 'safe')).toBe(0);
+      if (boundary > 1) {
+        expect(valueFor(rows, `${prefix}-${String(boundary - 1).padStart(2, '0')}`, 'safe'))
+          .toBeGreaterThan(0);
+      }
+      expect(valueFor(rows, `${prefix}-${String(boundary + 1).padStart(2, '0')}`, 'safe')).toBe(0);
+    }
+    const selectedCount = Object.values(expectedBoundary).reduce((sum, count) => sum + count, 0);
+    expect(selectedCount).toBe(2 * Object.values(slots).reduce((sum, count) => sum + count, 0));
+  });
+
+  it('supports R=0, R=1, zero-direct-slot winners, sparse supply, and invalid scores', () => {
+    const players = new Map<string, RosPlayerProjection>([
+      ['rb-a', projection('rb-a', 'RB', 50, 1)],
+      ['rb-zero', projection('rb-zero', 'RB', 0, 1)],
+      ['rb-negative', projection('rb-negative', 'RB', -1, 1)],
+      ['rb-nan', projection('rb-nan', 'RB', Number.NaN, 1)],
+      ['wr-a', projection('wr-a', 'WR', 40, 1)],
+      ['te-a', projection('te-a', 'TE', 30, 1)],
+      ['k-a', projection('k-a', 'K', 100, 1)],
+    ]);
+    const rows = boardFor(
+      players,
+      { QB: 0, RB: 0, WR: 0, TE: 0, FLEX: 1, SUPER_FLEX: 0 },
+      { teamsRemaining: 1, weeksRemaining: 1 },
+    );
+
+    // RB wins the only FLEX assignment, but R=1 means boundary wins over rank-one premium.
+    for (const strategy of ['safe', 'weeks-starter', 'aggressive'] as const) {
+      expect(valueFor(rows, 'rb-a', strategy)).toBe(0);
+      expect(valueFor(rows, 'wr-a', strategy)).toBe(0); // R=0
+      expect(valueFor(rows, 'te-a', strategy)).toBe(0); // R=0
+      expect(valueFor(rows, 'rb-zero', strategy)).toBe(0);
+      expect(valueFor(rows, 'rb-negative', strategy)).toBe(0);
+      expect(valueFor(rows, 'rb-nan', strategy)).toBe(0);
+    }
+    expect(rows.some((row) => row.playerId === 'k-a')).toBe(false);
+  });
+
+  it('uses deterministic player-ID ties for shared membership and positional boundary', () => {
+    const players = new Map<string, RosPlayerProjection>([
+      ['rb-z', projection('rb-z', 'RB', 20, 1)],
+      ['rb-a', projection('rb-a', 'RB', 20, 1)],
+      ['rb-m', projection('rb-m', 'RB', 20, 1)],
+      ['wr-a', projection('wr-a', 'WR', 20, 1)],
+    ]);
+    const slots = { QB: 0, RB: 1, WR: 0, TE: 0, FLEX: 1, SUPER_FLEX: 0 };
+    const first = boardFor(players, slots, { teamsRemaining: 1, weeksRemaining: 2 });
+    const second = boardFor(new Map([...players].reverse()), slots, { teamsRemaining: 1, weeksRemaining: 2 });
+
+    // rb-a direct, rb-m FLEX, therefore rb-m is the deterministic RB boundary.
+    expect(first.find((row) => row.playerId === 'rb-a')?.posRank).toBe(1);
+    expect(first.find((row) => row.playerId === 'rb-m')?.posRank).toBe(2);
+    expect(valueFor(first, 'rb-a', 'safe')).toBe(250);
+    expect(valueFor(first, 'rb-m', 'safe')).toBe(0);
+    expect(valueFor(first, 'rb-z', 'safe')).toBe(0);
+    expect(first).toEqual(second);
+  });
+
+  it('counts actual selected player IDs at every existing modeled stage', () => {
+    const players = new Map<string, RosPlayerProjection>();
+    for (const [id, player] of ranked('RB', 8, 100)) players.set(id, player);
+    for (const [id, player] of ranked('WR', 8, 80)) players.set(id, player);
+    const rows = boardFor(
+      players,
+      { QB: 0, RB: 1, WR: 1, TE: 0, FLEX: 1, SUPER_FLEX: 0 },
+      { teamsRemaining: 4, weeksRemaining: 3 },
+    );
+
+    // Stages are 4,3,2 teams. RB8 wins the current FLEX pool only; WR8 never wins one.
+    expect(rows.find((row) => row.playerId === 'rb-08')?.starterWeeks).toBe(1);
+    expect(rows.find((row) => row.playerId === 'wr-08')?.starterWeeks).toBe(0);
+    expect(rows.find((row) => row.playerId === 'rb-08')?.possibleStarterWeeks).toBe(3);
+  });
+
+  it('keeps values finite, nonnegative, monotone, and budget-scaled for arbitrary contexts', () => {
+    for (const teamsRemaining of [1, 2, 4, 16, 17, 28, 32]) {
+      for (const weeksRemaining of [0, 1, 14]) {
+        for (const budget of [0, 500, 1000, Number.NaN, -100]) {
+          const players = ranked('QB', 36, 100);
+          const rows = boardFor(
+            players,
+            { QB: 1, RB: 0, WR: 0, TE: 0, FLEX: 0, SUPER_FLEX: 1 },
+            { teamsRemaining, weeksRemaining, budget },
+          ).sort((a, b) => a.posRank - b.posRank);
+          for (const strategy of ['safe', 'weeks-starter', 'aggressive'] as const) {
+            const values = rows.map((row) => valueFor(rows, row.playerId, strategy)!);
+            expect(values.every((value) => Number.isFinite(value) && value >= 0)).toBe(true);
+            expect(values).toEqual([...values].sort((a, b) => b - a));
+          }
+        }
+      }
+    }
+  });
+
+  it('derives Aggressive exactly from corrected Weeks-as-Starter for each row', () => {
+    const players = ranked('QB', 8, 100);
+    for (const currentWeek of [1, 4, 9, 17, 20]) {
+      const rows = boardFor(
+        players,
+        { QB: 1, RB: 0, WR: 0, TE: 0, FLEX: 0, SUPER_FLEX: 0 },
+        { teamsRemaining: 6, weeksRemaining: 5, currentWeek },
+      );
+      for (const row of rows) {
+        const weeks = valueFor(rows, row.playerId, 'weeks-starter')!;
+        expect(valueFor(rows, row.playerId, 'aggressive'))
+          .toBe(Math.round(weeks * predictedBidMultiplier(currentWeek)));
+      }
+    }
   });
 });
