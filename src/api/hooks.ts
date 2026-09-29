@@ -1,5 +1,6 @@
 // TanStack Query hooks for Sleeper API
 
+import { useRef } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import * as api from './client';
 import type {
@@ -229,6 +230,58 @@ export interface ProjectionSnapshotBatch {
   errors: Map<number, Error>;
 }
 
+export interface ProjectionSnapshotBatchIdentity {
+  enabled: boolean;
+  decisionWeeks: readonly number[];
+  snapshotSources: readonly (ProjectionSnapshotResponse | undefined)[];
+  errorSources: readonly (Error | undefined)[];
+  data: ProjectionSnapshotBatch | undefined;
+}
+
+function sameIdentityValues<T>(left: readonly T[], right: readonly T[]) {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+/**
+ * Reuse a batch only while every coordinate and its React Query source identity is unchanged.
+ * Callers retain at most one prior batch, so this never creates an unbounded cache.
+ */
+export function stabilizeProjectionSnapshotBatch(
+  previous: ProjectionSnapshotBatchIdentity | undefined,
+  enabled: boolean,
+  decisionWeeks: readonly number[],
+  snapshotSources: readonly (ProjectionSnapshotResponse | undefined)[],
+  errorSources: readonly (Error | undefined)[],
+): ProjectionSnapshotBatchIdentity {
+  if (
+    previous?.enabled === enabled
+    && sameIdentityValues(previous.decisionWeeks, decisionWeeks)
+    && sameIdentityValues(previous.snapshotSources, snapshotSources)
+    && sameIdentityValues(previous.errorSources, errorSources)
+  ) {
+    return previous;
+  }
+
+  const snapshots = new Map<number, ProjectionSnapshotResponse>();
+  const errors = new Map<number, Error>();
+  if (enabled) {
+    decisionWeeks.forEach((decisionWeek, index) => {
+      const snapshot = snapshotSources[index];
+      const error = errorSources[index];
+      if (snapshot) snapshots.set(decisionWeek, snapshot);
+      if (error) errors.set(decisionWeek, error);
+    });
+  }
+
+  return {
+    enabled,
+    decisionWeeks: [...decisionWeeks],
+    snapshotSources: [...snapshotSources],
+    errorSources: [...errorSources],
+    data: enabled ? { snapshots, errors } : undefined,
+  };
+}
+
 /** Preserve honest per-coordinate failures so one sparse week cannot erase unrelated evidence. */
 export async function fetchProjectionSnapshotBatch(
   season: number,
@@ -288,24 +341,27 @@ export function useProjectionSnapshots(
     })),
   });
 
-  const snapshots = new Map<number, ProjectionSnapshotResponse>();
-  const errors = new Map<number, Error>();
-  let firstError: Error | null = null;
-
-  queries.forEach((query, index) => {
-    const decisionWeek = weeks[index];
-    if (query.data) snapshots.set(decisionWeek, query.data);
-    if (query.error instanceof Error) {
-      errors.set(decisionWeek, query.error);
-      if (!firstError) firstError = query.error;
-    }
-  });
-
-  const allFailed = weeks.length > 0 && snapshots.size === 0 && errors.size === weeks.length;
+  const identityRef = useRef<ProjectionSnapshotBatchIdentity | undefined>(undefined);
+  const identity = stabilizeProjectionSnapshotBatch(
+    // oxlint-disable-next-line react/refs -- Intentional bounded cache; current inputs validate it.
+    identityRef.current,
+    isEnabled,
+    weeks,
+    queries.map((query) => query.data),
+    queries.map((query) => query.error instanceof Error ? query.error : undefined),
+  );
+  // oxlint-disable-next-line react/refs -- Store only the current validated identity for next render.
+  identityRef.current = identity;
+  const { data } = identity;
+  const allFailed = isEnabled
+    && data != null
+    && weeks.length > 0
+    && data.snapshots.size === 0
+    && data.errors.size === weeks.length;
 
   return {
-    data: isEnabled ? { snapshots, errors } : undefined,
-    error: allFailed ? firstError : null,
+    data,
+    error: allFailed ? data.errors.values().next().value ?? null : null,
     isLoading: isEnabled && queries.some((query) => query.isLoading),
     refetch: async () => {
       await Promise.all(queries.map((query) => query.refetch()));
