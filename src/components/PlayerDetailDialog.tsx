@@ -38,8 +38,8 @@ export function PlayerDetailDialog({ open, onClose, data }: { open: boolean; onC
       .map((events) => [...events].sort((a, b) => Number(b.outcome === 'won') - Number(a.outcome === 'won') || b.actualBid - a.actualBid || a.transactionId.localeCompare(b.transactionId)))
       .sort((a, b) => (b[0]?.createdAt ?? 0) - (a[0]?.createdAt ?? 0));
   }, [data.history]);
-  const winners = groupedHistory.flatMap((events) => events.filter((event) => event.outcome === 'won'));
-  const otherBids = groupedHistory.flatMap((events) => events.filter((event) => event.outcome === 'legitimate-loss'));
+  const winningGroups = groupedHistory.map((events) => events.filter((event) => event.outcome === 'won')).filter((events) => events.length > 0);
+  const otherBidGroups = groupedHistory.map((events) => events.filter((event) => event.outcome === 'legitimate-loss')).filter((events) => events.length > 0);
   const orderedPredictions = orderManagerPredictions(data.managerPredictions ?? []);
   const supportsPrediction = !data.owned && typeof data.suggestedBid === 'number' && Number.isFinite(data.suggestedBid) && data.suggestedBid > 0;
   const closeDialog = useCallback(() => onClose(), [onClose]);
@@ -108,7 +108,7 @@ export function PlayerDetailDialog({ open, onClose, data }: { open: boolean; onC
 
           <section className="mt-4" aria-labelledby={`${titleId}-history`}>
             <h3 id={`${titleId}-history`} className="text-xs font-semibold uppercase tracking-wider text-[#f0f0ff]">Bidding History</h3>
-            {data.history.length === 0 ? <p className="mt-2 rounded-lg bg-[#121735] p-3 text-xs text-[#9ca3c7]">No canonical waiver history is available for this player in the loaded league weeks.</p> : <div className="mt-2 space-y-4">{winners.length > 0 && <section aria-label="Winning bids"><h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#10b981]">Winning bids</h4><div className="space-y-2">{winners.map(renderBid)}</div></section>}{otherBids.length > 0 && <section aria-label="Other bids"><h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#a5b4fc]">Other bids</h4><div className="space-y-2">{otherBids.map(renderBid)}</div></section>}</div>}
+            {data.history.length === 0 ? <p className="mt-2 rounded-lg bg-[#121735] p-3 text-xs text-[#9ca3c7]">No canonical waiver history is available for this player in the loaded league weeks.</p> : <div className="mt-2 space-y-4">{winningGroups.length > 0 && <section aria-label="Winning bids"><h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#10b981]">Winning bids</h4><div className="space-y-3">{winningGroups.map((events) => <div key={events[0].batchKey} aria-label={`Week ${events[0].decisionWeek} waiver event`} className="space-y-2">{events.map(renderBid)}</div>)}</div></section>}{otherBidGroups.length > 0 && <section aria-label="Other bids"><h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#a5b4fc]">Other bids</h4><div className="space-y-3">{otherBidGroups.map((events) => <div key={events[0].batchKey} aria-label={`Week ${events[0].decisionWeek} waiver event`} className="space-y-2">{events.map(renderBid)}</div>)}</div></section>}</div>}
           </section>
         </div>
       </div>
