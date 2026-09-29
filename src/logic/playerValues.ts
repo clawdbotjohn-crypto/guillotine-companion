@@ -1,21 +1,19 @@
 import type { Roster } from '../api/types';
 import type { RosPlayerProjection } from './projections';
-
-export interface PlayerValueDisplay {
-  value: number | null;
-  positionRank: number | null;
-}
+import type { MaxVorpCalibration } from './waivers';
 
 export interface RosterValueSummary {
   rosterId: number;
-  total: number;
+  /** Sum of modeled Max VORP dollars, or null when no roster player was modeled. */
+  total: number | null;
   matched: number;
   missing: number;
   playerCount: number;
 }
 
 export interface RankedRosterValue extends RosterValueSummary {
-  rank: number;
+  /** Competition rank among active rosters. Null means the roster total is unavailable. */
+  rank: number | null;
   outOf: number;
 }
 
@@ -23,21 +21,38 @@ export interface SelectedRosterValueDisplay extends RosterValueSummary {
   eliminated: boolean;
   rank: number | null;
   outOf: number;
+  /** Highest modeled total among active rosters only. */
+  leagueHigh: number | null;
 }
 
-export function selectedPlayerValue(value: RosPlayerProjection | undefined): number | null {
-  const raw = value?.sourceValue ?? value?.totalPoints;
-  return typeof raw === 'number' && Number.isFinite(raw) ? raw : null;
+/**
+ * Expand a valid Max VORP calibration to every player with a real Sleeper ROS projection.
+ * Positive players use the calibration's rounded bid. Projected players omitted by the
+ * positive-only calibration are honest $0 values; absent projections remain absent.
+ */
+export function buildMaxVorpPlayerValues(
+  projections: ReadonlyMap<string, RosPlayerProjection>,
+  calibration: MaxVorpCalibration | null | undefined,
+): Map<string, number> | null {
+  if (!calibration) return null;
+  const values = new Map<string, number>();
+  for (const playerId of [...projections.keys()].sort((a, b) => a.localeCompare(b))) {
+    values.set(playerId, calibration.playerValues.get(playerId)?.bid ?? 0);
+  }
+  return values;
 }
 
-export function buildPositionRanks(values: ReadonlyMap<string, RosPlayerProjection>): Map<string, number> {
+export function buildModeledPositionRanks(
+  values: ReadonlyMap<string, number>,
+  projections: ReadonlyMap<string, RosPlayerProjection>,
+): Map<string, number> {
   const grouped = new Map<string, Array<{ id: string; value: number }>>();
-  for (const [id, projection] of values) {
-    const value = selectedPlayerValue(projection);
-    if (value == null) continue;
-    const group = grouped.get(projection.position) ?? [];
+  for (const [id, value] of values) {
+    const position = projections.get(id)?.position;
+    if (!position || !Number.isFinite(value)) continue;
+    const group = grouped.get(position) ?? [];
     group.push({ id, value });
-    grouped.set(projection.position, group);
+    grouped.set(position, group);
   }
   const ranks = new Map<string, number>();
   for (const group of grouped.values()) {
@@ -62,34 +77,54 @@ export function collectRosterPlayerIds(roster: Roster): string[] {
 
 export function summarizeRosterValue(
   roster: Roster,
-  values: ReadonlyMap<string, RosPlayerProjection>,
+  values: ReadonlyMap<string, number>,
 ): RosterValueSummary {
   const ids = collectRosterPlayerIds(roster);
   let total = 0;
   let matched = 0;
   for (const id of ids) {
-    const value = selectedPlayerValue(values.get(id));
-    if (value == null) continue;
+    const value = values.get(id);
+    if (value == null || !Number.isFinite(value)) continue;
     total += value;
     matched++;
   }
-  return { rosterId: roster.roster_id, total, matched, missing: ids.length - matched, playerCount: ids.length };
+  return {
+    rosterId: roster.roster_id,
+    total: matched > 0 || ids.length === 0 ? total : null,
+    matched,
+    missing: ids.length - matched,
+    playerCount: ids.length,
+  };
 }
 
-/** Rank surviving rosters only; total then stable roster ID provides deterministic ties. */
+/** Rank surviving rosters only using deterministic competition ranks (1, 1, 3). */
 export function rankActiveRosterValues(
   rosters: readonly Roster[],
   activeRosterIds: ReadonlySet<number>,
-  values: ReadonlyMap<string, RosPlayerProjection>,
+  values: ReadonlyMap<string, number>,
 ): Map<number, RankedRosterValue> {
+  const outOf = activeRosterIds.size;
   const summaries = rosters
     .filter((roster) => activeRosterIds.has(roster.roster_id))
     .map((roster) => summarizeRosterValue(roster, values))
-    .sort((a, b) => b.total - a.total || a.rosterId - b.rosterId);
-  return new Map(summaries.map((summary, index) => [
-    summary.rosterId,
-    { ...summary, rank: index + 1, outOf: summaries.length },
-  ]));
+    .sort((a, b) => {
+      if (a.total == null && b.total == null) return a.rosterId - b.rosterId;
+      if (a.total == null) return 1;
+      if (b.total == null) return -1;
+      return b.total - a.total || a.rosterId - b.rosterId;
+    });
+
+  let previousTotal: number | null = null;
+  let previousRank: number | null = null;
+  return new Map(summaries.map((summary, index) => {
+    let rank: number | null = null;
+    if (summary.total != null) {
+      rank = previousRank != null && summary.total === previousTotal ? previousRank : index + 1;
+      previousTotal = summary.total;
+      previousRank = rank;
+    }
+    return [summary.rosterId, { ...summary, rank, outOf }];
+  }));
 }
 
 /** Always summarize the selected roster, but attach a rank only while it survives. */
@@ -97,18 +132,23 @@ export function buildSelectedRosterValueDisplay(
   selectedRoster: Roster,
   rosters: readonly Roster[],
   activeRosterIds: ReadonlySet<number>,
-  values: ReadonlyMap<string, RosPlayerProjection>,
+  values: ReadonlyMap<string, number>,
 ): SelectedRosterValueDisplay {
   const summary = summarizeRosterValue(selectedRoster, values);
   const activeRankings = rankActiveRosterValues(rosters, activeRosterIds, values);
   const activeRank = activeRosterIds.has(selectedRoster.roster_id)
     ? activeRankings.get(selectedRoster.roster_id)
     : undefined;
+  let leagueHigh: number | null = null;
+  for (const ranked of activeRankings.values()) {
+    if (ranked.total != null && (leagueHigh == null || ranked.total > leagueHigh)) leagueHigh = ranked.total;
+  }
 
   return {
     ...summary,
     eliminated: !activeRosterIds.has(selectedRoster.roster_id),
     rank: activeRank?.rank ?? null,
-    outOf: activeRankings.size,
+    outOf: activeRosterIds.size,
+    leagueHigh,
   };
 }

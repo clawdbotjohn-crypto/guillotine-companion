@@ -2,6 +2,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_SHOW_ROSTERED_PLAYERS, RankingSourceSelector, ReplacementTeamSelector, RosteredPlayersToggle, WaiverPlayerCard, VorpControls, VorpSourceNotice } from './WaiversPage';
+import { formatWaiverSourceMetric } from '../logic/playerValueMetrics';
 import { DEFAULT_WAIVER_STRATEGY, getWaiverStrategyExplanation, WAIVER_STRATEGIES, WAIVER_STRATEGY_EXPLANATIONS } from '../logic/waiverDisplay';
 import type { WaiverPlayerRow } from '../logic/waivers';
 import type { ManagerPredictionDisplay } from '../logic/managerPredictionDisplay';
@@ -40,6 +41,16 @@ describe('waiver controls', () => {
     expect(onChange).toHaveBeenCalledWith('fantasypros');
   });
 
+  it('formats each Waivers source in its native non-dollar metric', () => {
+    expect(formatWaiverSourceMetric({ sourceValue: 183.94 }, 'sleeper')).toEqual({ label: 'ROS pts', display: '183.94' });
+    expect(formatWaiverSourceMetric({ sourceValue: 999, sourceRank: 27 }, 'fantasypros')).toEqual({ label: 'ECR #', display: '27' });
+    expect(formatWaiverSourceMetric({ sourceValue: 8_450 }, 'fantasycalc')).toEqual({ label: 'FC value', display: '8,450' });
+    expect(formatWaiverSourceMetric({ sourceValue: 999 }, 'fantasypros')).toEqual({ label: 'ECR #', display: 'Unavailable' });
+    for (const source of ['sleeper', 'fantasypros', 'fantasycalc'] as const) {
+      expect(formatWaiverSourceMetric({ sourceValue: 183.94, sourceRank: 27 }, source).display).not.toContain('$');
+    }
+  });
+
   it('keeps Show rostered players off by default', () => {
     const onChange = vi.fn();
     render(<RosteredPlayersToggle checked={DEFAULT_SHOW_ROSTERED_PLAYERS} onChange={onChange} />);
@@ -63,13 +74,18 @@ describe('waiver controls', () => {
       }]}
       showManagerPredictions
       sourceLabel="FantasyCalc"
+      rankingSource="fantasycalc"
     />);
     const card = screen.getByRole('button', { name: /rostered by another team/i });
     expect(card.hasAttribute('disabled')).toBe(false);
+    expect(screen.getByText('FC value')).toBeTruthy();
+    expect(screen.queryByText('$180')).toBeNull();
     fireEvent.click(card);
     expect(screen.getByRole('dialog', { name: 'Test Runner' })).toBeTruthy();
     expect(screen.getByText('Owned / rostered')).toBeTruthy();
+    expect(screen.getAllByText('FC value')).toHaveLength(2);
     expect(screen.getByText('FantasyCalc · RB #17')).toBeTruthy();
+    expect(screen.queryByText('$180')).toBeNull();
     expect(screen.queryByText('Hidden Manager')).toBeNull();
     expect(screen.queryByText('Free agent context')).toBeNull();
   });

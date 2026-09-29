@@ -1,7 +1,7 @@
 // Hub Page — Your team's command center
 // Phase 1: Shows team overview, elimination status, basic stats
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useAppStore, usePlayers } from '../store';
 import { getPlayerPosition } from '../store/players';
 import {
@@ -29,14 +29,12 @@ import {
   getRestOfSeasonStartWeek,
   getHubByeWindowWeek,
   projectAllTeams,
-  RANKING_SOURCES,
-  buildPositionRanks,
   classifyCanonicalBidEvents,
   getActiveRosterIds,
+  buildMaxVorpPlayerValues,
+  buildModeledPositionRanks,
   buildSelectedRosterValueDisplay,
-  selectedPlayerValue,
   type TeamProjection,
-  type WaiverRankingSource,
 } from '../logic';
 import { Card, StatCard, StatusBadge, Skeleton, PositionBadge } from '../components/ui';
 import { SeasonPicker } from '../components/SeasonPicker';
@@ -49,8 +47,9 @@ import { useNavigate } from 'react-router-dom';
 import { formatHistoricalWeekRank } from '../logic/rankFormat';
 import { usePlayerValues } from '../hooks/usePlayerValues';
 import type { PlayerDetailData } from '../components/PlayerDetailDialog';
-import { formatDisplayCurrency } from '../logic/displayCurrency';
+import { formatWholeDollars } from '../logic/displayCurrency';
 import { managerName } from '../logic/managerPredictionDisplay';
+import { buildLeagueContext, buildMaxVorpCalibration } from '../logic/waivers';
 
 export function UpcomingProjectionCard({
   week, projection, isLoading = false, unavailableReason,
@@ -86,6 +85,35 @@ export function UpcomingProjectionCard({
   );
 }
 
+export function TeamValueStatCard({
+  value,
+  subtext,
+  leagueHigh,
+  activeTeamCount,
+}: {
+  value: string;
+  subtext: string;
+  leagueHigh: number | null;
+  activeTeamCount: number;
+}) {
+  return (
+    <StatCard
+      label="Team Value"
+      value={value}
+      subtext={subtext}
+      accentColor="#10b981"
+      infoLabel="About Team Value"
+      infoContent={(
+        <span className="block space-y-1">
+          <strong className="block text-[#f0f0ff]">League high: {formatWholeDollars(leagueHigh, 'Unavailable')}</strong>
+          <span className="block">Team Value sums current-roster Max VORP values calibrated from Sleeper ROS projections, league lineup slots, active-team stage, and initial FAAB.</span>
+          <span className="block">Standing compares {activeTeamCount} active/surviving rosters only.</span>
+        </span>
+      )}
+    />
+  );
+}
+
 export function HubPage() {
   const navigate = useNavigate();
   const { leagueId, leagueName, leagueSeason, rootLeagueId, rosterId, teamName } = useAppStore();
@@ -95,12 +123,11 @@ export function HubPage() {
   const { data: rosters } = useRosters(leagueId);
   const { data: players, isLoading: playersLoading } = usePlayers();
   const nflStateQuery = useNflState();
-  const [rankingSource, setRankingSource] = useState<WaiverRankingSource>('sleeper');
   const playerValuesModel = usePlayerValues({
     league,
     nflState: nflStateQuery.data,
     players,
-    source: rankingSource,
+    source: 'sleeper',
   });
   const completedWeek = getCompletedLeagueWeek(league, nflStateQuery.data);
   const { data: matchups, isLoading: matchupsLoading } = useAllMatchups(leagueId, completedWeek);
@@ -114,6 +141,33 @@ export function HubPage() {
     league?.season ?? null,
     projectionWeek,
     projectionWeek != null,
+  );
+  const eliminationModel = useMemo(
+    () => matchups && rosters && users ? computeEliminations(matchups, rosters, users) : null,
+    [matchups, rosters, users],
+  );
+  const maxVorpLeagueContext = useMemo(
+    () => eliminationModel && league
+      ? buildLeagueContext(league, eliminationModel, projectionWeek ?? undefined)
+      : null,
+    [league, eliminationModel, projectionWeek],
+  );
+  const maxVorpCalibration = useMemo(
+    () => playerValuesModel.sleeperValues && maxVorpLeagueContext
+      ? buildMaxVorpCalibration(
+        playerValuesModel.sleeperValues,
+        maxVorpLeagueContext.startersPerPos,
+        maxVorpLeagueContext.teamsRemaining,
+        maxVorpLeagueContext.budget,
+      )
+      : null,
+    [playerValuesModel.sleeperValues, maxVorpLeagueContext],
+  );
+  const maxVorpPlayerValues = useMemo(
+    () => playerValuesModel.sleeperValues
+      ? buildMaxVorpPlayerValues(playerValuesModel.sleeperValues, maxVorpCalibration)
+      : null,
+    [playerValuesModel.sleeperValues, maxVorpCalibration],
   );
   const handleSwitchSeason = useSwitchSeason();
   const canonicalBidEvents = useMemo(
@@ -167,8 +221,8 @@ export function HubPage() {
     );
   }
 
-  // Compute eliminations
-  const elimResult = computeEliminations(matchups, rosters, users);
+  // The guarded memo is complete whenever the required league data above is complete.
+  const elimResult = eliminationModel!;
   const myTeam = elimResult.teams.get(rosterId);
   const weeklyScoredPlayers = weeklyProjectionQuery.data
     ? buildWeeklyScoredPlayers(
@@ -225,16 +279,17 @@ export function HubPage() {
       })
     : [];
   const rosterIsOptimized = (myProjection?.starters.length ?? 0) > 0;
-  const sourceInfo = RANKING_SOURCES.find((source) => source.key === rankingSource)!;
-  const selectedValues = playerValuesModel.values ?? new Map();
-  const positionRanks = buildPositionRanks(selectedValues);
+  const modeledValues = maxVorpPlayerValues ?? new Map<string, number>();
+  const positionRanks = playerValuesModel.sleeperValues && maxVorpPlayerValues
+    ? buildModeledPositionRanks(maxVorpPlayerValues, playerValuesModel.sleeperValues)
+    : new Map<string, number>();
   const rosterValueMap = new Map(rosterRows.map((row) => [
     row.playerId,
-    selectedPlayerValue(selectedValues.get(row.playerId)),
+    maxVorpPlayerValues?.get(row.playerId) ?? null,
   ]));
   const activeRosterIds = getActiveRosterIds(elimResult);
-  const myTeamValue = myRoster
-    ? buildSelectedRosterValueDisplay(myRoster, rosters, activeRosterIds, selectedValues)
+  const myTeamValue = myRoster && maxVorpPlayerValues
+    ? buildSelectedRosterValueDisplay(myRoster, rosters, activeRosterIds, modeledValues)
     : null;
   const managerLabels = new Map(rosters.map((roster) => [roster.roster_id, managerName(roster.roster_id, rosters, users)]));
   const playerDetails = new Map<string, PlayerDetailData>(rosterRows.map((row) => {
@@ -247,7 +302,9 @@ export function HubPage() {
       age: player?.age,
       status: player?.status ?? row.status,
       injuryStatus: row.injuryStatus,
-      sourceLabel: sourceInfo.shortLabel,
+      sourceLabel: 'Sleeper ROS · league-calibrated',
+      valueLabel: 'Max VORP value',
+      valueDisplay: formatWholeDollars(rosterValueMap.get(row.playerId) ?? null, 'Unavailable'),
       value: rosterValueMap.get(row.playerId) ?? null,
       positionRank: positionRanks.get(row.playerId) ?? null,
       owned: true,
@@ -267,41 +324,20 @@ export function HubPage() {
   // Detect pre-season / no-data state
   const hasWeekData = elimResult.weeks.length > 0;
   const leagueStatus = league?.status ?? '';
-  const playerValuePanel = (
-    <Card hover={false} className="p-4 mb-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <label className="text-[10px] font-semibold uppercase tracking-wider text-[#6b6e99]" htmlFor="hub-player-values">Player Values</label>
-        <select
-          id="hub-player-values"
-          value={rankingSource}
-          onChange={(event) => setRankingSource(event.target.value as WaiverRankingSource)}
-          className="min-h-11 rounded-lg border border-[#2b315f] bg-[#0a0d1a] px-3 text-xs text-[#f0f0ff]"
-        >
-          {RANKING_SOURCES.map((source) => <option key={source.key} value={source.key}>{source.label}</option>)}
-        </select>
-      </div>
-      {playerValuesModel.isLoading ? (
-        <p className="mt-2 text-xs text-[#6b6e99]">Loading {sourceInfo.shortLabel} values…</p>
-      ) : playerValuesModel.unavailableReason || !myTeamValue ? (
-        <p className="mt-2 text-xs text-[#f59e0b]">Team value unavailable · {sourceInfo.shortLabel}. {playerValuesModel.unavailableReason ?? 'The selected roster could not be loaded.'}</p>
-      ) : (
-        <>
-          <p className="mt-2 font-['Space_Mono'] text-sm font-bold text-[#a5b4fc]">
-            Team value: {formatDisplayCurrency(myTeamValue.total)}
-            {!myTeamValue.eliminated && myTeamValue.rank != null ? ` · ${myTeamValue.rank}/${myTeamValue.outOf} surviving` : ''}
-          </p>
-          {myTeamValue.eliminated && (
-            <p className="mt-1 text-xs font-semibold text-[#f59e0b]">
-              Eliminated · not ranked among {myTeamValue.outOf} surviving
-            </p>
-          )}
-          <p className="mt-1 text-[10px] text-[#6b6e99]">
-            {sourceInfo.shortLabel} · {myTeamValue.matched}/{myTeamValue.playerCount} roster players matched{myTeamValue.missing ? ` · ${myTeamValue.missing} missing/unranked` : ''}
-          </p>
-        </>
-      )}
-    </Card>
-  );
+  const teamValueLoading = playerValuesModel.isLoading || nflStateQuery.isLoading;
+  const teamValueDisplay = teamValueLoading
+    ? 'Loading…'
+    : formatWholeDollars(myTeamValue?.total, 'Unavailable');
+  const teamValueSubtext = myTeamValue?.eliminated
+    ? `Eliminated · not ranked (${myTeamValue.outOf} active)`
+    : myRoster && !activeRosterIds.has(myRoster.roster_id)
+      ? `Eliminated · value unavailable (${activeRosterIds.size} active)`
+      : myTeamValue?.rank != null
+        ? `${myTeamValue.rank}/${myTeamValue.outOf}`
+        : playerValuesModel.unavailableReason ?? (maxVorpCalibration
+          ? 'No roster players matched'
+          : 'Max VORP model unavailable');
+
 
   // Pre-season: no matchup data yet
   if (!hasWeekData) {
@@ -337,7 +373,6 @@ export function HubPage() {
           isLoading={historyLoading}
         />
 
-        {playerValuePanel}
 
         {/* Pre-season card */}
         <Card hover={false} className="p-6 mb-6">
@@ -387,6 +422,12 @@ export function HubPage() {
             value={`$${budgetRemaining}`}
             subtext={`of $${totalBudget}`}
             accentColor="#f59e0b"
+          />
+          <TeamValueStatCard
+            value={teamValueDisplay}
+            subtext={teamValueSubtext}
+            leagueHigh={myTeamValue?.leagueHigh ?? null}
+            activeTeamCount={myTeamValue?.outOf ?? activeRosterIds.size}
           />
         </div>
 
@@ -469,7 +510,6 @@ export function HubPage() {
         isLoading={historyLoading}
       />
 
-      {playerValuePanel}
 
       <UpcomingProjectionCard
         week={projectionWeek}
@@ -515,6 +555,12 @@ export function HubPage() {
           label="Last Week Score"
           value={myLastScore?.points.toFixed(1) || '—'}
           subtext={myLastScore ? `${formatHistoricalWeekRank(myLastScore.rank, lastWeek.teamsRemaining)} · Wk ${lastWeek.week}` : undefined}
+        />
+        <TeamValueStatCard
+          value={teamValueDisplay}
+          subtext={teamValueSubtext}
+          leagueHigh={myTeamValue?.leagueHigh ?? null}
+          activeTeamCount={myTeamValue?.outOf ?? activeRosterIds.size}
         />
       </div>
 

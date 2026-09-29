@@ -58,6 +58,7 @@ import {
   WAIVER_STRATEGIES,
 } from '../logic/waiverDisplay';
 import { resolveBiddingBaseline } from '../logic/waiverStrategies';
+import { formatWaiverSourceMetric } from '../logic/playerValueMetrics';
 
 const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE'];
 
@@ -202,7 +203,8 @@ export function WaiverPlayerCard({
   managerLabels = new Map(),
   showManagerPredictions = false,
   getPlayerName: resolvePlayerName = getPlayerName,
-  sourceLabel = 'Player value source',
+  sourceLabel = 'Sleeper ROS',
+  rankingSource = 'sleeper',
   canonicalHistory = [],
 }: {
   row: WaiverPlayerRow;
@@ -224,6 +226,7 @@ export function WaiverPlayerCard({
   managerLabels?: ReadonlyMap<number, string>;
   getPlayerName?: (playerId: string) => string;
   sourceLabel?: string;
+  rankingSource?: WaiverRankingSource;
   canonicalHistory?: import('../logic').CanonicalBidEvent[];
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -235,7 +238,7 @@ export function WaiverPlayerCard({
     ? `W${projectionWeek} ${weeklyPoints.toFixed(1)} pts${byeWeek != null ? ` · Bye W${byeWeek}` : ''}`
     : byeWeek != null ? `Bye W${byeWeek}` : null;
   const selectedTeamOwner = owner?.rosterId === selectedRosterId;
-  const compactValue = owner ? row.sourceValue : value;
+  const sourceMetric = formatWaiverSourceMetric(row, rankingSource);
   const orderedPredictions = orderManagerPredictions(managerPredictions);
   const eligiblePredictions = orderedPredictions.filter(isEligibleBuyerPrediction);
   const predictedBid = eligiblePredictions[0]?.predictedBid;
@@ -269,8 +272,8 @@ export function WaiverPlayerCard({
             </div>
             <div className="shrink-0 text-right" data-testid="compact-bid-summary">
               <div data-testid="suggested-bid-row" className="flex items-baseline justify-end gap-1.5">
-                <span className="text-[9px] uppercase tracking-wider text-[#6b6e99]">{owner ? 'Current value' : 'Suggested bid'}</span>
-                <span className={`font-['Space_Mono'] text-lg font-bold tabular-nums ${owner ? 'text-[#8b8eac]' : 'text-[#f59e0b]'}`}>{formatDisplayCurrency(compactValue)}</span>
+                <span className="text-[9px] uppercase tracking-wider text-[#6b6e99]">{owner ? sourceMetric.label : 'Suggested bid'}</span>
+                <span className={`font-['Space_Mono'] text-lg font-bold tabular-nums ${owner ? 'text-[#8b8eac]' : 'text-[#f59e0b]'}`}>{owner ? sourceMetric.display : formatDisplayCurrency(value)}</span>
               </div>
               {showPrediction && <div className="mt-0.5 text-[10px] text-[#a5b4fc]">Predicted bid <span className="font-['Space_Mono']">${predictedBid}</span></div>}
               {!owner && value > 0 && remainingFaab != null && value > remainingFaab && <FaabOverBudgetWarning />}
@@ -309,6 +312,8 @@ export function WaiverPlayerCard({
           status,
           injuryStatus,
           sourceLabel,
+          valueLabel: sourceMetric.label,
+          valueDisplay: sourceMetric.display,
           value: row.sourceValue,
           positionRank: row.posRank,
           owned: !!owner,
@@ -787,6 +792,7 @@ export function WaiversPage() {
               managerLabels={managerLabels}
               showManagerPredictions={predictions.length > 0}
               sourceLabel={sourceInfo.shortLabel}
+              rankingSource={rankingSource}
               canonicalHistory={canonicalHistoryByPlayer.get(row.playerId) ?? []}
             />
           );

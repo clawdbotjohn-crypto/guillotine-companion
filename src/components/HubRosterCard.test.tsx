@@ -72,11 +72,12 @@ describe('HubRosterCard', () => {
     expect(starter.getByText('Questionable')).toBeTruthy();
     expect(starter.getByLabelText('17.3 projected points')).toBeTruthy();
     expect(starter.getByText('Paid $42')).toBeTruthy();
-    expect(starter.getByText('Value $91')).toBeTruthy();
+    expect(starter.getByText('Max VORP value $91')).toBeTruthy();
+    expect(starter.getByLabelText('Max VORP value $91')).toBeTruthy();
 
     const zeroBid = within(screen.getByTestId('roster-player-zero-bid'));
     expect(zeroBid.getByText('Paid $0')).toBeTruthy();
-    expect(zeroBid.getByText('Value $30')).toBeTruthy();
+    expect(zeroBid.getByText('Max VORP value $30')).toBeTruthy();
 
     const drafted = within(screen.getByTestId('roster-player-drafted'));
     expect(drafted.getByText('Bench')).toBeTruthy();
@@ -85,7 +86,7 @@ describe('HubRosterCard', () => {
     expect(drafted.getByText('Injured Reserve')).toBeTruthy();
     expect(drafted.getByLabelText('Projection unavailable')).toBeTruthy();
     expect(drafted.getByLabelText('Drafted').textContent).toBe('Drafted');
-    expect(drafted.getByText('Value —')).toBeTruthy();
+    expect(drafted.getByText('Max VORP value —')).toBeTruthy();
   });
 
   it('opens the shared player detail surface from a roster row', () => {
@@ -97,13 +98,15 @@ describe('HubRosterCard', () => {
       values={new Map([['p1', 77]])}
       details={new Map([['p1', {
         playerId: 'p1', name: 'Hub Player', position: 'RB', team: 'KC',
-        sourceLabel: 'Sleeper ROS', value: 77, positionRank: 5, owned: true,
+        sourceLabel: 'Sleeper ROS · league-calibrated', valueLabel: 'Max VORP value', valueDisplay: '$77', value: 77, positionRank: 5, owned: true,
         history: [],
       }]])}
     />);
     fireEvent.click(screen.getByRole('button', { name: 'Open details for Hub Player' }));
     expect(screen.getByRole('dialog', { name: 'Hub Player' })).toBeTruthy();
-    expect(screen.getByText('Sleeper ROS · RB #5')).toBeTruthy();
+    expect(screen.getByText('Max VORP value')).toBeTruthy();
+    expect(screen.getByText('$77')).toBeTruthy();
+    expect(screen.getByText('Sleeper ROS · league-calibrated · RB #5')).toBeTruthy();
   });
 
   it('labels the honest lineup fallback when optimization data is unavailable', () => {

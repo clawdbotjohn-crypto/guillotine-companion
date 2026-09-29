@@ -1,4 +1,6 @@
 import type { ReactNode, ButtonHTMLAttributes } from 'react';
+import { Info } from 'lucide-react';
+import { ContextDisclosure } from '../ContextDisclosure';
 
 // Card component — Neon League style
 interface CardProps {
@@ -92,13 +94,24 @@ interface StatCardProps {
   value: string | number;
   subtext?: string;
   accentColor?: string;
+  infoLabel?: string;
+  infoContent?: ReactNode;
 }
 
-export function StatCard({ label, value, subtext, accentColor = '#6366f1' }: StatCardProps) {
+export function StatCard({ label, value, subtext, accentColor = '#6366f1', infoLabel, infoContent }: StatCardProps) {
   return (
     <Card hover={false} className="p-4">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#6b6e99] font-['Exo_2'] mb-1">
-        {label}
+      <div className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-[#6b6e99] font-['Exo_2']">
+        <span>{label}</span>
+        {infoLabel && infoContent && (
+          <ContextDisclosure
+            label={infoLabel}
+            trigger={<Info size={13} aria-hidden="true" />}
+            className="normal-case tracking-normal"
+          >
+            {infoContent}
+          </ContextDisclosure>
+        )}
       </div>
       <div className="text-2xl font-bold font-['Space_Mono'] tabular-nums" style={{ color: accentColor }}>
         {value}

@@ -16,6 +16,9 @@ export interface PlayerDetailData {
   status?: string | null;
   injuryStatus?: string | null;
   sourceLabel: string;
+  /** Native label and preformatted display for this source metric (never inferred as currency). */
+  valueLabel: string;
+  valueDisplay: string;
   value: number | null;
   positionRank: number | null;
   owned: boolean;
@@ -96,7 +99,7 @@ export function PlayerDetailDialog({ open, onClose, data }: { open: boolean; onC
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <section aria-label="Player profile" className="grid grid-cols-2 gap-2 pb-4 text-xs">
-            <div className="min-w-0 rounded-lg bg-[#121735] p-3"><div className="text-[10px] uppercase tracking-wider text-[#6b6e99]">Current Value</div><div className="mt-1 truncate font-['Space_Mono'] text-lg font-bold text-[#a5b4fc]">{formatDisplayCurrency(data.value, 'Unavailable')}</div><div className="mt-1 text-[10px] text-[#6b6e99]">{data.sourceLabel}{data.positionRank != null ? ` · ${data.position} #${data.positionRank}` : ''}</div></div>
+            <div className="min-w-0 rounded-lg bg-[#121735] p-3"><div className="text-[10px] uppercase tracking-wider text-[#6b6e99]">{data.valueLabel}</div><div className="mt-1 truncate font-['Space_Mono'] text-lg font-bold text-[#a5b4fc]">{data.valueDisplay}</div><div className="mt-1 text-[10px] text-[#6b6e99]">{data.sourceLabel}{data.positionRank != null ? ` · ${data.position} #${data.positionRank}` : ''}</div></div>
             <div className="min-w-0 rounded-lg bg-[#121735] p-3"><div className="text-[10px] uppercase tracking-wider text-[#6b6e99]">Profile</div><div className="mt-1 text-[#f0f0ff]">Age {data.age ?? 'unavailable'}</div><div className="mt-1 text-[#9ca3c7]">Status: {data.status || 'Unavailable'}</div><div className="mt-1 text-[#9ca3c7]">Injury: {data.injuryStatus || 'None reported'}</div></div>
           </section>
 

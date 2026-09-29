@@ -16,7 +16,7 @@ function event(id: string, outcome: CanonicalBidEvent['outcome'], bid: number, b
 
 const data: PlayerDetailData = {
   playerId: 'p1', name: 'Detail Player', position: 'RB', team: 'SEA', age: 25,
-  status: 'Active', sourceLabel: 'FantasyCalc', value: 44, positionRank: 7,
+  status: 'Active', sourceLabel: 'FantasyCalc', valueLabel: 'FC value', valueDisplay: '44', value: 44, positionRank: 7,
   owned: false, suggestedBid: 12, managerPredictions: [],
   history: [event('win', 'won', 15), event('loss', 'legitimate-loss', 13)],
 };
@@ -27,6 +27,9 @@ describe('PlayerDetailDialog', () => {
     const { rerender } = render(<PlayerDetailDialog open onClose={vi.fn()} data={{ ...data, managerLabels: labels }} />);
     const dialog = screen.getByRole('dialog', { name: 'Detail Player' });
     expect(within(dialog).getByText('FantasyCalc · RB #7')).toBeTruthy();
+    expect(within(dialog).getByText('FC value')).toBeTruthy();
+    expect(within(dialog).getByText('44')).toBeTruthy();
+    expect(within(dialog).queryByText('$44')).toBeNull();
     rerender(<PlayerDetailDialog open onClose={vi.fn()} data={{ ...data, managerLabels: labels, sourceLabel: 'Fantasy Pros', positionRank: 5 }} />);
     expect(within(dialog).getByText('Fantasy Pros · RB #5')).toBeTruthy();
     expect(within(dialog).queryByText('FantasyCalc · RB #7')).toBeNull();

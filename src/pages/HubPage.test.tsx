@@ -1,9 +1,9 @@
 /* @vitest-environment jsdom */
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { TeamProjection } from '../logic/analytics';
 import { formatCurrentRank, formatProjectedCurrentRank } from '../logic/analytics';
-import { UpcomingProjectionCard } from './HubPage';
+import { TeamValueStatCard, UpcomingProjectionCard } from './HubPage';
 import { formatHistoricalWeekRank } from '../logic/rankFormat';
 
 describe('Hub rank contexts', () => {
@@ -63,6 +63,22 @@ describe('Hub rank contexts', () => {
     expect(screen.getByText('At Risk')).toBeTruthy();
     expect(screen.queryByText(/original rosters/i)).toBeNull();
     expect(screen.getByText('Sleeper weekly projections')).toBeTruthy();
+  });
+
+  it('keeps Team Value compact and exposes model provenance on focus and mobile tap', () => {
+    render(<TeamValueStatCard value="$337" subtext="26/26" leagueHigh={512} activeTeamCount={26} />);
+    expect(screen.getByText('Team Value')).toBeTruthy();
+    expect(screen.getByText('$337')).toBeTruthy();
+    expect(screen.getByText('26/26')).toBeTruthy();
+    const info = screen.getByRole('button', { name: 'About Team Value' });
+    fireEvent.focus(info);
+    expect(screen.getByRole('tooltip').textContent).toContain('League high: $512');
+    expect(screen.getByRole('tooltip').textContent).toContain('current-roster Max VORP values');
+    expect(screen.getByRole('tooltip').textContent).toContain('26 active/surviving rosters only');
+    fireEvent.blur(info);
+    fireEvent.click(info);
+    expect(info.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByRole('tooltip').className).toContain('flex');
   });
 
   it('renders an honest unavailable state instead of a historical score', () => {

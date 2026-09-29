@@ -22,7 +22,7 @@ export const RANKING_SOURCES: Array<{
     key: 'fantasypros',
     label: 'Fantasy Pros',
     shortLabel: 'FantasyPros ROS ECR',
-    metricLabel: 'ROS ECR',
+    metricLabel: 'ECR #',
     description: 'FantasyPros rest-of-season expert consensus rankings',
   },
   {
