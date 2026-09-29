@@ -133,11 +133,13 @@ export function useUserLeagues(userId: string | null, season: string) {
   });
 }
 
-export function useLeagueHistory(leagueId: string | null) {
+export function useLeagueHistory(leagueId: string | null, currentLeague?: League) {
   return useQuery<League[]>({
     queryKey: ['league-history', leagueId],
-    queryFn: () => api.getLeagueHistory(leagueId!),
-    enabled: !!leagueId,
+    queryFn: () => api.getLeagueHistory(leagueId!, currentLeague),
+    // Wait for the selected league query so the common current-season case can
+    // seed the history walk instead of fetching the same league twice.
+    enabled: !!leagueId && !!currentLeague,
     staleTime: STALE_6H,
   });
 }

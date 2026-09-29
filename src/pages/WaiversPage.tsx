@@ -60,6 +60,7 @@ import {
   WAIVER_STRATEGIES,
 } from '../logic/waiverDisplay';
 import { resolveBiddingBaseline } from '../logic/waiverStrategies';
+import { planWaiverProjectionWeeks } from '../logic/waiverProjectionPlan';
 
 const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE'];
 
@@ -352,19 +353,33 @@ export function WaiversPage() {
     if (!league || !nflStateQuery.data || league.season !== nflStateQuery.data.season) return null;
     return getRestOfSeasonStartWeek(nflStateQuery.data);
   }, [league, nflStateQuery.data]);
-  const projectionWeeksQuery = useRestOfSeasonProjectionWeeks(
-    league?.season ?? null,
-    projectionStartWeek,
-    18,
-    !!league && !!nflStateQuery.data && league.season === nflStateQuery.data.season,
-  );
-  const fantasyCalcQuery = useFantasyCalcRankings(league, rankingSource === 'fantasycalc');
-  const fantasyProsQuery = useFantasyProsRankings(league, rankingSource === 'fantasypros');
+  const projectionPlan = planWaiverProjectionWeeks(projectionStartWeek);
   const weeklyProjectionQuery = useWeeklyProjections(
     league?.season ?? null,
-    projectionStartWeek,
+    projectionPlan.currentWeek,
     !!league && !!nflStateQuery.data && league.season === nflStateQuery.data.season,
   );
+  const futureProjectionStartWeek = projectionPlan.futureRange?.startWeek ?? null;
+  const projectionWeeksQuery = useRestOfSeasonProjectionWeeks(
+    league?.season ?? null,
+    futureProjectionStartWeek,
+    projectionPlan.futureRange?.endWeek ?? 18,
+    !!league && !!nflStateQuery.data && league.season === nflStateQuery.data.season,
+  );
+  const projectionWeeksData = useMemo(() => {
+    if (projectionStartWeek == null || !weeklyProjectionQuery.data) return undefined;
+    if (futureProjectionStartWeek != null && !projectionWeeksQuery.data) return undefined;
+    const weeks = new Map(projectionWeeksQuery.data ?? []);
+    weeks.set(projectionStartWeek, weeklyProjectionQuery.data);
+    return weeks;
+  }, [
+    futureProjectionStartWeek,
+    projectionStartWeek,
+    projectionWeeksQuery.data,
+    weeklyProjectionQuery.data,
+  ]);
+  const fantasyCalcQuery = useFantasyCalcRankings(league, rankingSource === 'fantasycalc');
+  const fantasyProsQuery = useFantasyProsRankings(league, rankingSource === 'fantasypros');
 
   const biddingProfiles = useBiddingProfiles({
     leagueId,
@@ -384,13 +399,13 @@ export function WaiversPage() {
     : null;
 
   const sleeperRosValues = useMemo(() => {
-    if (!playersQuery.data || !league || !projectionWeeksQuery.data) return null;
+    if (!playersQuery.data || !league || !projectionWeeksData) return null;
     return sumRestOfSeasonProjections(
-      projectionWeeksQuery.data,
+      projectionWeeksData,
       getProjectionScoring(league.scoring_settings?.rec),
       (playerId) => playersQuery.data.get(playerId)?.position,
     );
-  }, [projectionWeeksQuery.data, playersQuery.data, league]);
+  }, [projectionWeeksData, playersQuery.data, league]);
 
   const seasonValues = useMemo(() => {
     if (!playersQuery.data || !league) return null;
@@ -410,15 +425,15 @@ export function WaiversPage() {
     league,
   ]);
 
-  const selectedSourceQuery = rankingSource === 'sleeper'
-    ? projectionWeeksQuery
-    : rankingSource === 'fantasycalc'
-      ? fantasyCalcQuery
-      : fantasyProsQuery;
+  const selectedSourceQuery = rankingSource === 'fantasycalc'
+    ? fantasyCalcQuery
+    : fantasyProsQuery;
+  const sleeperProjectionsLoading = weeklyProjectionQuery.isLoading || projectionWeeksQuery.isLoading;
+  const sleeperProjectionsError = weeklyProjectionQuery.error || projectionWeeksQuery.error;
   const isLoading = matchupsLoading
     || playersQuery.isLoading
-    || (rankingSource === 'sleeper' && nflStateQuery.isLoading)
-    || selectedSourceQuery.isLoading;
+    || (rankingSource === 'sleeper' && (nflStateQuery.isLoading || sleeperProjectionsLoading))
+    || (rankingSource !== 'sleeper' && selectedSourceQuery.isLoading);
 
   const waiverContext = useMemo(() => {
     if (!matchups || !rosters || !users || !league) return null;
@@ -514,8 +529,9 @@ export function WaiversPage() {
 
   const sourceInfo = RANKING_SOURCES.find((source) => source.key === rankingSource)!;
   const sourceError = playersQuery.error
-    || selectedSourceQuery.error
-    || (rankingSource === 'sleeper' ? nflStateQuery.error : null);
+    || (rankingSource === 'sleeper'
+      ? sleeperProjectionsError || nflStateQuery.error
+      : selectedSourceQuery.error);
   const sourceShell = (content: ReactNode) => (
     <div className="px-6 py-6 pb-24 max-w-lg mx-auto">
       <h1 className="font-['Orbitron'] text-lg font-bold uppercase tracking-wider text-[#f0f0ff] mb-4">
@@ -540,8 +556,13 @@ export function WaiversPage() {
         message={sourceError instanceof Error ? sourceError.message : 'The ranking source returned an unknown error.'}
         onRetry={() => {
           if (playersQuery.error) void playersQuery.refetch();
-          if (rankingSource === 'sleeper' && nflStateQuery.error) void nflStateQuery.refetch();
-          void selectedSourceQuery.refetch();
+          if (rankingSource === 'sleeper') {
+            if (nflStateQuery.error) void nflStateQuery.refetch();
+            if (weeklyProjectionQuery.error) void weeklyProjectionQuery.refetch();
+            if (projectionWeeksQuery.error) void projectionWeeksQuery.refetch();
+          } else {
+            void selectedSourceQuery.refetch();
+          }
         }}
       />,
     );
@@ -597,32 +618,35 @@ export function WaiversPage() {
   const selectedVorpCalibration = strategy === 'max-vorp' ? maxVorpCalibration : vorpCalibration;
   const sleeperUnavailableReason = selectedVorpCalibration
     ? undefined
-    : projectionWeeksQuery.isLoading || nflStateQuery.isLoading
+    : sleeperProjectionsLoading || nflStateQuery.isLoading
       ? 'Sleeper ROS projections are still loading'
       : league && nflStateQuery.data && league.season !== nflStateQuery.data.season
         ? `Sleeper ROS projections are not available for historical season ${league.season}`
         : projectionStartWeek != null && projectionStartWeek > 18
           ? 'the current NFL season has no remaining projection weeks'
-          : projectionWeeksQuery.error || nflStateQuery.error
+          : sleeperProjectionsError || nflStateQuery.error
             ? 'Sleeper ROS projections could not be loaded'
             : !sleeperRosValues || sleeperRosValues.size === 0
               ? 'Sleeper returned no usable remaining-season point projections'
               : 'Sleeper ROS projections could not fill every required lineup slot or produce a valid championship calibration';
+  // The upcoming-week query seeds the ROS aggregate above, so Sleeper receives
+  // exactly one request for this coordinate while weekly context remains independently resilient.
+  const weeklyProjectionData = weeklyProjectionQuery.data;
   const displayRows = showRosteredPlayers ? allRows : availableRows;
   const positionRows = posFilter === 'ALL'
     ? displayRows
     : displayRows.filter((row) => row.position === posFilter);
   const filtered = sortWaiverRowsByStrategy(positionRows, strategy);
-  const weeklyContext = weeklyProjectionQuery.data && playersQuery.data && league
+  const weeklyContext = weeklyProjectionData && playersQuery.data && league
     ? buildWeeklyProjectionContext(
-      weeklyProjectionQuery.data,
+      weeklyProjectionData,
       getProjectionScoring(league.scoring_settings?.rec),
       (playerId) => playersQuery.data?.get(playerId)?.position,
     )
     : new Map();
-  const weeklyScoredPlayers = weeklyProjectionQuery.data && league
+  const weeklyScoredPlayers = weeklyProjectionData && league
     ? buildWeeklyScoredPlayers(
-      weeklyProjectionQuery.data,
+      weeklyProjectionData,
       getProjectionScoring(league.scoring_settings?.rec),
       getPlayerPosition,
     )

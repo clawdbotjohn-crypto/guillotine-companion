@@ -1,5 +1,11 @@
-import { describe, expect, it } from 'vitest';
-import { parseProjectionSnapshotResponse } from './client';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { getLeagueHistory, parseProjectionSnapshotResponse } from './client';
+import type { League } from './types';
+
+const originalFetch = globalThis.fetch;
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+});
 
 function validPayload() {
   return {
@@ -39,6 +45,30 @@ function validPayload() {
     }],
   };
 }
+
+describe('getLeagueHistory', () => {
+  it('seeds the history walk with the current league instead of fetching it twice', async () => {
+    const current = {
+      league_id: 'current',
+      previous_league_id: 'previous',
+    } as League;
+    const previous = {
+      league_id: 'previous',
+      previous_league_id: null,
+    } as League;
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => previous,
+    })) as unknown as typeof fetch;
+    globalThis.fetch = fetchMock;
+
+    const history = await getLeagueHistory('current', current);
+
+    expect(history).toEqual([current, previous]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith('https://api.sleeper.app/v1/league/previous');
+  });
+});
 
 describe('parseProjectionSnapshotResponse', () => {
   it('accepts a valid payload and returns typed data', () => {

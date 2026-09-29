@@ -32,7 +32,7 @@ export function LeaguePage() {
   const completedWeek = getCompletedLeagueWeek(league, nflStateQuery.data);
   const { data: matchups, isLoading: matchupsLoading } = useAllMatchups(leagueId, completedWeek);
   const { data: transactions } = useAllTransactions(leagueId, 18);
-  const { data: leagueHistory, isLoading: historyLoading } = useLeagueHistory(rootLeagueId);
+  const { data: leagueHistory, isLoading: historyLoading } = useLeagueHistory(rootLeagueId, league);
   const projectionWeek = league && nflStateQuery.data && league.season === nflStateQuery.data.season
     ? getRestOfSeasonStartWeek(nflStateQuery.data)
     : null;
