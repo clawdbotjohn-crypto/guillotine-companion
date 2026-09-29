@@ -22,18 +22,20 @@ const data: PlayerDetailData = {
 };
 
 describe('PlayerDetailDialog', () => {
-  it('shows changing source context and hides legitimate losing bids until requested', () => {
-    const { rerender } = render(<PlayerDetailDialog open onClose={vi.fn()} data={data} />);
+  it('shows current source plus named winning and other bids without hiding legitimate competitors', () => {
+    const labels = new Map([[1, 'Winning Team'], [2, 'Competing Team']]);
+    const { rerender } = render(<PlayerDetailDialog open onClose={vi.fn()} data={{ ...data, managerLabels: labels }} />);
     const dialog = screen.getByRole('dialog', { name: 'Detail Player' });
     expect(within(dialog).getByText('FantasyCalc · RB #7')).toBeTruthy();
-    rerender(<PlayerDetailDialog open onClose={vi.fn()} data={{ ...data, sourceLabel: 'Fantasy Pros', positionRank: 5 }} />);
+    rerender(<PlayerDetailDialog open onClose={vi.fn()} data={{ ...data, managerLabels: labels, sourceLabel: 'Fantasy Pros', positionRank: 5 }} />);
     expect(within(dialog).getByText('Fantasy Pros · RB #5')).toBeTruthy();
     expect(within(dialog).queryByText('FantasyCalc · RB #7')).toBeNull();
-    expect(within(dialog).getByText('Week 2 · Winner')).toBeTruthy();
-    expect(within(dialog).queryByText('Week 2 · Competing bid')).toBeNull();
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Show losing bids (1)' }));
-    expect(within(dialog).getByText('Week 2 · Competing bid')).toBeTruthy();
-    expect(within(dialog).getByRole('button', { name: 'Hide losing bids' })).toBeTruthy();
+    expect(within(dialog).getByText('Winning Team')).toBeTruthy();
+    expect(within(dialog).getByText('Competing Team')).toBeTruthy();
+    expect(within(dialog).getByText('Week 2 · Won · canonical waiver event')).toBeTruthy();
+    expect(within(dialog).getByText('Week 2 · Lost · canonical waiver event')).toBeTruthy();
+    expect(within(dialog).getByRole('region', { name: 'Winning bids' })).toBeTruthy();
+    expect(within(dialog).getByRole('region', { name: 'Other bids' })).toBeTruthy();
   });
 
   it('closes on Escape and presents owned players without acquisition context', () => {
@@ -55,6 +57,13 @@ describe('PlayerDetailDialog', () => {
     opener.focus();
     fireEvent.click(opener);
     const dialog = screen.getByRole('dialog', { name: 'Detail Player' });
+    const backdrop = screen.getByTestId('player-detail-backdrop');
+    expect(backdrop.parentElement).toBe(document.body);
+    expect(backdrop.className).toContain('items-start');
+    expect(backdrop.className).toContain('safe-area-inset-top');
+    expect(backdrop.className).toContain('4.75rem');
+    expect(dialog.className).toContain('100dvh');
+    expect(dialog.className).toContain('overflow-hidden');
     await waitFor(() => expect(document.activeElement).toBe(dialog));
     fireEvent.mouseDown(dialog.parentElement!);
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());

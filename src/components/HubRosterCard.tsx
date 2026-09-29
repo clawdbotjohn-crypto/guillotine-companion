@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { HubRosterRow } from '../logic/hubRoster';
 import { Card, PositionBadge } from './ui';
 import { PlayerDetailDialog, type PlayerDetailData } from './PlayerDetailDialog';
+import { formatDisplayCurrency } from '../logic/displayCurrency';
 
 function projectionLabel(row: HubRosterRow): string {
   return row.projection == null ? 'Projection unavailable' : `${row.projection.toFixed(1)} projected points`;
@@ -47,8 +48,8 @@ function RosterPlayerRow({ row, value, onOpen }: {
           <div aria-label={projectionLabel(row)} className="font-['Space_Mono'] text-xs tabular-nums text-[#a5b4fc]">
             {row.projection == null ? '— proj' : `${row.projection.toFixed(1)} proj`}
           </div>
-          <div className="mt-0.5 font-['Space_Mono'] text-[10px] tabular-nums text-[#10b981]" aria-label={value == null ? 'Current value unavailable' : `Current value $${value}`}>
-            Value {value == null ? '—' : `$${Number.isInteger(value) ? value : value.toFixed(1)}`}
+          <div className="mt-0.5 font-['Space_Mono'] text-[10px] tabular-nums text-[#10b981]" aria-label={value == null || !Number.isFinite(value) ? 'Current value unavailable' : `Current value ${formatDisplayCurrency(value)}`}>
+            Value {formatDisplayCurrency(value)}
           </div>
           <div aria-label={acquisitionLabel(row)} className="mt-0.5 font-['Space_Mono'] text-[10px] tabular-nums text-[#f59e0b]">
             {row.acquisition.faab != null

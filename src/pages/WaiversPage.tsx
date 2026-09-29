@@ -6,7 +6,8 @@ import { FaabOverBudgetWarning } from '../components/FaabOverBudgetWarning';
 import { WaiverManagerPredictions } from '../components/ManagerBiddingProfiles';
 import { buildManagerDetailData, type ManagerDetailData } from '../logic/managerDetails';
 import { PlayerDetailDialog } from '../components/PlayerDetailDialog';
-import { buildManagerPredictions, isEligibleBuyerPrediction, orderManagerPredictions, type ManagerPredictionDisplay } from '../logic/managerPredictionDisplay';
+import { buildManagerPredictions, isEligibleBuyerPrediction, managerName, orderManagerPredictions, type ManagerPredictionDisplay } from '../logic/managerPredictionDisplay';
+import { formatDisplayCurrency } from '../logic/displayCurrency';
 import { ContextDisclosure } from '../components/ContextDisclosure';
 import { useAppStore, usePlayers } from '../store';
 import {
@@ -198,6 +199,7 @@ export function WaiverPlayerCard({
   selectedRosterId,
   managerPredictions = [],
   managerDetails = new Map(),
+  managerLabels = new Map(),
   showManagerPredictions = false,
   getPlayerName: resolvePlayerName = getPlayerName,
   sourceLabel = 'Player value source',
@@ -219,6 +221,7 @@ export function WaiverPlayerCard({
   managerPredictions?: ManagerPredictionDisplay[];
   showManagerPredictions?: boolean;
   managerDetails?: ReadonlyMap<number, ManagerDetailData>;
+  managerLabels?: ReadonlyMap<number, string>;
   getPlayerName?: (playerId: string) => string;
   sourceLabel?: string;
   canonicalHistory?: import('../logic').CanonicalBidEvent[];
@@ -240,7 +243,7 @@ export function WaiverPlayerCard({
   const showPrediction = hasPredictionDetails && predictedBid != null;
   const cardLabel = owner
     ? `${row.name}, ${selectedTeamOwner ? 'owned by your selected team' : 'rostered by another team'}. Open player details`
-    : `${row.name}, suggested bid $${value}. Open player details`;
+    : `${row.name}, suggested bid ${formatDisplayCurrency(value)}. Open player details`;
 
   return (
     <>
@@ -267,7 +270,7 @@ export function WaiverPlayerCard({
             <div className="shrink-0 text-right" data-testid="compact-bid-summary">
               <div data-testid="suggested-bid-row" className="flex items-baseline justify-end gap-1.5">
                 <span className="text-[9px] uppercase tracking-wider text-[#6b6e99]">{owner ? 'Current value' : 'Suggested bid'}</span>
-                <span className={`font-['Space_Mono'] text-lg font-bold tabular-nums ${owner ? 'text-[#8b8eac]' : 'text-[#f59e0b]'}`}>{compactValue == null ? '—' : `$${compactValue}`}</span>
+                <span className={`font-['Space_Mono'] text-lg font-bold tabular-nums ${owner ? 'text-[#8b8eac]' : 'text-[#f59e0b]'}`}>{formatDisplayCurrency(compactValue)}</span>
               </div>
               {showPrediction && <div className="mt-0.5 text-[10px] text-[#a5b4fc]">Predicted bid <span className="font-['Space_Mono']">${predictedBid}</span></div>}
               {!owner && value > 0 && remainingFaab != null && value > remainingFaab && <FaabOverBudgetWarning />}
@@ -312,6 +315,9 @@ export function WaiverPlayerCard({
           ownerLabel: owner ? (selectedTeamOwner ? 'This player is on your selected roster.' : 'This player is currently rostered by another team.') : undefined,
           suggestedBid: owner ? null : value,
           managerPredictions: showManagerPredictions ? managerPredictions : [],
+          managerDetails,
+          managerLabels,
+          getPlayerName: resolvePlayerName,
           history: canonicalHistory,
         }}
       />
@@ -642,6 +648,7 @@ export function WaiversPage() {
   const activeRosterIds = getActiveRosterIds(waiverContext!.elim);
   const playerValues = new Map(allRows.map((row) => [row.playerId, row.sourceValue]));
   const playerPositionRanks = new Map(allRows.map((row) => [row.playerId, row.posRank]));
+  const managerLabels = new Map(rosters!.map((roster) => [roster.roster_id, managerName(roster.roster_id, rosters!, users!)]));
   const managerDetails = buildManagerDetailData({
     profiles: biddingProfiles.profiles,
     rosters: rosters!,
@@ -777,6 +784,7 @@ export function WaiversPage() {
               selectedRosterId={rosterId}
               managerPredictions={predictions}
               managerDetails={managerDetails}
+              managerLabels={managerLabels}
               showManagerPredictions={predictions.length > 0}
               sourceLabel={sourceInfo.shortLabel}
               canonicalHistory={canonicalHistoryByPlayer.get(row.playerId) ?? []}

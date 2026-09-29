@@ -49,6 +49,8 @@ import { useNavigate } from 'react-router-dom';
 import { formatHistoricalWeekRank } from '../logic/rankFormat';
 import { usePlayerValues } from '../hooks/usePlayerValues';
 import type { PlayerDetailData } from '../components/PlayerDetailDialog';
+import { formatDisplayCurrency } from '../logic/displayCurrency';
+import { managerName } from '../logic/managerPredictionDisplay';
 
 export function UpcomingProjectionCard({
   week, projection, isLoading = false, unavailableReason,
@@ -234,6 +236,7 @@ export function HubPage() {
   const myTeamValue = myRoster
     ? buildSelectedRosterValueDisplay(myRoster, rosters, activeRosterIds, selectedValues)
     : null;
+  const managerLabels = new Map(rosters.map((roster) => [roster.roster_id, managerName(roster.roster_id, rosters, users)]));
   const playerDetails = new Map<string, PlayerDetailData>(rosterRows.map((row) => {
     const player = players?.get(row.playerId);
     return [row.playerId, {
@@ -249,6 +252,7 @@ export function HubPage() {
       positionRank: positionRanks.get(row.playerId) ?? null,
       owned: true,
       ownerLabel: 'This player is on your roster.',
+      managerLabels,
       history: canonicalHistoryByPlayer.get(row.playerId) ?? [],
     }];
   }));
@@ -283,7 +287,7 @@ export function HubPage() {
       ) : (
         <>
           <p className="mt-2 font-['Space_Mono'] text-sm font-bold text-[#a5b4fc]">
-            Team value: ${Number.isInteger(myTeamValue.total) ? myTeamValue.total : myTeamValue.total.toFixed(1)}
+            Team value: {formatDisplayCurrency(myTeamValue.total)}
             {!myTeamValue.eliminated && myTeamValue.rank != null ? ` · ${myTeamValue.rank}/${myTeamValue.outOf} surviving` : ''}
           </p>
           {myTeamValue.eliminated && (

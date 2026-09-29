@@ -85,7 +85,8 @@ describe('waiver controls', () => {
     fireEvent.click(card);
     const dialog = screen.getByRole('dialog', { name: 'Test Runner' });
     expect(within(dialog).getByText('$0')).toBeTruthy();
-    expect(within(within(dialog).getByLabelText('Acquisition context')).getByText('Unavailable')).toBeTruthy();
+    expect(within(within(dialog).getByLabelText('Acquisition context')).getByText('$0')).toBeTruthy();
+    expect(within(dialog).getByText('Predicted bidding is unavailable for a $0 or unsupported acquisition value.')).toBeTruthy();
   });
 
   it('preserves compact prediction and FAAB warning without exposing manager identity', () => {
@@ -99,6 +100,12 @@ describe('waiver controls', () => {
     expect(screen.getByText((_text, element) => element?.textContent === 'Predicted bid $40')).toBeTruthy();
     expect(screen.queryByText('Hidden Manager')).toBeNull();
     expect(screen.queryByText('$61')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Test Runner, suggested bid/i }));
+    const dialog = screen.getByRole('dialog', { name: 'Test Runner' });
+    expect(within(dialog).getByText('Predicted Bidding')).toBeTruthy();
+    expect(within(dialog).getByText('Hidden Manager')).toBeTruthy();
+    expect(within(dialog).getByText('$40')).toBeTruthy();
+    expect(within(dialog).getByText('Bidding History')).toBeTruthy();
   });
 
   it('preserves full accessible manager prediction rows and detail access beside player details', () => {
