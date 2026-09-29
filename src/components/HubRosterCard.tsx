@@ -1,68 +1,69 @@
-import { Card, PositionBadge } from './ui';
-import { ByeWeekText } from './ByeWeekText';
+import { useState } from 'react';
 import type { HubRosterRow } from '../logic/hubRoster';
+import { Card, PositionBadge } from './ui';
+import { PlayerDetailDialog, type PlayerDetailData } from './PlayerDetailDialog';
 
-function playerStatusLabels(row: HubRosterRow): string[] {
-  const labels = [row.injuryStatus];
-  if (row.status && row.status.toLowerCase() !== 'active') labels.push(row.status);
-  return [...new Set(labels.filter((label): label is string => !!label))];
+function projectionLabel(row: HubRosterRow): string {
+  return row.projection == null ? 'Projection unavailable' : `${row.projection.toFixed(1)} projected points`;
 }
 
-function RosterPlayerRow({ row, week }: { row: HubRosterRow; week: number | null }) {
-  const role = row.isStarter ? 'Starter' : 'Bench';
-  const statusLabels = playerStatusLabels(row);
+function acquisitionLabel(row: HubRosterRow): string {
+  if (row.acquisition.faab != null) return `Paid $${row.acquisition.faab}`;
+  if (row.acquisition.kind === 'draft') return 'Drafted';
+  if (row.acquisition.kind === 'trade') return 'Traded';
+  if (row.acquisition.kind === 'free_agent') return 'Free agent pickup';
+  return 'Acquisition price unavailable';
+}
 
+function RosterPlayerRow({ row, value, onOpen }: {
+  row: HubRosterRow;
+  value: number | null;
+  onOpen: () => void;
+}) {
+  const status = row.injuryStatus || (row.status && row.status !== 'Active' ? row.status : null);
   return (
-    <li
-      className="grid grid-cols-[minmax(0,1fr)_4.25rem_3.25rem] items-center gap-2 border-t border-[#202445] px-3 py-2.5 first:border-t-0"
+    <button
+      type="button"
       data-testid={`roster-player-${row.playerId}`}
+      onClick={onOpen}
+      aria-label={`Open details for ${row.name}`}
+      className="w-full min-w-0 min-h-16 rounded-lg bg-[#0f1330]/70 p-2.5 text-left hover:bg-[#161a3a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#818cf8]"
     >
-      <div className="min-w-0">
-        <div className="flex min-w-0 items-center gap-2">
-          <PositionBadge position={row.position} className="shrink-0 px-1.5" />
-          <span className="truncate text-[13px] font-medium text-[#f0f0ff]">{row.name}</span>
+      <div className="flex min-w-0 items-start gap-2">
+        <PositionBadge position={row.position} />
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-baseline gap-1.5">
+            <span className="truncate text-sm font-semibold text-[#f0f0ff]">{row.name}</span>
+            <span className="shrink-0 text-[10px] text-[#6b6e99]">{row.team ?? 'Team unavailable'}</span>
+          </div>
+          <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-[#6b6e99]">
+            <span>{row.isStarter ? 'Starter' : 'Bench'}</span>
+            {row.starterSlot && row.starterSlot !== row.position && <span>{row.starterSlot}</span>}
+            <span>{row.byeWeek == null ? 'Bye unavailable' : `Bye Wk ${row.byeWeek}`}</span>
+            {status && <span className="font-semibold text-[#f59e0b]">{status}</span>}
+          </div>
         </div>
-        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[9px] uppercase tracking-wide text-[#6b6e99]">
-          <span className={row.isStarter ? 'text-[#a5b4fc]' : 'text-[#4a4d77]'}>{role}</span>
-          <span aria-hidden="true">·</span>
-          <span>{row.team ?? 'Team unavailable'}</span>
-          <span aria-hidden="true">·</span>
-          <ByeWeekText byeWeek={row.byeWeek} currentWeek={week} />
-          {statusLabels.map((label) => (
-            <span
-              key={label}
-              className="rounded bg-[rgba(245,158,11,0.14)] px-1.5 py-0.5 font-semibold text-[#f59e0b]"
-            >
-              {label}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      <div className="text-right font-['Space_Mono'] tabular-nums">
-        <div className="text-[8px] uppercase tracking-wider text-[#4a4d77]">
-          {week == null ? 'Proj' : `W${week} proj`}
-        </div>
-        <div
-          className={`text-xs font-bold ${row.projection == null ? 'text-[#6b6e99]' : 'text-[#a5b4fc]'}`}
-          aria-label={row.projection == null ? 'Projection unavailable' : `${row.projection.toFixed(1)} projected points`}
-        >
-          {row.projection == null ? '—' : row.projection.toFixed(1)}
-        </div>
-      </div>
-
-      <div className="text-right font-['Space_Mono'] tabular-nums">
-        <div className="text-[8px] uppercase tracking-wider text-[#4a4d77]">FAAB</div>
-        <div
-          className={`text-xs font-bold ${row.acquisition.faab == null ? 'text-[#4a4d77]' : 'text-[#f59e0b]'}`}
-          aria-label={row.acquisition.faab == null
-            ? 'Acquisition price unavailable'
-            : `${row.acquisition.faab} dollars FAAB`}
-        >
-          {row.acquisition.faab == null ? '—' : `$${row.acquisition.faab}`}
+        <div className="shrink-0 text-right">
+          <div aria-label={projectionLabel(row)} className="font-['Space_Mono'] text-xs tabular-nums text-[#a5b4fc]">
+            {row.projection == null ? '— proj' : `${row.projection.toFixed(1)} proj`}
+          </div>
+          <div className="mt-0.5 font-['Space_Mono'] text-[10px] tabular-nums text-[#10b981]" aria-label={value == null ? 'Current value unavailable' : `Current value $${value}`}>
+            Value {value == null ? '—' : `$${Number.isInteger(value) ? value : value.toFixed(1)}`}
+          </div>
+          <div aria-label={acquisitionLabel(row)} className="mt-0.5 font-['Space_Mono'] text-[10px] tabular-nums text-[#f59e0b]">
+            {row.acquisition.faab != null
+              ? `Paid $${row.acquisition.faab}`
+              : row.acquisition.kind === 'draft'
+                ? 'Drafted'
+                : row.acquisition.kind === 'trade'
+                  ? 'Traded'
+                  : row.acquisition.kind === 'free_agent'
+                    ? 'Free agent'
+                    : 'Acq —'}
+          </div>
         </div>
       </div>
-    </li>
+    </button>
   );
 }
 
@@ -70,59 +71,46 @@ export function HubRosterCard({
   rows,
   week,
   optimized,
+  values = new Map(),
+  details = new Map(),
 }: {
   rows: HubRosterRow[];
   week: number | null;
   optimized: boolean;
+  values?: ReadonlyMap<string, number | null>;
+  details?: ReadonlyMap<string, PlayerDetailData>;
 }) {
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const starters = rows.filter((row) => row.isStarter);
   const bench = rows.filter((row) => !row.isStarter);
+  const selected = selectedPlayerId ? details.get(selectedPlayerId) : undefined;
+  const subtitle = optimized && week != null
+    ? `Optimized for NFL Week ${week} · Sleeper projections`
+    : 'Current Sleeper lineup · weekly projections unavailable';
 
   return (
-    <Card hover={false} className="mb-6 overflow-hidden">
-      <div className="flex items-start justify-between gap-3 px-4 py-3">
-        <div>
-          <h2 className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#a5b4fc]">
-            Full Roster
-          </h2>
-          <p className="mt-1 text-[9px] text-[#4a4d77]">
-            {optimized && week != null
-              ? `Optimized for NFL Week ${week} · Sleeper projections`
-              : 'Current Sleeper lineup · weekly projections unavailable'}
-          </p>
+    <>
+      <Card hover={false} className="p-4 mb-6 min-w-0 overflow-hidden">
+        <div className="mb-3">
+          <h2 className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#6b6e99]">Full Roster</h2>
+          <p className="mt-1 text-[10px] text-[#4a4d77]">{subtitle}</p>
         </div>
-        <span className="shrink-0 font-['Space_Mono'] text-[10px] text-[#6b6e99]">
-          {rows.length} players
-        </span>
-      </div>
-
-      {rows.length === 0 ? (
-        <p className="border-t border-[#202445] px-4 py-5 text-center text-xs text-[#6b6e99]">
-          Roster unavailable
-        </p>
-      ) : (
-        <>
-          <section aria-labelledby="hub-roster-starters">
-            <div className="flex items-center justify-between border-y border-[#2a2e55] bg-[rgba(99,102,241,0.08)] px-3 py-1.5">
-              <h3 id="hub-roster-starters" className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#a5b4fc]">
-                Starters
-              </h3>
-              <span className="font-['Space_Mono'] text-[9px] text-[#6b6e99]">{starters.length}</span>
-            </div>
-            <ul>{starters.map((row) => <RosterPlayerRow key={row.playerId} row={row} week={week} />)}</ul>
-          </section>
-
-          <section aria-labelledby="hub-roster-bench">
-            <div className="flex items-center justify-between border-y border-[#2a2e55] bg-[rgba(22,26,58,0.55)] px-3 py-1.5">
-              <h3 id="hub-roster-bench" className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#6b6e99]">
-                Bench
-              </h3>
-              <span className="font-['Space_Mono'] text-[9px] text-[#4a4d77]">{bench.length}</span>
-            </div>
-            <ul>{bench.map((row) => <RosterPlayerRow key={row.playerId} row={row} week={week} />)}</ul>
-          </section>
-        </>
-      )}
-    </Card>
+        {rows.length === 0 ? (
+          <p className="text-xs text-[#6b6e99]">Roster unavailable</p>
+        ) : (
+          <div className="space-y-4">
+            <section aria-labelledby="hub-starters-heading">
+              <h3 id="hub-starters-heading" className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#a5b4fc]">Starters</h3>
+              <div className="space-y-1.5">{starters.map((row) => <RosterPlayerRow key={row.playerId} row={row} value={values.get(row.playerId) ?? null} onOpen={() => setSelectedPlayerId(row.playerId)} />)}</div>
+            </section>
+            <section aria-labelledby="hub-bench-heading">
+              <h3 id="hub-bench-heading" className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#6b6e99]">Bench</h3>
+              <div className="space-y-1.5">{bench.map((row) => <RosterPlayerRow key={row.playerId} row={row} value={values.get(row.playerId) ?? null} onOpen={() => setSelectedPlayerId(row.playerId)} />)}</div>
+            </section>
+          </div>
+        )}
+      </Card>
+      {selected && <PlayerDetailDialog open data={selected} onClose={() => setSelectedPlayerId(null)} />}
+    </>
   );
 }

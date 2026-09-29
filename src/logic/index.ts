@@ -100,3 +100,16 @@ export {
 } from './biddingProfiles';
 
 export { BIDDING_BASELINE, DEFAULT_WAIVER_STRATEGY, WAIVER_STRATEGY_REGISTRY, resolveBiddingBaseline, resolveStrategyBid, type StrategyKey } from './waiverStrategies';
+
+export {
+  selectedPlayerValue,
+  buildPositionRanks,
+  collectRosterPlayerIds,
+  summarizeRosterValue,
+  rankActiveRosterValues,
+  buildSelectedRosterValueDisplay,
+  type PlayerValueDisplay,
+  type RosterValueSummary,
+  type RankedRosterValue,
+  type SelectedRosterValueDisplay,
+} from './playerValues';

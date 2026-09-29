@@ -1,5 +1,5 @@
 /* @vitest-environment jsdom */
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { HubRosterRow } from '../logic/hubRoster';
 import { HubRosterCard } from './HubRosterCard';
@@ -27,6 +27,7 @@ describe('HubRosterCard', () => {
       <HubRosterCard
         week={5}
         optimized
+        values={new Map([['starter', 91], ['zero-bid', 30]])}
         rows={[
           rosterRow({
             playerId: 'starter',
@@ -70,10 +71,12 @@ describe('HubRosterCard', () => {
     expect(starter.getByText('Bye Wk 5')).toBeTruthy();
     expect(starter.getByText('Questionable')).toBeTruthy();
     expect(starter.getByLabelText('17.3 projected points')).toBeTruthy();
-    expect(starter.getByText('$42')).toBeTruthy();
+    expect(starter.getByText('Paid $42')).toBeTruthy();
+    expect(starter.getByText('Value $91')).toBeTruthy();
 
     const zeroBid = within(screen.getByTestId('roster-player-zero-bid'));
-    expect(zeroBid.getByText('$0')).toBeTruthy();
+    expect(zeroBid.getByText('Paid $0')).toBeTruthy();
+    expect(zeroBid.getByText('Value $30')).toBeTruthy();
 
     const drafted = within(screen.getByTestId('roster-player-drafted'));
     expect(drafted.getByText('Bench')).toBeTruthy();
@@ -81,8 +84,26 @@ describe('HubRosterCard', () => {
     expect(drafted.getByText('Bye unavailable')).toBeTruthy();
     expect(drafted.getByText('Injured Reserve')).toBeTruthy();
     expect(drafted.getByLabelText('Projection unavailable')).toBeTruthy();
-    expect(drafted.getByLabelText('Acquisition price unavailable').textContent).toBe('—');
-    expect(drafted.queryByText(/^\$/)).toBeNull();
+    expect(drafted.getByLabelText('Drafted').textContent).toBe('Drafted');
+    expect(drafted.getByText('Value —')).toBeTruthy();
+  });
+
+  it('opens the shared player detail surface from a roster row', () => {
+    const row = rosterRow({ playerId: 'p1', name: 'Hub Player' });
+    render(<HubRosterCard
+      rows={[row]}
+      week={6}
+      optimized
+      values={new Map([['p1', 77]])}
+      details={new Map([['p1', {
+        playerId: 'p1', name: 'Hub Player', position: 'RB', team: 'KC',
+        sourceLabel: 'Sleeper ROS', value: 77, positionRank: 5, owned: true,
+        history: [],
+      }]])}
+    />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open details for Hub Player' }));
+    expect(screen.getByRole('dialog', { name: 'Hub Player' })).toBeTruthy();
+    expect(screen.getByText('Sleeper ROS · RB #5')).toBeTruthy();
   });
 
   it('labels the honest lineup fallback when optimization data is unavailable', () => {

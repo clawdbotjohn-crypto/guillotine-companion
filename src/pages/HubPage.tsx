@@ -1,6 +1,7 @@
 // Hub Page — Your team's command center
 // Phase 1: Shows team overview, elimination status, basic stats
 
+import { useMemo, useState } from 'react';
 import { useAppStore, usePlayers } from '../store';
 import { getPlayerPosition } from '../store/players';
 import {
@@ -28,7 +29,14 @@ import {
   getRestOfSeasonStartWeek,
   getHubByeWindowWeek,
   projectAllTeams,
+  RANKING_SOURCES,
+  buildPositionRanks,
+  classifyCanonicalBidEvents,
+  getActiveRosterIds,
+  buildSelectedRosterValueDisplay,
+  selectedPlayerValue,
   type TeamProjection,
+  type WaiverRankingSource,
 } from '../logic';
 import { Card, StatCard, StatusBadge, Skeleton, PositionBadge } from '../components/ui';
 import { SeasonPicker } from '../components/SeasonPicker';
@@ -39,6 +47,8 @@ import { useSwitchSeason } from '../hooks/useSwitchSeason';
 import { Calendar } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { formatHistoricalWeekRank } from '../logic/rankFormat';
+import { usePlayerValues } from '../hooks/usePlayerValues';
+import type { PlayerDetailData } from '../components/PlayerDetailDialog';
 
 export function UpcomingProjectionCard({
   week, projection, isLoading = false, unavailableReason,
@@ -83,6 +93,13 @@ export function HubPage() {
   const { data: rosters } = useRosters(leagueId);
   const { data: players, isLoading: playersLoading } = usePlayers();
   const nflStateQuery = useNflState();
+  const [rankingSource, setRankingSource] = useState<WaiverRankingSource>('sleeper');
+  const playerValuesModel = usePlayerValues({
+    league,
+    nflState: nflStateQuery.data,
+    players,
+    source: rankingSource,
+  });
   const completedWeek = getCompletedLeagueWeek(league, nflStateQuery.data);
   const { data: matchups, isLoading: matchupsLoading } = useAllMatchups(leagueId, completedWeek);
   const { data: transactions } = useAllTransactions(leagueId, 18);
@@ -97,6 +114,21 @@ export function HubPage() {
     projectionWeek != null,
   );
   const handleSwitchSeason = useSwitchSeason();
+  const canonicalBidEvents = useMemo(
+    () => transactions && league
+      ? classifyCanonicalBidEvents(transactions, league.settings?.waiver_budget ?? 1000)
+      : [],
+    [transactions, league],
+  );
+  const canonicalHistoryByPlayer = useMemo(() => {
+    const byPlayer = new Map<string, typeof canonicalBidEvents>();
+    for (const event of canonicalBidEvents) {
+      const events = byPlayer.get(event.playerId) ?? [];
+      events.push(event);
+      byPlayer.set(event.playerId, events);
+    }
+    return byPlayer;
+  }, [canonicalBidEvents]);
 
   const seasons = (leagueHistory || [])
     .map((l) => ({ leagueId: l.league_id, season: l.season, name: l.name }))
@@ -191,6 +223,35 @@ export function HubPage() {
       })
     : [];
   const rosterIsOptimized = (myProjection?.starters.length ?? 0) > 0;
+  const sourceInfo = RANKING_SOURCES.find((source) => source.key === rankingSource)!;
+  const selectedValues = playerValuesModel.values ?? new Map();
+  const positionRanks = buildPositionRanks(selectedValues);
+  const rosterValueMap = new Map(rosterRows.map((row) => [
+    row.playerId,
+    selectedPlayerValue(selectedValues.get(row.playerId)),
+  ]));
+  const activeRosterIds = getActiveRosterIds(elimResult);
+  const myTeamValue = myRoster
+    ? buildSelectedRosterValueDisplay(myRoster, rosters, activeRosterIds, selectedValues)
+    : null;
+  const playerDetails = new Map<string, PlayerDetailData>(rosterRows.map((row) => {
+    const player = players?.get(row.playerId);
+    return [row.playerId, {
+      playerId: row.playerId,
+      name: row.name,
+      position: row.position,
+      team: row.team,
+      age: player?.age,
+      status: player?.status ?? row.status,
+      injuryStatus: row.injuryStatus,
+      sourceLabel: sourceInfo.shortLabel,
+      value: rosterValueMap.get(row.playerId) ?? null,
+      positionRank: positionRanks.get(row.playerId) ?? null,
+      owned: true,
+      ownerLabel: 'This player is on your roster.',
+      history: canonicalHistoryByPlayer.get(row.playerId) ?? [],
+    }];
+  }));
   const byeWindowWeek = league && nflStateQuery.data?.season === league.season
     ? getHubByeWindowWeek(nflStateQuery.data)
     : null;
@@ -202,6 +263,41 @@ export function HubPage() {
   // Detect pre-season / no-data state
   const hasWeekData = elimResult.weeks.length > 0;
   const leagueStatus = league?.status ?? '';
+  const playerValuePanel = (
+    <Card hover={false} className="p-4 mb-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <label className="text-[10px] font-semibold uppercase tracking-wider text-[#6b6e99]" htmlFor="hub-player-values">Player Values</label>
+        <select
+          id="hub-player-values"
+          value={rankingSource}
+          onChange={(event) => setRankingSource(event.target.value as WaiverRankingSource)}
+          className="min-h-11 rounded-lg border border-[#2b315f] bg-[#0a0d1a] px-3 text-xs text-[#f0f0ff]"
+        >
+          {RANKING_SOURCES.map((source) => <option key={source.key} value={source.key}>{source.label}</option>)}
+        </select>
+      </div>
+      {playerValuesModel.isLoading ? (
+        <p className="mt-2 text-xs text-[#6b6e99]">Loading {sourceInfo.shortLabel} values…</p>
+      ) : playerValuesModel.unavailableReason || !myTeamValue ? (
+        <p className="mt-2 text-xs text-[#f59e0b]">Team value unavailable · {sourceInfo.shortLabel}. {playerValuesModel.unavailableReason ?? 'The selected roster could not be loaded.'}</p>
+      ) : (
+        <>
+          <p className="mt-2 font-['Space_Mono'] text-sm font-bold text-[#a5b4fc]">
+            Team value: ${Number.isInteger(myTeamValue.total) ? myTeamValue.total : myTeamValue.total.toFixed(1)}
+            {!myTeamValue.eliminated && myTeamValue.rank != null ? ` · ${myTeamValue.rank}/${myTeamValue.outOf} surviving` : ''}
+          </p>
+          {myTeamValue.eliminated && (
+            <p className="mt-1 text-xs font-semibold text-[#f59e0b]">
+              Eliminated · not ranked among {myTeamValue.outOf} surviving
+            </p>
+          )}
+          <p className="mt-1 text-[10px] text-[#6b6e99]">
+            {sourceInfo.shortLabel} · {myTeamValue.matched}/{myTeamValue.playerCount} roster players matched{myTeamValue.missing ? ` · ${myTeamValue.missing} missing/unranked` : ''}
+          </p>
+        </>
+      )}
+    </Card>
+  );
 
   // Pre-season: no matchup data yet
   if (!hasWeekData) {
@@ -236,6 +332,8 @@ export function HubPage() {
           onSelect={handleSwitchSeason}
           isLoading={historyLoading}
         />
+
+        {playerValuePanel}
 
         {/* Pre-season card */}
         <Card hover={false} className="p-6 mb-6">
@@ -294,6 +392,8 @@ export function HubPage() {
           rows={rosterRows}
           week={projectionWeek}
           optimized={rosterIsOptimized}
+          values={rosterValueMap}
+          details={playerDetails}
         />
 
         {/* Recent bids (unlikely pre-season but safe to show) */}
@@ -365,6 +465,8 @@ export function HubPage() {
         isLoading={historyLoading}
       />
 
+      {playerValuePanel}
+
       <UpcomingProjectionCard
         week={projectionWeek}
         projection={myProjection}
@@ -418,6 +520,8 @@ export function HubPage() {
         rows={rosterRows}
         week={projectionWeek}
         optimized={rosterIsOptimized}
+        values={rosterValueMap}
+        details={playerDetails}
       />
 
       {/* Week-by-week scores */}
