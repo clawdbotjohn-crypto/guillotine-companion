@@ -40,7 +40,7 @@ export function TeamProfilePage() {
   const completedWeek = getCompletedLeagueWeek(league, nflStateQuery.data);
   const { data: matchups, isLoading: matchupsLoading } = useAllMatchups(leagueId, completedWeek);
   const { data: transactions } = useAllTransactions(leagueId, 18);
-  const { data: leagueHistory, isLoading: historyLoading } = useLeagueHistory(rootLeagueId);
+  const { data: leagueHistory, isLoading: historyLoading } = useLeagueHistory(rootLeagueId, league);
   const handleSwitchSeason = useSwitchSeason();
 
   const draftId = league?.draft_id ?? null;

@@ -298,11 +298,17 @@ export async function getProjectionWeeks(
 }
 
 // League history — walk previous_league_id chain
-export async function getLeagueHistory(leagueId: string): Promise<League[]> {
+export async function getLeagueHistory(
+  leagueId: string,
+  seedLeague?: League,
+): Promise<League[]> {
   const history: League[] = [];
   let currentId: string | null = leagueId;
   while (currentId) {
-    const league = await getLeague(currentId);
+    const league: League = seedLeague?.league_id === currentId
+      ? seedLeague
+      : await getLeague(currentId);
+    seedLeague = undefined;
     history.push(league);
     currentId = league.previous_league_id;
   }
