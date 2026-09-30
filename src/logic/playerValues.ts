@@ -163,19 +163,23 @@ export function buildSelectedRosterValueDisplay(
 
 
 /**
- * Build exclusive native-position buckets for active rosters. A player contributes to exactly
- * one bucket from the same ROS projection used by Max VORP, so FLEX/SUPER_FLEX lineup
- * eligibility can never double-count them. Empty modeled buckets are honest $0 totals.
+ * Build exclusive projection-position buckets for active rosters. A player contributes to exactly
+ * one league-supported native/broad-IDP bucket from the same ROS projection used by Max VORP,
+ * so FLEX/SUPER_FLEX eligibility can never double-count them. Empty modeled buckets are $0.
  */
 export function rankActiveRosterPositionValues(
   rosters: readonly Roster[],
   activeRosterIds: ReadonlySet<number>,
   values: ReadonlyMap<string, number>,
   projections: ReadonlyMap<string, RosPlayerProjection>,
+  positionBuckets?: ReadonlyMap<string, string>,
 ): Map<number, RosterPositionValueRank[]> {
   const positions = [...new Set([...projections.values()]
     .map((projection) => projection.position)
-    .filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    .filter(Boolean)
+    .map((position) => positionBuckets?.get(position) ?? (positionBuckets ? null : position))
+    .filter((position): position is string => position != null))]
+    .sort((a, b) => a.localeCompare(b));
   const totalsByRoster = new Map<number, Map<string, number>>();
   for (const roster of rosters) {
     if (!activeRosterIds.has(roster.roster_id)) continue;
@@ -184,7 +188,10 @@ export function rankActiveRosterPositionValues(
       const projection = projections.get(playerId);
       const value = values.get(playerId);
       if (!projection?.position || value == null || !Number.isFinite(value)) continue;
-      totals.set(projection.position, (totals.get(projection.position) ?? 0) + value);
+      const bucket = positionBuckets?.get(projection.position)
+        ?? (positionBuckets ? null : projection.position);
+      if (!bucket) continue;
+      totals.set(bucket, (totals.get(bucket) ?? 0) + value);
     }
     totalsByRoster.set(roster.roster_id, totals);
   }

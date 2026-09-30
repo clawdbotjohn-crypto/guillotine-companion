@@ -10,6 +10,7 @@ import {
   EliminatedTeamsVisibilityToggle,
   PositionGroupBreakdown,
   PositionValueBreakdown,
+  TeamRowDisclosureButton,
   TeamStandingDetails,
   TeamValueStandingDetails,
 } from './TeamsPage';
@@ -332,5 +333,24 @@ describe('Teams Value mode', () => {
     expect(screen.getByText('RB')).toBeTruthy();
     expect(screen.getByText('$42')).toBeTruthy();
     expect(screen.getByText('#2/4')).toBeTruthy();
+  });
+
+  it('uses a keyboard-accessible row disclosure without changing its visual content', () => {
+    let toggled = false;
+    render(
+      <TeamRowDisclosureButton
+        expanded={false}
+        controls="team-7-details"
+        label="Expand Houston details"
+        onToggle={() => { toggled = true; }}
+      >
+        <span>Houston</span>
+      </TeamRowDisclosureButton>,
+    );
+    const trigger = screen.getByRole('button', { name: 'Expand Houston details' });
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(trigger.getAttribute('aria-controls')).toBe('team-7-details');
+    fireEvent.click(trigger);
+    expect(toggled).toBe(true);
   });
 });

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Roster } from '../api/types';
 import type { RosPlayerProjection } from './projections';
 import { buildMaxVorpCalibration } from './waivers';
+import { buildLeagueValuePositionBuckets } from './teamPositionGroups';
 import {
   buildMaxVorpPlayerValues,
   buildModeledPositionRanks,
@@ -153,6 +154,40 @@ describe('Hub roster Team Value', () => {
     expect(ranked.get(3)?.find((row) => row.position === 'RB')).toEqual({ position: 'RB', total: 0, rank: 3, outOf: 3 });
     expect([...ranked.values()].flat().some((row) => row.position === 'FLEX')).toBe(false);
     expect(ranked.has(4)).toBe(false);
+  });
+
+  it('excludes irrelevant global projection positions and preserves league-supported parity', () => {
+    const positions = ['C', 'CB', 'DE', 'DT', 'FB', 'NT', 'SS', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB'];
+    const projections = new Map<string, RosPlayerProjection>(positions.map((position) => [
+      position.toLowerCase(),
+      { ...projection(position.toLowerCase(), 10), position },
+    ]));
+    const values = new Map(positions.map((position) => [position.toLowerCase(), 0]));
+    values.set('rb', 29);
+    values.set('wr', 31);
+    values.set('te', 34);
+    const ranked = rankActiveRosterPositionValues(
+      [roster(1, [...values.keys()]), roster(2, [])],
+      new Set([1, 2]),
+      values,
+      projections,
+      buildLeagueValuePositionBuckets(['QB', 'RB', 'WR', 'TE', 'FLEX', 'K', 'DEF', 'BN']),
+    );
+    const selectedRows = ranked.get(1) ?? [];
+
+    expect(selectedRows.map((row) => row.position)).toEqual(['DEF', 'K', 'QB', 'RB', 'TE', 'WR']);
+    expect(selectedRows.reduce((sum, row) => sum + row.total, 0)).toBe(94);
+    expect(selectedRows.some((row) => ['C', 'CB', 'DE', 'DT', 'FB', 'NT', 'SS', 'DL', 'LB', 'DB', 'FLEX'].includes(row.position))).toBe(false);
+  });
+
+  it('maps broad IDP lineup slots without counting native defenders twice', () => {
+    const buckets = buildLeagueValuePositionBuckets(['DL', 'LB', 'DB', 'IDP_FLEX', 'BN']);
+    expect(buckets.get('DE')).toBe('DL');
+    expect(buckets.get('DT')).toBe('DL');
+    expect(buckets.get('CB')).toBe('DB');
+    expect(buckets.get('SS')).toBe('DB');
+    expect(buckets.get('LB')).toBe('LB');
+    expect(buckets.has('WR')).toBe(false);
   });
 
 });

@@ -96,9 +96,10 @@ interface StatCardProps {
   accentColor?: string;
   infoLabel?: string;
   infoContent?: ReactNode;
+  constrainInfoToViewport?: boolean;
 }
 
-export function StatCard({ label, value, subtext, accentColor = '#6366f1', infoLabel, infoContent }: StatCardProps) {
+export function StatCard({ label, value, subtext, accentColor = '#6366f1', infoLabel, infoContent, constrainInfoToViewport = false }: StatCardProps) {
   return (
     <Card hover={false} className="p-4">
       <div className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-[#6b6e99] font-['Exo_2']">
@@ -108,6 +109,7 @@ export function StatCard({ label, value, subtext, accentColor = '#6366f1', infoL
             label={infoLabel}
             trigger={<Info size={13} aria-hidden="true" />}
             className="normal-case tracking-normal"
+            constrainToViewport={constrainInfoToViewport}
           >
             {infoContent}
           </ContextDisclosure>

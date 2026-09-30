@@ -76,6 +76,7 @@ export function usePlayerValues({
     sleeperValues,
     startWeek,
     isLoading: source === 'sleeper' && !nflState ? true : selectedQuery.isLoading,
+    isFetching: sleeperQuery.isFetching || selectedQuery.isFetching,
     error: selectedQuery.error,
     unavailableReason,
     refetch: selectedQuery.refetch,

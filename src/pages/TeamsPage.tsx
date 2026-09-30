@@ -4,7 +4,7 @@
 // - Per team: historical points rank + position-group scoring breakdown (FLEX its own category)
 // Toggle between Projected and Historical ordering.
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore, usePlayers } from '../store';
 import { getPlayerPosition } from '../store/players';
@@ -47,13 +47,13 @@ import { SeasonPicker } from '../components/SeasonPicker';
 import { useSwitchSeason } from '../hooks/useSwitchSeason';
 import { ChevronRight, ShieldCheck, ShieldAlert, Shield, TriangleAlert } from 'lucide-react';
 import { filterTeamsByEliminatedVisibility } from '../logic/teamVisibility';
-import { getTeamPositionGroups, type TeamOrder } from '../logic/teamPositionGroups';
+import { buildLeagueValuePositionBuckets, getTeamPositionGroups, type TeamOrder } from '../logic/teamPositionGroups';
 import { usePlayerValues } from '../hooks/usePlayerValues';
 import { formatWholeDollars } from '../logic/displayCurrency';
 import { buildLeagueContext, buildMaxVorpCalibration } from '../logic/waivers';
 import { orderTeamsByValue } from '../logic/teamValueOrder';
 
-const POS_ORDER = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB'];
+const POS_ORDER = ['QB', 'RB', 'FB', 'WR', 'TE', 'K', 'DEF', 'C', 'DL', 'DE', 'DT', 'NT', 'LB', 'ILB', 'OLB', 'DB', 'CB', 'S', 'SS', 'FS'];
 
 function rankColor(rank: number, outOf: number): string {
   if (outOf <= 1) return '#a5b4fc';
@@ -141,6 +141,34 @@ export function TeamValueStandingDetails({
   );
 }
 
+export function TeamRowDisclosureButton({
+  expanded,
+  controls,
+  label,
+  onToggle,
+  children,
+}: {
+  expanded: boolean;
+  controls: string;
+  label: string;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      aria-expanded={expanded}
+      aria-controls={controls}
+      onClick={onToggle}
+      className="flex w-full cursor-pointer items-center justify-between bg-transparent p-0 text-left outline-none focus-visible:ring-2 focus-visible:ring-[#6366f1]"
+    >
+      {children}
+      <ChevronRight aria-hidden="true" className={`h-4 w-4 shrink-0 text-[#4a4d77] transition-transform ${expanded ? 'rotate-90' : ''}`} />
+    </button>
+  );
+}
+
 export function TeamsPage() {
   const navigate = useNavigate();
   const {
@@ -220,8 +248,15 @@ export function TeamsPage() {
     const valueRanks = maxVorpValues
       ? rankActiveRosterValues(rosters, activeRosterIds, maxVorpValues)
       : new Map<number, RankedRosterValue>();
+    const valuePositionBuckets = buildLeagueValuePositionBuckets(league?.roster_positions);
     const positionValueRanks = maxVorpValues && playerValuesModel.sleeperValues
-      ? rankActiveRosterPositionValues(rosters, activeRosterIds, maxVorpValues, playerValuesModel.sleeperValues)
+      ? rankActiveRosterPositionValues(
+          rosters,
+          activeRosterIds,
+          maxVorpValues,
+          playerValuesModel.sleeperValues,
+          valuePositionBuckets,
+        )
       : new Map<number, RosterPositionValueRank[]>();
     return { elim, projections, weeklyScoredPlayers, historicalPosRanks, projectedPosRanks, histRanks, valueRanks, positionValueRanks };
   }, [matchups, rosters, users, league, weeklyProjectionQuery.data, projectionWeek, playerValuesModel.sleeperValues]);
@@ -383,15 +418,19 @@ export function TeamsPage() {
 
           return (
             <Card key={t.rosterId} hover={false} className={`p-3 ${isMine ? 'border-l-4 border-l-[#6366f1]' : ''}`}>
-              <div className="flex items-center justify-between cursor-pointer"
-                onClick={() => setExpanded(isOpen ? null : t.rosterId)}>
-                <div className="flex items-center gap-3 min-w-0">
+              <TeamRowDisclosureButton
+                expanded={isOpen}
+                controls={`team-${t.rosterId}-details`}
+                label={`${isOpen ? 'Collapse' : 'Expand'} ${t.displayName} details`}
+                onToggle={() => setExpanded(isOpen ? null : t.rosterId)}
+              >
+                <div className="flex min-w-0 items-center gap-3">
                   <RiskIcon risk={t.eliminated ? 'eliminated' : modeRisk} />
                   <div className="min-w-0">
-                    <div className={`text-sm font-medium truncate ${t.eliminated ? 'text-[#4a4d77]' : 'text-[#f0f0ff]'}`}>
-                      {t.displayName}{isMine && <span className="text-[#6366f1] text-[10px] ml-1">YOU</span>}
+                    <div className={`truncate text-sm font-medium ${t.eliminated ? 'text-[#4a4d77]' : 'text-[#f0f0ff]'}`}>
+                      {t.displayName}{isMine && <span className="ml-1 text-[10px] text-[#6366f1]">YOU</span>}
                     </div>
-                    <div className="flex items-center gap-2 mt-0.5">
+                    <div className="mt-0.5 flex items-center gap-2">
                       {hasScores && (orderBy === 'value'
                         ? <TeamValueStandingDetails team={t} value={valueRanks.get(t.rosterId)} />
                         : <TeamStandingDetails team={t} historical={hist} orderBy={orderBy} />
@@ -399,12 +438,11 @@ export function TeamsPage() {
                     </div>
                   </div>
                 </div>
-                <ChevronRight className={`w-4 h-4 text-[#4a4d77] transition-transform ${isOpen ? 'rotate-90' : ''}`} />
-              </div>
+              </TeamRowDisclosureButton>
 
               {/* Position-group breakdown */}
               {isOpen && (
-                <div className="mt-3 pt-3 border-t border-[#1a1e3a]">
+                <div id={`team-${t.rosterId}-details`} className="mt-3 border-t border-[#1a1e3a] pt-3">
                   {orderBy === 'value' ? (
                     <PositionValueBreakdown
                       groups={valueGroups}

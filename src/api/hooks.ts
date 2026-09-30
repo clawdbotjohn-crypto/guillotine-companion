@@ -363,6 +363,7 @@ export function useProjectionSnapshots(
     data,
     error: allFailed ? data.errors.values().next().value ?? null : null,
     isLoading: isEnabled && queries.some((query) => query.isLoading),
+    isFetching: isEnabled && queries.some((query) => query.isFetching),
     refetch: async () => {
       await Promise.all(queries.map((query) => query.refetch()));
     },

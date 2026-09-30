@@ -103,6 +103,7 @@ export function TeamValueStatCard({
       subtext={subtext}
       accentColor="#10b981"
       infoLabel="About Team Value"
+      constrainInfoToViewport
       infoContent={(
         <span className="block space-y-1">
           <strong className="block text-[#f0f0ff]">League high: {formatWholeDollars(leagueHigh, 'Unavailable')}</strong>

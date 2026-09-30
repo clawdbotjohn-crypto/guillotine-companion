@@ -408,13 +408,17 @@ function ProjectionErrorState({ title, message, onRetry }: { title: string; mess
 
 export function WaiversPage() {
   const { leagueId, rosterId, activeStrategy: strategy, setStrategy } = useAppStore();
-  const { data: league } = useLeague(leagueId);
-  const { data: users } = useLeagueUsers(leagueId);
-  const { data: rosters } = useRosters(leagueId);
+  const leagueQuery = useLeague(leagueId);
+  const usersQuery = useLeagueUsers(leagueId);
+  const rostersQuery = useRosters(leagueId);
+  const { data: league } = leagueQuery;
+  const { data: users } = usersQuery;
+  const { data: rosters } = rostersQuery;
   const playersQuery = usePlayers();
   const nflStateQuery = useNflState();
   const completedWeek = getCompletedLeagueWeek(league, nflStateQuery.data);
-  const { data: matchups, isLoading: matchupsLoading } = useAllMatchups(leagueId, completedWeek);
+  const matchupsQuery = useAllMatchups(leagueId, completedWeek);
+  const { data: matchups, isLoading: matchupsLoading } = matchupsQuery;
   const transactionsQuery = useAllTransactions(leagueId, 18);
   const { data: transactions } = transactionsQuery;
   const [rankingSource, setRankingSource] = useState<WaiverRankingSource>('sleeper');
@@ -431,12 +435,21 @@ export function WaiversPage() {
     projectionStartWeek,
     !!league && !!nflStateQuery.data && league.season === nflStateQuery.data.season,
   );
+  const predictionDependenciesFetching = leagueQuery.isFetching
+    || usersQuery.isFetching
+    || rostersQuery.isFetching
+    || playersQuery.isFetching
+    || nflStateQuery.isFetching
+    || matchupsQuery.isFetching
+    || playerValuesModel.isFetching
+    || weeklyProjectionQuery.isFetching;
 
   const biddingProfiles = useBiddingProfiles({
     leagueId,
     league,
     rosters,
     players: playersQuery.data,
+    dependenciesFetching: predictionDependenciesFetching,
   });
 
   const [posFilter, setPosFilter] = useState('ALL');
