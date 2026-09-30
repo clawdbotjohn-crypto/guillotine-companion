@@ -90,6 +90,11 @@ describe('weekly top-three and median-market analysis', () => {
     expect(bullets[1]).toContain('W3');
     expect(bullets[1]).toContain('W4');
     expect(bullets.join('\n')).toContain('closest overall serious-median strategy is Current-team VoRP');
+    expect(bullets.join('\n')).toContain('Max VORP');
+    expect(bullets.join('\n')).toContain('Current-team VoRP');
+    expect(bullets.join('\n')).toContain('Corrected Safe');
+    expect(bullets.join('\n')).toContain('Corrected Weeks as Starter');
+    expect(bullets.join('\n')).not.toContain('Middle VORP');
     expect(markdown.indexOf('## Five-bullet answer')).toBeLessThan(markdown.indexOf('## Weekly top-three'));
     expect(markdown).toContain('Max VORP 3.34×');
     expect(markdown).toContain('VoRP 3.00×');

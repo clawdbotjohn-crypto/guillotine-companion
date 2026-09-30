@@ -1,5 +1,5 @@
 import {
-  MARKET_STRATEGIES,
+  MARKET_STRATEGIES as ALL_MARKET_STRATEGIES,
   type HeldOutScaleMetric,
   type MarketMetric,
   type MarketMetricGroup,
@@ -10,6 +10,17 @@ import {
   type WeeklyTopThree,
 } from './weekly-market-analysis.ts';
 
+const OWNER_SUMMARY_STRATEGIES = ALL_MARKET_STRATEGIES.filter(([id]) => id !== 'middle-vorp');
+const OWNER_SUMMARY_IDS = new Set(OWNER_SUMMARY_STRATEGIES.map(([id]) => id));
+
+function ownerMetrics(metrics: MarketMetric[]): MarketMetric[] {
+  return metrics.filter((row) => OWNER_SUMMARY_IDS.has(row.id));
+}
+
+function ownerClosest(metrics: MarketMetric[]): string {
+  return ownerMetrics(metrics).reduce((best, row) => row.mae < best.mae ? row : best).label;
+}
+
 function number(value: number | null, digits = 2): string {
   return value != null && Number.isFinite(value) ? value.toFixed(digits) : '—';
 }
@@ -19,7 +30,7 @@ function markdownTable(headers: string[], rows: Array<Array<string | number>>): 
 }
 
 function ratioList(summary: Record<MarketStrategyId, RatioSummary>, field: keyof Pick<RatioSummary, 'arithmeticMean' | 'geometricMean' | 'median'> = 'arithmeticMean'): string {
-  return MARKET_STRATEGIES.map(([id, label]) => `${label} ${number(summary[id][field])}× (${summary[id].defined}/${summary[id].total})`).join('; ');
+  return OWNER_SUMMARY_STRATEGIES.map(([id, label]) => `${label} ${number(summary[id][field])}× (${summary[id].defined}/${summary[id].total})`).join('; ');
 }
 
 function weekMetric(view: WeeklyMarketView, week: number): MarketMetricGroup {
@@ -40,13 +51,13 @@ export function plainFiveBulletAnswer(analysis: WeeklyMarketAnalysis): string[] 
     `Scope: ${scope} have same-week reconstructed snapshots. The top three are unique canonical winners after ${analysis.exclusion.marker} (${analysis.exclusion.proof}; proof matches=${analysis.exclusion.canonicalMatchCount}).`,
     `Top-three winning-price arithmetic multipliers (observed/intrinsic): ${weeks.map((week) => `W${week.week}: ${ratioList(week.winnerMultipliers)}`).join('; ')}.`,
     `Top-three serious-market-median arithmetic multipliers: ${weeks.map((week) => `W${week.week}: ${ratioList(week.marketMultipliers)}`).join('; ')}.`,
-    `Closest serious-market strategy by eligible weekly cluster: ${weeks.map((week) => `W${week.week} ${weekMetric(view, week.week).closest}`).join('; ')}.`,
-    `Across all eligible weeks, the closest overall serious-median strategy is ${overall.closest}; raw evidence is retained in the labeled with-target sensitivity view, and weekly scale remains distinct from strategy shape.`,
+    `Closest serious-market strategy by eligible weekly cluster: ${weeks.map((week) => `W${week.week} ${ownerClosest(weekMetric(view, week.week).metrics)}`).join('; ')}.`,
+    `Across all eligible weeks, the closest overall serious-median strategy is ${ownerClosest(overall.metrics)}; raw evidence is retained in the labeled with-target sensitivity view, and weekly scale remains distinct from strategy shape.`,
   ];
 }
 
 function aggregateRows(week: WeeklyTopThree, kind: 'winnerMultipliers' | 'marketMultipliers'): Array<Array<string | number>> {
-  return MARKET_STRATEGIES.map(([id, label]) => {
+  return OWNER_SUMMARY_STRATEGIES.map(([id, label]) => {
     const summary = week[kind][id];
     return [label, `${summary.defined}/${summary.total}`, number(summary.arithmeticMean), number(summary.geometricMean), number(summary.median)];
   });
@@ -54,7 +65,7 @@ function aggregateRows(week: WeeklyTopThree, kind: 'winnerMultipliers' | 'market
 
 function metricRows(group: MarketMetricGroup, allBid = false): Array<Array<string | number>> {
   const metrics = allBid ? group.allBidMedianMetrics : group.metrics;
-  return metrics.map((row) => [
+  return ownerMetrics(metrics).map((row) => [
     row.label,
     row.n,
     number(row.mae, 1),
@@ -66,11 +77,11 @@ function metricRows(group: MarketMetricGroup, allBid = false): Array<Array<strin
 }
 
 function metricSummary(metrics: MarketMetric[]): string {
-  return metrics.map((row) => `${row.label} MAE ${number(row.mae, 1)}`).join('; ');
+  return ownerMetrics(metrics).map((row) => `${row.label} MAE ${number(row.mae, 1)}`).join('; ');
 }
 
 function heldOutRows(metrics: HeldOutScaleMetric[]): Array<Array<string | number>> {
-  return metrics.map((row) => [
+  return metrics.filter((row) => OWNER_SUMMARY_IDS.has(row.id)).map((row) => [
     row.label,
     `${row.fitWeek}→${row.testWeek}`,
     number(row.fittedMultiplier, 3),
@@ -86,7 +97,7 @@ function heldOutRows(metrics: HeldOutScaleMetric[]): Array<Array<string | number
 function sensitivityLine(analysis: WeeklyMarketAnalysis): string {
   const without = analysis.ownerDirected.marketMetrics.find((row) => row.week == null)!;
   const withTarget = analysis.withExcludedTarget.marketMetrics.find((row) => row.week == null)!;
-  return `Without ${analysis.exclusion.marker}: n=${without.seriousMedianClusters}, closest=${without.closest} (${metricSummary(without.metrics)}). With the marked target: n=${withTarget.seriousMedianClusters}, closest=${withTarget.closest} (${metricSummary(withTarget.metrics)}).`;
+  return `Without ${analysis.exclusion.marker}: n=${without.seriousMedianClusters}, closest=${ownerClosest(without.metrics)} (${metricSummary(without.metrics)}). With the marked target: n=${withTarget.seriousMedianClusters}, closest=${ownerClosest(withTarget.metrics)} (${metricSummary(withTarget.metrics)}).`;
 }
 
 export function renderWeeklyMarketMarkdown(analysis: WeeklyMarketAnalysis): string {
@@ -97,7 +108,7 @@ export function renderWeeklyMarketMarkdown(analysis: WeeklyMarketAnalysis): stri
       row.label,
       `$${row.winningBid}`,
       row.faabCensored ? 'yes' : 'no',
-      ...MARKET_STRATEGIES.map(([id]) => number(row.winningRatios[id])),
+      ...OWNER_SUMMARY_STRATEGIES.map(([id]) => number(row.winningRatios[id])),
     ]);
     const marketRows = week.rows.map((row) => [
       row.label,
@@ -105,33 +116,33 @@ export function renderWeeklyMarketMarkdown(analysis: WeeklyMarketAnalysis): stri
       `${row.seriousBidCount}/${row.allBidCount}`,
       row.censoredObservationCount,
       `$${number(row.allBidMedian, 1)}${row.allBidMedianMateriallyDifferent ? ' †' : ''}`,
-      ...MARKET_STRATEGIES.map(([id]) => number(row.marketRatios[id])),
+      ...OWNER_SUMMARY_STRATEGIES.map(([id]) => number(row.marketRatios[id])),
     ]);
     return `### W${week.week} — Analysis A: top-three winning prices\n\n` +
-      markdownTable(['Privacy-safe target', 'Winning bid', 'FAAB-censored?', ...MARKET_STRATEGIES.map(([, label]) => `${label} ratio`)], targetRows) +
+      markdownTable(['Privacy-safe target', 'Winning bid', 'FAAB-censored?', ...OWNER_SUMMARY_STRATEGIES.map(([, label]) => `${label} ratio`)], targetRows) +
       `\n\n${markdownTable(['Strategy', 'Defined/total', 'Arithmetic mean ×', 'Geometric mean ×', 'Median ×'], aggregateRows(week, 'winnerMultipliers'))}\n\n` +
       `### W${week.week} — Analysis C: top-three median-market prices\n\n` +
-      markdownTable(['Privacy-safe target', 'Serious median', 'Serious/all n', 'Censored observations', 'All-bid median', ...MARKET_STRATEGIES.map(([, label]) => `${label} ratio`)], marketRows) +
+      markdownTable(['Privacy-safe target', 'Serious median', 'Serious/all n', 'Censored observations', 'All-bid median', ...OWNER_SUMMARY_STRATEGIES.map(([, label]) => `${label} ratio`)], marketRows) +
       `\n\n${markdownTable(['Strategy', 'Defined/total', 'Arithmetic mean ×', 'Geometric mean ×', 'Median ×'], aggregateRows(week, 'marketMultipliers'))}\n\n` +
       `† All-bid median differs from the serious-bid median by at least $${analysis.policy.materialMedianDifferenceDollars}.`;
   }).join('\n\n');
   const marketSections = view.marketMetrics.map((group) => {
     const label = group.week == null ? 'Overall' : `W${group.week}`;
     return `### ${label}\n\n` +
-      `Canonical winning-bid clusters: ${group.clusters}; closest=${group.closestWinning}. Undefined strategy zeros are omitted strategy-by-strategy, so n is visible.\n\n` +
-      markdownTable(['Strategy', 'n', 'MAE', 'Median AE', 'Bias (intrinsic−winning)', 'Raw prediction R²*', 'Spearman ρ'], group.winningMetrics.map((row) => [
+      `Canonical winning-bid clusters: ${group.clusters}; closest=${ownerClosest(group.winningMetrics)}. Undefined strategy zeros are omitted strategy-by-strategy, so n is visible.\n\n` +
+      markdownTable(['Strategy', 'n', 'MAE', 'Median AE', 'Bias (intrinsic−winning)', 'Raw prediction R²*', 'Spearman ρ'], ownerMetrics(group.winningMetrics).map((row) => [
         row.label, row.n, number(row.mae, 1), number(row.medianAbsoluteError, 1), `${row.signedBias > 0 ? '+' : ''}${number(row.signedBias, 1)}`, number(row.rSquared, 2), number(row.spearman, 2),
       ])) +
-      `\n\nSerious median clusters: ${group.seriousMedianClusters}/${group.clusters}; closest=${group.closest}.\n\n` +
+      `\n\nSerious median clusters: ${group.seriousMedianClusters}/${group.clusters}; closest=${ownerClosest(group.metrics)}.\n\n` +
       markdownTable(['Strategy', 'n', 'MAE', 'Median AE', 'Bias (intrinsic−market)', 'Raw prediction R²*', 'Spearman ρ'], metricRows(group)) +
-      `\n\n**All-bid-median sensitivity** (${group.materiallyDifferentClusters} materially changed clusters; closest=${group.closestAllBid}):\n\n` +
+      `\n\n**All-bid-median sensitivity** (${group.materiallyDifferentClusters} materially changed clusters; closest=${ownerClosest(group.allBidMedianMetrics)}):\n\n` +
       markdownTable(['Strategy', 'n', 'MAE', 'Median AE', 'Bias (intrinsic−market)', 'Raw prediction R²*', 'Spearman ρ'], metricRows(group, true));
   }).join('\n\n');
   const multiplierSections = view.clusterMultipliers.map((group) => {
     const scope = group.week == null ? 'Season aggregate' : `W${group.week}`;
     return `### ${scope} — ${group.observed}\n\n${markdownTable(
       ['Strategy', 'Defined/total', 'Arithmetic mean ×', 'Geometric mean ×', 'Median ×'],
-      MARKET_STRATEGIES.map(([id, label]) => {
+      OWNER_SUMMARY_STRATEGIES.map(([id, label]) => {
         const summary = group.summaries[id];
         return [label, `${summary.defined}/${summary.total}`, number(summary.arithmeticMean), number(summary.geometricMean), number(summary.median)];
       }),
@@ -143,7 +154,7 @@ export function renderWeeklyMarketMarkdown(analysis: WeeklyMarketAnalysis): stri
     markdownTable(['Strategy', 'Fit→test week', 'Prior-week median multiplier', 'Test-week n', 'MAE', 'Median AE', 'Bias', 'Raw held-out R²*', 'Spearman ρ'], heldOutRows(view.heldOutScaleMetrics.seriousMedian));
   return `## Five-bullet answer: weekly price multipliers\n\n${bullets}\n\n` +
 `## Weekly top-three and median-market appendix\n\n` +
-`This owner-directed view compares **Max VORP, Middle VORP, current-team VoRP, and the corrected PR #13 Safe and Weeks-as-Starter curves**. Legacy Aggressive is excluded because it is derived from legacy Safe. Only events with an exact or explicitly reconstructed same-decision-week snapshot join are eligible; the eligible decision weeks are ${analysis.ownerDirected.eligibleWeeks.map((week) => `W${week}`).join(', ')}. “Serious” is strictly **bid > $5**. Ratios are **observed/intrinsic**, not intrinsic/observed. A zero intrinsic denominator is undefined, excluded from arithmetic/geometric/median aggregation, and counted in coverage. A winning or competing bid at its reconstructed pre-bid FAAB is marked as FAAB-censored because latent willingness may be higher.\n\n` +
+`This owner-directed view compares the four required owner-summary methods: **Max VORP, current-team VoRP, Corrected Safe, and Corrected Weeks as Starter**. Middle VORP is kept only in its separately labeled analysis appendix. Legacy Aggressive is excluded because it is derived from legacy Safe. Only events with an exact or explicitly reconstructed same-decision-week snapshot join are eligible; the eligible decision weeks are ${analysis.ownerDirected.eligibleWeeks.map((week) => `W${week}`).join(', ')}. “Serious” is strictly **bid > $5**. Ratios are **observed/intrinsic**, not intrinsic/observed. A zero intrinsic denominator is undefined, excluded from arithmetic/geometric/median aggregation, and counted in coverage. A winning or competing bid at its reconstructed pre-bid FAAB is marked as FAAB-censored because latent willingness may be higher.\n\n` +
 `${topSections}\n\n` +
 `## Analysis B: median serious market versus intrinsic strategy\n\n` +
 `Each player/week cluster selects its highest canonical completed winner, then includes only legitimate failed competing claims proven against that winner in the same processing batch. Metrics use one median observation per eligible player/week, avoiding duplicate weight from contingency/drop paths or a second clearing cycle. **Raw prediction R²*** is the standard predictive score against the observed-mean baseline, but it is **not the R² from a fitted regression**: strategy dollars are held fixed on the identity line rather than refit to bids. It may be negative when fixed predictions are worse than the mean-only baseline; that does not mean negative correlation. R² and Spearman are shown only when at least two non-constant observations make them meaningful.\n\n` +
@@ -153,5 +164,5 @@ export function renderWeeklyMarketMarkdown(analysis: WeeklyMarketAnalysis): stri
 `## Owner-directed exclusion sensitivity\n\n` +
 `The underlying canonical evidence is retained. The primary view excludes only the deterministic anonymized marker **${analysis.exclusion.marker}**, established by ${analysis.exclusion.proof}; no private name or identifier is stored or printed. ${sensitivityLine(analysis)}\n\n` +
 `## Shape × scale interpretation\n\n` +
-`The five primary intrinsic strategies describe **target shape**—which players should cost relatively more—while the observed/intrinsic multipliers estimate a separate **market scale** for each week. The rank and error results can motivate a future model that combines strategy shape with a pooled week/market scale. They do **not** identify an individual manager style: ${analysis.ownerDirected.eligibleWeeks.length} reconstructed weeks and sparse manager histories are insufficient for that claim.\n`;
+`The four owner-summary strategies describe **target shape**—which players should cost relatively more—while the observed/intrinsic multipliers estimate a separate **market scale** for each week. The rank and error results can motivate a future model that combines strategy shape with a pooled week/market scale. They do **not** identify an individual manager style: ${analysis.ownerDirected.eligibleWeeks.length} reconstructed weeks and sparse manager histories are insufficient for that claim.\n`;
 }

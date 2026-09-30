@@ -30,6 +30,7 @@ import {
 } from './bidding-strategy-analysis.ts';
 import { buildWeeklyMarketAnalysis } from './weekly-market-analysis.ts';
 import { renderWeeklyMarketMarkdown } from './weekly-market-report.ts';
+import { renderBehavioralAuditMarkdown } from './behavioral-audit.ts';
 import {
   buildOfflinePlayerValues,
   commonHorizonTeamCount,
@@ -772,8 +773,9 @@ function renderReport(fixture: AnalysisFixture): string {
 
   return `# SeaMex 2026 bidding-strategy accuracy analysis\n\n` +
 `Deterministic offline report generated from anonymized fixture version ${fixture.fixtureVersion}. Data are complete through **${fixture.source.dataThrough}**; there is no wall-clock generation timestamp. Regenerate byte-for-byte with \`npm run analyze:bidding\`.\n\n` +
-`${middleVorpEvaluation}\n\n` +
 `${weeklyAppendix}\n\n` +
+`${middleVorpEvaluation}\n\n` +
+`${renderBehavioralAuditMarkdown()}\n\n` +
 `## Executive result\n\n` +
 `Among ${wins.length} usable winning bids, **${bestAllWins.label}** has the lowest in-sample MAE (${round(bestAllWins.mae, 1)}). After the predeclared token rule, **${bestSeriousWins.label}** is lowest (${round(bestSeriousWins.mae, 1)}). Robust-filter leaders are ${robustLeaders.join('; ')}; the serious-bid leader is ${robustlyStable ? '' : '**not** '}stable across them. This is descriptive evidence from one 32-team league, ${usableDecisionWeeks.length} reconstructed decision weeks, not a universal strategy ranking. Do **not** change the production default from this study alone.\n\n` +
 `The executable comparison preserves the five production-registry strategies, adds **Middle VORP only in this offline analysis**, and separately labels the corrected PR #13 Safe/Weeks curves versus legacy branch outputs. The P0 label “Weekly” is **not** silently mapped to VoRP; the naming audit below establishes why it is excluded as undefined. No production registry, default, or UI behavior is changed.\n\n` +

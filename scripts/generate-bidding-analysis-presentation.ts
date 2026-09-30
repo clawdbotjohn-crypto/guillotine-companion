@@ -22,11 +22,12 @@ import {
   type EvaluatedBid,
 } from './bidding-strategy-analysis.ts';
 import {
-  MARKET_STRATEGIES,
+  MARKET_STRATEGIES as ALL_MARKET_STRATEGIES,
   buildWeeklyMarketAnalysis,
   type WeeklyMarketAnalysis,
 } from './weekly-market-analysis.ts';
 import { plainFiveBulletAnswer } from './weekly-market-report.ts';
+import { renderBehavioralAuditHtml } from './behavioral-audit.ts';
 import {
   buildOfflinePlayerValues,
   commonHorizonTeamCount,
@@ -34,6 +35,9 @@ import {
   summarizeDistribution,
   type OfflinePlayerValues,
 } from './middle-vorp-analysis.ts';
+
+const OWNER_SUMMARY_STRATEGIES = ALL_MARKET_STRATEGIES.filter(([id]) => id !== 'middle-vorp');
+const OWNER_SUMMARY_IDS = new Set(OWNER_SUMMARY_STRATEGIES.map(([id]) => id));
 
 const FIXTURE_PATH = 'scripts/fixtures/bidding-strategy-seamex-2026.json';
 const HTML_PATH = 'docs/analysis/bidding-strategy-accuracy-seamex-2026.html';
@@ -348,7 +352,7 @@ function weeklyMultiplierChart(model: PresentationModel, kind: 'winner' | 'marke
   const weeks = model.weeklyAnalysis.ownerDirected.topThree;
   const width = 760, height = 300, left = 54, right = 26, top = 40, bottom = 58;
   const plotWidth = width - left - right, plotHeight = height - top - bottom;
-  const max = Math.max(0.5, ...weeks.flatMap((week) => MARKET_STRATEGIES.map(([id]) => (kind === 'winner'
+  const max = Math.max(0.5, ...weeks.flatMap((week) => OWNER_SUMMARY_STRATEGIES.map(([id]) => (kind === 'winner'
     ? week.winnerMultipliers[id].arithmeticMean
     : week.marketMultipliers[id].arithmeticMean) ?? 0))) * 1.2;
   const y = (value: number) => top + (max - value) / max * plotHeight;
@@ -357,9 +361,9 @@ function weeklyMultiplierChart(model: PresentationModel, kind: 'winner' | 'marke
   const bars = weeks.map((week, weekIndex) => {
     const center = left + weekWidth * weekIndex + weekWidth / 2;
     const label = `<text x="${center}" y="${height - 18}" text-anchor="middle" class="row-label">W${week.week}</text>`;
-    const perStrategy = MARKET_STRATEGIES.map(([id], strategyIndex) => {
+    const perStrategy = OWNER_SUMMARY_STRATEGIES.map(([id], strategyIndex) => {
       const value = (kind === 'winner' ? week.winnerMultipliers[id].arithmeticMean : week.marketMultipliers[id].arithmeticMean) ?? 0;
-      const barX = center - (MARKET_STRATEGIES.length / 2) * (barWidth + 5) + strategyIndex * (barWidth + 5);
+      const barX = center - (OWNER_SUMMARY_STRATEGIES.length / 2) * (barWidth + 5) + strategyIndex * (barWidth + 5);
       return `<rect x="${barX}" y="${y(value)}" width="${barWidth}" height="${Math.max(1, top + plotHeight - y(value))}" rx="3" fill="${STYLES[id].color}"/><text x="${barX + barWidth / 2}" y="${y(value) - 4}" text-anchor="middle" class="small">${number(value, 2)}×</text>`;
     }).join('');
     return `<g>${label}${perStrategy}</g>`;
@@ -369,19 +373,19 @@ function weeklyMultiplierChart(model: PresentationModel, kind: 'winner' | 'marke
     const yy = y(value);
     return `<line x1="${left}" y1="${yy}" x2="${width - right}" y2="${yy}" stroke="#d8d6cc"/><text x="${left - 8}" y="${yy + 4}" text-anchor="end">${number(value, 1)}×</text>`;
   }).join('');
-  const legend = MARKET_STRATEGIES.map(([id, label], index) => `<g transform="translate(${left + index * 145} 14)"><rect width="12" height="12" fill="${STYLES[id].color}"/><text x="18" y="10">${escapeHtml(label)}</text></g>`).join('');
+  const legend = OWNER_SUMMARY_STRATEGIES.map(([id, label], index) => `<g transform="translate(${left + index * 145} 14)"><rect width="12" height="12" fill="${STYLES[id].color}"/><text x="18" y="10">${escapeHtml(label)}</text></g>`).join('');
   const title = kind === 'winner' ? 'Weekly top-three winning multipliers' : 'Weekly top-three serious-market multipliers';
   const note = kind === 'winner'
     ? 'Arithmetic mean of winning/intrinsic ratios across each week\'s top-three unique winners.'
     : 'Arithmetic mean of serious-median/intrinsic ratios across each week\'s top-three unique winners.';
-  const svg = `<svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="${slug(title)}-title ${slug(title)}-desc"><title id="${slug(title)}-title">${escapeHtml(title)}</title><desc id="${slug(title)}-desc">Grouped bar chart for weekly arithmetic multipliers across five primary analysis strategies.</desc>${grid}${legend}${bars}</svg>`;
+  const svg = `<svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="${slug(title)}-title ${slug(title)}-desc"><title id="${slug(title)}-title">${escapeHtml(title)}</title><desc id="${slug(title)}-desc">Grouped bar chart for weekly arithmetic multipliers across the four required owner-summary methods.</desc>${grid}${legend}${bars}</svg>`;
   return figure(title, `Owner-directed view (${model.weeklyAnalysis.exclusion.marker} excluded); same-week snapshots only • ${model.provenance}`, svg, note);
 }
 
 function weeklyMultiplierTable(model: PresentationModel): string {
   const rows = model.weeklyAnalysis.ownerDirected.topThree.flatMap((week) => [
-    ...MARKET_STRATEGIES.map(([id, label]) => ({ week: week.week, observed: 'Winning bid', label, summary: week.winnerMultipliers[id] })),
-    ...MARKET_STRATEGIES.map(([id, label]) => ({ week: week.week, observed: 'Serious-market median', label, summary: week.marketMultipliers[id] })),
+    ...OWNER_SUMMARY_STRATEGIES.map(([id, label]) => ({ week: week.week, observed: 'Winning bid', label, summary: week.winnerMultipliers[id] })),
+    ...OWNER_SUMMARY_STRATEGIES.map(([id, label]) => ({ week: week.week, observed: 'Serious-market median', label, summary: week.marketMultipliers[id] })),
   ]).map((row) => `<tr><th scope="row">W${row.week}</th><td>${row.observed}</td><td>${escapeHtml(row.label)}</td><td>${row.summary.defined}/${row.summary.total}</td><td>${number(row.summary.arithmeticMean, 2)}×</td><td>${number(row.summary.geometricMean, 2)}×</td><td>${number(row.summary.median, 2)}×</td></tr>`).join('');
   return `<div class="table-wrap"><table><caption><strong>Exact weekly top-three multipliers</strong><span>Observed/intrinsic; arithmetic mean is primary, with geometric mean, median, and zero-denominator coverage.</span></caption><thead><tr><th scope="col">Week</th><th scope="col">Observation</th><th scope="col">Strategy</th><th scope="col">Coverage</th><th scope="col">Arithmetic mean</th><th scope="col">Geometric mean</th><th scope="col">Median</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
@@ -389,15 +393,15 @@ function weeklyMultiplierTable(model: PresentationModel): string {
 function weeklyMarketMetricTable(model: PresentationModel): string {
   const groups = model.weeklyAnalysis.ownerDirected.marketMetrics;
   const rows = groups.flatMap((group) => [
-    ...group.winningMetrics.map((metric) => ({ scope: group.week == null ? 'Overall' : `W${group.week}`, observation: 'Canonical winner', closest: group.closestWinning, metric })),
-    ...group.metrics.map((metric) => ({ scope: group.week == null ? 'Overall' : `W${group.week}`, observation: 'Serious median', closest: group.closest, metric })),
-    ...group.allBidMedianMetrics.map((metric) => ({ scope: group.week == null ? 'Overall' : `W${group.week}`, observation: 'All-bid sensitivity', closest: group.closestAllBid, metric })),
+    ...group.winningMetrics.filter((metric) => OWNER_SUMMARY_IDS.has(metric.id)).map((metric) => ({ scope: group.week == null ? 'Overall' : `W${group.week}`, observation: 'Canonical winner', closest: group.closestWinning, metric })),
+    ...group.metrics.filter((metric) => OWNER_SUMMARY_IDS.has(metric.id)).map((metric) => ({ scope: group.week == null ? 'Overall' : `W${group.week}`, observation: 'Serious median', closest: group.closest, metric })),
+    ...group.allBidMedianMetrics.filter((metric) => OWNER_SUMMARY_IDS.has(metric.id)).map((metric) => ({ scope: group.week == null ? 'Overall' : `W${group.week}`, observation: 'All-bid sensitivity', closest: group.closestAllBid, metric })),
   ]).map(({ scope, observation, closest, metric }) => `<tr><th scope="row">${scope}</th><td>${observation}</td><td>${escapeHtml(metric.label)}${metric.label === closest ? ' ★' : ''}</td><td>${metric.n}</td><td>${number(metric.mae, 1)}</td><td>${number(metric.medianAbsoluteError, 1)}</td><td>${metric.signedBias > 0 ? '+' : ''}${number(metric.signedBias, 1)}</td><td>${number(metric.rSquared, 2)}</td><td>${number(metric.spearman, 2)}</td></tr>`).join('');
   return `<div class="table-wrap"><table><caption><strong>Median-market fit: overall, by week, and all-bid sensitivity</strong><span>★ lowest MAE within scope; bias = intrinsic − observed. Raw prediction R²* uses fixed strategy dollars with no regression refit.</span></caption><thead><tr><th scope="col">Scope</th><th scope="col">Observation</th><th scope="col">Strategy</th><th scope="col">n</th><th scope="col">MAE</th><th scope="col">Median AE</th><th scope="col">Bias</th><th scope="col">Raw prediction R²*</th><th scope="col">Spearman ρ</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 function clusterMultiplierTable(model: PresentationModel): string {
-  const rows = model.weeklyAnalysis.ownerDirected.clusterMultipliers.flatMap((group) => MARKET_STRATEGIES.map(([id, label]) => {
+  const rows = model.weeklyAnalysis.ownerDirected.clusterMultipliers.flatMap((group) => OWNER_SUMMARY_STRATEGIES.map(([id, label]) => {
     const summary = group.summaries[id];
     return `<tr><th scope="row">${group.week == null ? 'Season' : `W${group.week}`}</th><td>${group.observed === 'winning' ? 'Canonical winner' : 'Serious median'}</td><td>${escapeHtml(label)}</td><td>${summary.defined}/${summary.total}</td><td>${number(summary.arithmeticMean, 3)}</td><td>${number(summary.geometricMean, 3)}</td><td>${number(summary.median, 3)}</td></tr>`;
   })).join('');
@@ -409,25 +413,25 @@ function heldOutScaleTable(model: PresentationModel): string {
     ['Canonical winner', model.weeklyAnalysis.ownerDirected.heldOutScaleMetrics.winning],
     ['Serious median', model.weeklyAnalysis.ownerDirected.heldOutScaleMetrics.seriousMedian],
   ] as const;
-  const rows = groups.flatMap(([observation, metrics]) => metrics.map((metric) => `<tr><th scope="row">${observation}</th><td>${escapeHtml(metric.label)}</td><td>W${metric.fitWeek}→W${metric.testWeek}</td><td>${number(metric.fittedMultiplier, 3)}×</td><td>${metric.n}</td><td>${number(metric.mae, 1)}</td><td>${metric.signedBias > 0 ? '+' : ''}${number(metric.signedBias, 1)}</td><td>${number(metric.rSquared, 2)}</td><td>${number(metric.spearman, 2)}</td></tr>`)).join('');
-  return `<div class="table-wrap"><table><caption><strong>Prior-week-fitted held-out scale</strong><span>W2 median multiplier fit once, then applied to W3 without refitting. Raw held-out R²* remains an unfitted prediction score.</span></caption><thead><tr><th>Observation</th><th>Strategy</th><th>Fit→test</th><th>Multiplier</th><th>n</th><th>MAE</th><th>Bias</th><th>Raw R²*</th><th>ρ</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  const rows = groups.flatMap(([observation, metrics]) => metrics.filter((metric) => OWNER_SUMMARY_IDS.has(metric.id)).map((metric) => `<tr><th scope="row">${observation}</th><td>${escapeHtml(metric.label)}</td><td>W${metric.fitWeek}→W${metric.testWeek}</td><td>${number(metric.fittedMultiplier, 3)}×</td><td>${metric.n}</td><td>${number(metric.mae, 1)}</td><td>${metric.signedBias > 0 ? '+' : ''}${number(metric.signedBias, 1)}</td><td>${number(metric.rSquared, 2)}</td><td>${number(metric.spearman, 2)}</td></tr>`)).join('');
+  return `<div class="table-wrap"><table><caption><strong>Prior-week-fitted held-out scale</strong><span>Each prior eligible week's median multiplier is fit once, then applied to the next eligible week without refitting. Raw held-out R²* remains an unfitted prediction score.</span></caption><thead><tr><th>Observation</th><th>Strategy</th><th>Fit→test</th><th>Multiplier</th><th>n</th><th>MAE</th><th>Bias</th><th>Raw R²*</th><th>ρ</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 function exclusionSensitivity(model: PresentationModel): string {
   const owner = model.weeklyAnalysis.ownerDirected.marketMetrics.find((row) => row.week == null)!;
   const raw = model.weeklyAnalysis.withExcludedTarget.marketMetrics.find((row) => row.week == null)!;
   const rows = [
-    ['Owner-directed exclusion', owner.seriousMedianClusters, owner.closest ?? '—', ...owner.metrics.map((row) => `$${number(row.mae, 1)}`)],
-    ['Raw evidence retained', raw.seriousMedianClusters, raw.closest ?? '—', ...raw.metrics.map((row) => `$${number(row.mae, 1)}`)],
+    ['Owner-directed exclusion', owner.seriousMedianClusters, owner.closest ?? '—', ...owner.metrics.filter((row) => OWNER_SUMMARY_IDS.has(row.id)).map((row) => `$${number(row.mae, 1)}`)],
+    ['Raw evidence retained', raw.seriousMedianClusters, raw.closest ?? '—', ...raw.metrics.filter((row) => OWNER_SUMMARY_IDS.has(row.id)).map((row) => `$${number(row.mae, 1)}`)],
   ];
-  return `<div class="table-wrap"><table><caption><strong>Compact with-vs-without sensitivity</strong><span>${escapeHtml(model.weeklyAnalysis.exclusion.proof)}; marker only, with no private identity stored.</span></caption><thead><tr><th scope="col">View</th><th scope="col">Clusters</th><th scope="col">Closest</th>${MARKET_STRATEGIES.map(([, label]) => `<th scope="col">${escapeHtml(label)} MAE</th>`).join('')}</tr></thead><tbody>${rows.map((row) => `<tr><th scope="row">${row[0]}</th>${row.slice(1).map((cell) => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+  return `<div class="table-wrap"><table><caption><strong>Compact with-vs-without sensitivity</strong><span>${escapeHtml(model.weeklyAnalysis.exclusion.proof)}; marker only, with no private identity stored.</span></caption><thead><tr><th scope="col">View</th><th scope="col">Clusters</th><th scope="col">Closest</th>${OWNER_SUMMARY_STRATEGIES.map(([, label]) => `<th scope="col">${escapeHtml(label)} MAE</th>`).join('')}</tr></thead><tbody>${rows.map((row) => `<tr><th scope="row">${row[0]}</th>${row.slice(1).map((cell) => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 
 function weeklyTargetTable(model: PresentationModel): string {
   const targets = model.weeklyAnalysis.ownerDirected.topThree.flatMap((week) => week.rows);
-  const strategyHeaders = MARKET_STRATEGIES.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join('');
-  const winningRows = targets.map((row) => `<tr><th scope="row">${escapeHtml(row.label)}</th><td>W${row.week}</td><td>$${number(row.winningBid, 0)}</td><td>${row.faabCensored ? 'yes' : 'no'}</td>${MARKET_STRATEGIES.map(([id]) => `<td>${number(row.winningRatios[id], 2)}×</td>`).join('')}</tr>`).join('');
-  const marketRows = targets.map((row) => `<tr><th scope="row">${escapeHtml(row.label)}</th><td>W${row.week}</td><td>${row.seriousMedianBid == null ? '—' : `$${number(row.seriousMedianBid, 1)}`}</td><td>${row.censoredObservationCount}</td>${MARKET_STRATEGIES.map(([id]) => `<td>${number(row.marketRatios[id], 2)}×</td>`).join('')}</tr>`).join('');
+  const strategyHeaders = OWNER_SUMMARY_STRATEGIES.map(([, label]) => `<th scope="col">${escapeHtml(label)}</th>`).join('');
+  const winningRows = targets.map((row) => `<tr><th scope="row">${escapeHtml(row.label)}</th><td>W${row.week}</td><td>$${number(row.winningBid, 0)}</td><td>${row.faabCensored ? 'yes' : 'no'}</td>${OWNER_SUMMARY_STRATEGIES.map(([id]) => `<td>${number(row.winningRatios[id], 2)}×</td>`).join('')}</tr>`).join('');
+  const marketRows = targets.map((row) => `<tr><th scope="row">${escapeHtml(row.label)}</th><td>W${row.week}</td><td>${row.seriousMedianBid == null ? '—' : `$${number(row.seriousMedianBid, 1)}`}</td><td>${row.censoredObservationCount}</td>${OWNER_SUMMARY_STRATEGIES.map(([id]) => `<td>${number(row.marketRatios[id], 2)}×</td>`).join('')}</tr>`).join('');
   return `<div class="table-wrap"><table><caption><strong>Top-three winning-bid ratios (privacy-safe labels)</strong><span>Canonical winning bid ÷ intrinsic suggestion; exact FAAB equality is labeled censored.</span></caption><thead><tr><th scope="col">Target</th><th scope="col">Week</th><th scope="col">Winning bid</th><th scope="col">FAAB-censored</th>${strategyHeaders}</tr></thead><tbody>${winningRows}</tbody></table></div><div class="table-wrap"><table><caption><strong>Top-three serious-market ratios (privacy-safe labels)</strong><span>Serious median ÷ intrinsic suggestion; competitors are canonical legitimate failures with bid &gt; $5.</span></caption><thead><tr><th scope="col">Target</th><th scope="col">Week</th><th scope="col">Serious median</th><th scope="col">Censored obs.</th>${strategyHeaders}</tr></thead><tbody>${marketRows}</tbody></table></div>`;
 }
 
@@ -514,6 +518,7 @@ export function renderBiddingPresentation(model: PresentationModel): string {
 </section><div class="page-break" aria-hidden="true"></div>
 ${middleVorpSection(model)}
 <section aria-labelledby="weekly-title"><header class="section-head"><div><p class="kicker">01 · Weekly multiplier answer</p><h2 id="weekly-title">Shape is not scale.</h2></div><p>Top-three canonical winners and serious market medians use observed bid ÷ intrinsic same-week suggestion. Arithmetic mean is primary; geometric mean, median, and coverage expose ratio skew and zero denominators.</p></header><div class="warning"><strong>Important metric label</strong>Every value labeled <b>raw prediction R²*</b> keeps strategy dollar predictions fixed on the identity line. It is not the goodness-of-fit R² from a regression trained on these bids. Negative values are valid and mean the fixed predictions lose to the observed-mean baseline—not that correlation is negative.</div><div class="chart-grid">${weeklyMultiplierChart(model, 'winner')}${weeklyMultiplierChart(model, 'market')}</div>${weeklyMultiplierTable(model)}${weeklyTargetTable(model)}${weeklyMarketMetricTable(model)}${clusterMultiplierTable(model)}${heldOutScaleTable(model)}${exclusionSensitivity(model)}<div class="method-note"><h3>Interpretation boundary</h3><p>The owner-directed marker is excluded only from this labeled analysis; raw canonical evidence remains in the sensitivity row. Serious means bid &gt; $5, failed claims must be legitimate same-target competitors, and FAAB-limited observations are marked censored. This supports a strategy-shape × market-scale hypothesis, not individual manager-style conclusions from ${eligibleWeeks.length} reconstructed weeks.</p></div></section>
+${renderBehavioralAuditHtml()}
 <section aria-labelledby="accuracy-title"><header class="section-head"><div><p class="kicker">02 · Prior accuracy study</p><h2 id="accuracy-title">Price fit depends on the question.</h2></div><p>Winning-bid error asks who best estimates the clearing price. All-bid error also includes failed claims and token bids. Lower MAE is better; bias shows direction.</p></header><div class="chart-grid">${winningBars}${allSeriousBars}${signedBiasChart(model)}${rankCoverageChart(model)}</div>${metricTable('Winning-bid scorecard', model.winningMetrics, `n=${model.wins.length}; subset=usable winning bids`, model.provenance)}${metricTable('All and serious scorecard — all bids', model.allMetrics, `n=${model.usable.length}; subset=all formula-usable bids`, model.provenance)}${metricTable('All and serious scorecard — serious bids', model.seriousMetrics, `n=${model.serious.length}; subset=non-token bids > $5`, model.provenance)}</section>
 <section aria-labelledby="robust-title"><header class="section-head"><div><p class="kicker">03 · Stability</p><h2 id="robust-title">Sensitivity stays explicit across filters.</h2></div><p>These filters were declared before inspecting winners and applied independently. They are sensitivity checks, not permission to delete inconvenient evidence.</p></header>${sensitivityChart(model)}<div class="callout-grid"><article class="callout"><h3>Token threshold</h3><p>Low intent means bid ≤ max($1, 1% of original FAAB) = $5. Tokens remain in the all-bid view and are separated here.</p></article><article class="callout"><h3>Three outlier lenses</h3><p>Ratio-gap flagged 1 isolated top; MAD flagged 3; IQR flagged 4. Independent robust rules test whether one extreme drives the conclusion.</p></article><article class="callout"><h3>Honest conclusion</h3><p><strong>${model.sampleWinner.label} is the sample winner.</strong> ${stableRobustLeader ? `<strong>${stableRobustLeader}</strong> also leads all three predeclared robust filters.` : 'No single strategy leads all three robust filters.'} Treat this as descriptive evidence, not a default-setting result.</p></article></div></section>
 <section aria-labelledby="behavior-title"><header class="section-head"><div><p class="kicker">04 · Behavior</p><h2 id="behavior-title">Identity lines expose the misses.</h2></div><p>Each dot is an anonymized winning target. A perfect forecast lies on the dashed diagonal; below it underpredicts. Extreme observed bids stretch beyond every intrinsic strategy; Aggressive reaches higher than the others, but still underpredicts the largest win.</p></header>${smallMultiples(model)}${managerChart(model)}<div class="table-wrap"><table><caption><strong>Manager-adjusted subset</strong><span>Strict prior-batch walk-forward • ${escapeHtml(model.provenance)} • smaller, non-comparable subset</span></caption><thead><tr><th scope="col">Forecast subset</th><th scope="col">n</th><th scope="col">MAE</th><th scope="col">Median AE</th><th scope="col">Bias</th><th scope="col">Spearman ρ</th><th scope="col">Prediction R²*</th><th scope="col">Within tolerance</th></tr></thead><tbody><tr><th scope="row">All forecastable bids</th><td>${model.managerMetrics.n}</td><td>${number(model.managerMetrics.mae)}</td><td>${number(model.managerMetrics.medianAbsoluteError)}</td><td>+${number(model.managerMetrics.signedBias)}</td><td>${number(model.managerMetrics.spearman ?? Number.NaN, 2)}</td><td>${number(managerR2 ?? Number.NaN, 2)}</td><td>${number(model.managerMetrics.withinToleranceRate * 100)}%</td></tr><tr><th scope="row">Forecastable wins</th><td>${model.managerWinMetrics.n}</td><td>${number(model.managerWinMetrics.mae)}</td><td>${number(model.managerWinMetrics.medianAbsoluteError)}</td><td>${number(model.managerWinMetrics.signedBias)}</td><td>${number(model.managerWinMetrics.spearman ?? Number.NaN, 2)}</td><td>${number(managerWinR2 ?? Number.NaN, 2)}</td><td>${number(model.managerWinMetrics.withinToleranceRate * 100)}%</td></tr></tbody></table></div></section>

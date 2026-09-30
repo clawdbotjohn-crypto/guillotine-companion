@@ -1,68 +1,5 @@
 # Guillotine Companion — Progress
 
-## 🧪 P1 — Evaluate Middle VORP as a potential default (John, 2026-09-27)
-
-**Owner hypothesis:** A single future-looking replacement horizon at roughly half the current survivor count may be a better default than current-team VORP or player-specific Max VORP. Example: with 28 active teams, Middle VORP uses the 14-team VORP calibration.
-
-- [x] Defined deterministic **Middle VORP** semantics: primary target `max(4, ceil(teamsRemaining / 2))`; one common horizon for all players, with explicit odd-count floor/ceil tests (27→14 versus 13).
-- [x] Treated 50% as a hypothesis and evaluated 67% / 50% / 33% common-horizon sensitivity in analysis only; no sensitivity became a selectable product strategy.
-- [x] Added Middle VORP only to the reproducible offline analysis and compared it with Max VORP, current-team VORP, legacy curves, and analytical reproductions of PR #13’s corrected Safe/Weeks curves without merging or cherry-picking product code.
-- [x] Reported the latest reproducible SeaMex W3 ordering, dollar distributions, positive counts, positional cutoffs, top prices, rank correlations, and privacy-safe divergence examples with Max VORP’s selected stage.
-- [x] Backtested canonical wins and serious-market medians by week with n, MAE, bias, Spearman ρ, raw unfitted prediction R², weekly/season arithmetic/geometric/median multipliers, all-bid and owner-directed sensitivity, and strict W2-fit→W3-score median-scale results.
-- [x] Kept W1–W3 provenance explicitly reconstructed and W4 exact explicitly absent. Middle VORP is now part of the reproducible weekly calibration methodology in analysis/report code only; no scheduler or cron changed.
-- [x] Recommendation: **retain analysis-only**. The two completed reconstructed decision weeks are insufficient to prove a default; W4+ exact prospective evidence must confirm held-out error/bias/rank quality and 33%/50%/67% stability before confidence changes.
-
-**Result (2026-09-27):** Current W3 uses 28→14 teams. Middle prices 93/445 players positively (mean $7.7, max $123) versus Max/current 191/445 (means $15.4/$13.9; maxima $232/$109); ρ is 0.780 against each. On serious-market medians, Middle has overall n=9, MAE $20.8, bias −$12.6, raw prediction R² −0.15, ρ=0.44, versus current-team VoRP n=21, MAE $11.0, bias −$1.0, R² 0.63, ρ=0.78. W2→W3 median-scale Middle remains weak (serious n=5, MAE $44.9, bias +$44.9, raw held-out R² −9.69). See deterministic Markdown/HTML/PDF artifacts under `docs/analysis/`.
-
-## 📅 Recurring Wednesday bidding-strategy calibration (John, 2026-09-27)
-
-- [x] Immediate clarity fix: relabeled every owner-facing R² as **raw/unfitted prediction R²**, added a prominent warning that it is not fitted-regression goodness-of-fit, and explained why negative values are possible without implying negative correlation. Added regression guards so ambiguous standalone table labels do not return.
-- [ ] Every Wednesday at 08:00 America/Los_Angeles, refresh the read-only SeaMex bidding analysis after the Tuesday snapshot/waiver cycle.
-- [ ] Lead with a concise dashboard, keeping detailed methodology/sensitivity in appendices rather than deleting audit evidence.
-- [ ] Quick summary must include the newest supported decision week’s: top-three winning multiplier by Max VORP/VoRP/Safe/Weeks as Starter; top-three serious-market median multiplier by those strategies; median-market-fit raw R², MAE, Spearman, and n by strategy; and season-to-date comparison/trend. Omit Aggressive from multiplier tables because it is derived from Safe.
-- [ ] Use arithmetic mean multiplier as the owner-facing primary value, with geometric mean/median sensitivity. Preserve the explicit Monangai historical exclusion plus with/without sensitivity.
-- [ ] Clearly distinguish raw identity-line R² (absolute dollar calibration; may be negative) from any scale-fitted/cross-validated R² (strategy shape after learning a multiplier). Never fit and score a multiplier on the same observations.
-- [ ] Require a valid same-week snapshot and canonical transaction evidence; never substitute a mutable/fallback snapshot. Label exact versus reconstructed provenance and skip unsupported weeks honestly.
-- [ ] Regenerate Markdown/HTML/PDF, verify deterministic output and privacy/secret guards, push only the analysis branch/update PR #12, and send a concise weekly summary. Never merge or deploy.
-
-## 🚨 P0 follow-up — weekly top-three and median-market multiplier analysis (John, 2026-09-27)
-
-**Owner question:** For each completed decision week, excluding the owner-designated irrational-price outlier and omitting Aggressive because it is derived from Safe, quantify how actual winning and median-market bids scale relative to Max VORP, VoRP, Safe, and Weeks as Starter.
-
-- [x] Identify each week's top three unique won players by highest canonical completed winning bid after the explicit owner-directed exclusion. Audit all available completed weeks; include a week only if a same-week strategy snapshot supports a like-for-like result, and explain any missing week. Deterministically resolve ties and deduplicate contingency/drop-path claims.
-- [x] **Analysis A — top-three winning prices:** For each selected player/week and each non-Aggressive strategy, calculate `winning bid / intrinsic strategy suggestion`. Show player-level (privacy-safe labels), weekly arithmetic mean multiplier (John's requested “average”), and geometric mean plus median as skew sensitivity. Explicitly mark undefined zero-denominator cases and FAAB-censored winning bids.
-- [x] **Analysis B — median market:** For every eligible player/week cluster with a completed win, calculate the median canonical serious market bid from the winner plus legitimate failed competing claims (token threshold remains >$5). Compare each strategy to that median using MAE, median AE, signed bias, R²/Spearman where meaningful, and identify which strategy is closest overall and by week. Report all-bid median as sensitivity if materially different.
-- [x] **Analysis C — top-three median-market multipliers:** For the same weekly top-three players, calculate `median serious bid / intrinsic strategy suggestion` and report player-level ratios plus weekly arithmetic/geometric/median aggregate multipliers for Max VORP, VoRP, Safe, and Weeks as Starter.
-- [x] Keep the owner-designated event in the raw audit dataset; exclude it only in the explicitly labeled owner-directed view. Also show a compact with-vs-without sensitivity so the report does not silently discard an outlier.
-- [x] Add concise charts/tables and a 5-bullet answer to the existing owner-facing HTML/PDF presentation. Connect findings to the separate shape-vs-scale hypothesis without claiming individual manager styles from sparse data.
-- [x] Generate all results from canonical fixture/source code, add deterministic tests/formula guards, preserve reconstructed provenance labels, and disclose sample sizes and denominator/censoring rules. No manager identities, league ID, credentials, or raw private payloads.
-- [x] Committed and pushed only `analysis/bidding-strategy-accuracy` to update PR #12. No merge, deploy, push to main, or workflow dispatch. Updated owner artifacts remain at `docs/analysis/bidding-strategy-accuracy-seamex-2026.{html,pdf}`.
-
-
-## 🚨 P0 follow-up — visual bidding-analysis presentation (John, 2026-09-27)
-
-**Goal:** Turn PR #12's reproducible analyst appendix into an owner-facing presentation document that is easy to digest. The PR remains an audit trail, not the primary presentation.
-
-- [x] Produce a polished standalone visual report from the committed anonymized fixture/results, with a one-page executive summary and concise key-finding bullets.
-- [x] Include charts for winning-bid error by strategy, serious/all-bid error, signed bias, rank/coverage performance, outlier-sensitivity stability, actual-vs-predicted behavior, and manager-adjusted forecast results where comparability is valid. Clearly display n and reconstructed provenance on every applicable view.
-- [x] Add and explain formulas for MAE, median AE, bias, Spearman rank correlation, R², normalized FAAB error, cluster-bootstrap intervals, token threshold, and outlier rules. State where R² is an unsuitable or potentially negative measure for unfitted intrinsic valuations.
-- [x] Use honest visual hierarchy: distinguish `best in this sample` from `robust recommendation`; do not imply Aggressive is universally best or compare manager-adjusted and raw models without noting their different forecastable subsets.
-- [x] Generate an easily viewable self-contained HTML plus PDF (or equivalent portable presentation) with no external runtime/CDN dependency, no identities/league ID/secrets, and accessible legends/colors. Add a reproducible generation command and automated data/formula checks.
-- [x] Verify rendered desktop and mobile/print output, commit/push to existing `analysis/bidding-strategy-accuracy`, and update PR #12. Do not merge or deploy. Provide the local artifact path so main can attach the presentation directly to John.
-
-## 🚨 P0 — Bidding strategy accuracy analysis (John authorized, 2026-09-27; COMPLETE LOCALLY)
-
-**Goal:** Produce a reproducible, offline, review-only SeaMex report comparing Max VORP, Weekly, Safe, Aggressive, and Weeks as Starter against real 2026 waiver bids. This is analysis only; do not change production strategy/default behavior.
-
-- [x] Build an auditable extractor/classifier for canonical completed waiver wins and legitimate failed bids. `classifyTransactionsWithAudit` requires a different same-player winner in the identical processing batch, audits exclusion reasons, and removes 24 duplicate contingency/drop paths without inventing absent private bids.
-- [x] Reconstruct each event's pre-bid FAAB and available league context. The completed spend/transfer ledger reports transaction-ledger=311, inferred-minimum=0, uncertain=0. Refresh hard-verifies read-only Supabase ref `xduqpomhjdlgmtmmkfed`; W2/W3 are reconstructed and W4 is excluded rather than using its W3 fallback.
-- [x] Calculate every authoritative strategy suggestion for each usable player/event with the correct decision week, active-team count, lineup/scoring, budget, and source inputs. The script calls shared `buildWaiverBoard`; the naming audit proves no `weekly` key/formula or Weekly→`vorp` alias exists, so Weekly is explicitly excluded as undefined and current `vorp` is analyzed under its real VoRP label. Intrinsic values remain separate from capped manager forecasts.
-- [x] Analyze distinct targets: winning bids; canonical serious win/loss clusters; all valid bids; player price ranking; and manager-adjusted forecasts when historically valid. Report covers 239 usable bids, 47 wins, 165 non-token bids, 19 competitive clusters, and 133 strict walk-forward forecasts.
-- [x] Report MAE, median absolute error, signed bias, rank correlation, within-range/coverage metrics, and slices by position/week/player tier/cap state. Original-$500 and reconstructed pre-bid-FAAB normalization are included.
-- [x] Run transparent sensitivity analyses with all evidence, token/low-intent bids separated by a predefined ≤$5 rule, and isolated extreme bids independently flagged under ratio-gap, MAD, and IQR rules. The report preserves counts and shows all five sensitivity cases.
-- [x] Use leave-week-out/walk-forward validation when sample size permits; otherwise state why it does not. Two reconstructed decision weeks are insufficient for leave-week-out fitting; manager forecasts are strictly prior-batch walk-forward, and fixed-seed cluster-bootstrap MAE intervals quantify sample uncertainty.
-- [x] Save a reproducible script and committed report under `scripts/` and `docs/analysis/`, with commands, data provenance, formulas, anonymized outputs, limitations, and a recommendation. The committed derived fixture contains stable aliases only—no credential, raw payload, league ID, player ID/name, or manager ID/name.
-- [x] Verify deterministic reruns, classifier/metrics/edge-case tests, lint/typecheck, full tests, `git diff --check`, and changed-file secret scan. Local implementation is complete; commit/push/review-only PR are intentionally delegated to the top-level orchestrator under this task's explicit no-commit/no-push/no-PR boundary.
 ## ✅ P0 — Correct replacement-level zeroing for Safe / Weeks-as-Starter / Aggressive (completed 2026-09-27)
 
 **Owner direction (2026-09-27):** Safe, Weeks-as-Starter, and Aggressive now use the selected ranking source's optimized starter pool. Shared FLEX/SUPER_FLEX slots are allocated once, and the final selected player at each position is the exact $0 boundary.
@@ -433,5 +370,7 @@ Architecture: `docs/BIDDING-PROFILES-PLAN.md`
 - Generalized prior-only scale validation from one W2→W3 pair to **every adjacent eligible pair**; W3→W4 is now included without refitting on the test week (for Middle VORP serious medians: W3 scale `1.185`, W4 `n=5`, MAE `$31.35`).
 - W4 diagnostics: Corrected Weeks as Starter is closest on serious-market medians (MAE `$16.30`), Corrected Safe is closest on canonical winners, and Max VORP is closest on all bids. Across W2–W4, Current-team VoRP remains closest on serious medians/all bids while Corrected Safe remains closest on winners.
 - Manager-aware calibration improved with more data but remains descriptive: all usable bids `n=243`, MAE `$28.79`, R² `0.367`, Spearman `0.649`; winner-only `n=50`, MAE `$18.86`, R² `0.641`, Spearman `0.787`.
-- Regenerated markdown, HTML, and PDF artifacts and visually reviewed all 20 rendered PDF pages (no overlap/clipping/table overflow observed). Privacy scan of the target artifacts found no player names, team IDs, manager IDs, or league IDs.
+- Added a generated behavioral-question and privacy-safe owner-team audit appendix covering all required Likely/Possible, history, top-bidder, claim-volume, positional-need, right-tail, minimum-proxy, Aggressive, 1.5×Max, contingency, spend, and remaining-FAAB questions. Unsupported manager-style/need/longitudinal claims are explicitly prospective rather than fabricated.
+- Restricted the exactly-five-bullet answer and owner multiplier/accuracy tables to the four required methods (Max VORP, Current-team VoRP, Corrected Safe, Corrected Weeks as Starter); Middle VORP remains only in its separately labeled candidate appendix.
+- Regenerated markdown, HTML, and PDF artifacts and visually reviewed all 21 rendered PDF pages (no overlap/clipping/table overflow observed). Full candidate-PR added-line and target-artifact privacy scans found no private player, team, manager, roster, or league identifiers; the raw league ID in the inherited handoff was redacted.
 - **Product decision: NO FORMULA CHANGE.** Keep Middle VORP analysis-only and retain the existing product bidding formulas. One additional reconstructed week changes leaders by lens and is not enough to promote a new default; continue exact pre-waiver collection and weekly held-out calibration.
