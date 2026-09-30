@@ -66,6 +66,25 @@ test('POST rejects missing auth before fetching or writing', async () => {
   assert.equal(touched, false);
 });
 
+test('authenticated scheduler health check validates auth/config without upstream or repository access', async () => {
+  let touched = false;
+  const service = createProjectionSnapshotService({
+    schedulerSecret: SECRET,
+    firstDecisionWeekLocalDate: FIRST_DECISION_WEEK,
+    fetchImpl: async () => { touched = true; },
+    repository: new Proxy({}, { get() { touched = true; throw new Error('repository must not be read'); } }),
+  });
+  const healthy = await service.health(request());
+  assert.equal(healthy.status, 204);
+  assert.equal(healthy.body, '');
+  assert.equal(touched, false);
+  assert.equal((await service.health(request({ headers: {} }))).status, 401);
+  assert.equal(touched, false);
+
+  const misconfigured = createProjectionSnapshotService({ schedulerSecret: SECRET, firstDecisionWeekLocalDate: 'not-a-date' });
+  assert.equal((await misconfigured.health(request())).status, 503);
+});
+
 test('strict POST validation requires explicit provenance and canonical Pacific cutoff', () => {
   assert.throws(() => parsePostBody({ ...body, extra: true }), /unknown fields/);
   assert.throws(() => parsePostBody({ ...body, decisionWeek: 19 }), /between 1 and 18/);
@@ -108,10 +127,13 @@ for (const scenario of [
     let saved;
     const input = { season: 2026, decisionWeek: scenario.decisionWeek, canonicalCutoffAt: scenario.cutoff, provenance: 'exact' };
     const service = createProjectionSnapshotService({
-      repository: { ingest: async (snapshot) => {
-        saved = snapshot;
-        return { snapshotId: 'id', created: true, rowCount: snapshot.rows.length, status: 'completed', provenance: 'exact' };
-      } },
+      repository: {
+        findCompletedMetadata: async () => null,
+        ingest: async (snapshot) => {
+          saved = snapshot;
+          return { snapshotId: 'id', created: true, rowCount: snapshot.rows.length, status: 'completed', provenance: 'exact' };
+        },
+      },
       schedulerSecret: SECRET, firstDecisionWeekLocalDate: '2026-09-08', fetchImpl: sleeperFetch(),
       now: sequencedClock(scenario.start, scenario.finish),
     });
@@ -139,7 +161,7 @@ for (const scenario of [
     let written = false;
     const input = { season: 2026, decisionWeek: scenario.decisionWeek, canonicalCutoffAt: scenario.cutoff, provenance: 'exact' };
     const service = createProjectionSnapshotService({
-      repository: { ingest: async () => { written = true; } }, schedulerSecret: SECRET,
+      repository: { findCompletedMetadata: async () => null, ingest: async () => { written = true; } }, schedulerSecret: SECRET,
       firstDecisionWeekLocalDate: '2026-09-08', fetchImpl: sleeperFetch(),
       now: sequencedClock(scenario.start, scenario.late),
     });
@@ -149,6 +171,56 @@ for (const scenario of [
     assert.equal(written, false);
   });
 }
+
+test('exact retry short-circuits from bounded completed metadata before Sleeper fetch or ingestion', async () => {
+  let fetches = 0;
+  let ingests = 0;
+  let lookup;
+  const existing = {
+    snapshotId: 'existing-id', status: 'completed', provenance: 'exact', rowCount: 15761, contentHash: 'a'.repeat(64),
+  };
+  const service = createProjectionSnapshotService({
+    schedulerSecret: SECRET,
+    firstDecisionWeekLocalDate: FIRST_DECISION_WEEK,
+    now: () => new Date('2026-09-30T03:07:00Z'),
+    fetchImpl: async () => { fetches += 1; return sleeperFetch()(); },
+    repository: {
+      findCompletedMetadata: async (coordinates) => { lookup = coordinates; return existing; },
+      ingest: async () => { ingests += 1; },
+    },
+  });
+  const response = await service.post(request({ body: {
+    season: 2026, decisionWeek: 4, canonicalCutoffAt: '2026-09-30T03:00:00Z', provenance: 'exact',
+  } }));
+  assert.equal(response.status, 200);
+  assert.equal(fetches, 0);
+  assert.equal(ingests, 0);
+  assert.deepEqual(lookup, {
+    source: 'sleeper', season: 2026, decisionWeek: 4,
+    canonicalCutoffAt: '2026-09-30T03:00:00.000Z', provenance: 'exact',
+  });
+  assert.deepEqual(parse(response), { ...existing, created: false, alreadyCompleted: true });
+});
+
+test('racing exact requests still preserve transactional immutable-conflict behavior', async () => {
+  const conflict = new Error('snapshot conflict: evidence key already has different immutable content');
+  conflict.code = 'SNAPSHOT_CONFLICT';
+  const service = createProjectionSnapshotService({
+    schedulerSecret: SECRET,
+    firstDecisionWeekLocalDate: FIRST_DECISION_WEEK,
+    now: sequencedClock('2026-09-30T03:07:00Z', '2026-09-30T03:07:01Z'),
+    fetchImpl: sleeperFetch(),
+    repository: {
+      findCompletedMetadata: async () => null,
+      ingest: async () => { throw conflict; },
+    },
+  });
+  const response = await service.post(request({ body: {
+    season: 2026, decisionWeek: 4, canonicalCutoffAt: '2026-09-30T03:00:00Z', provenance: 'exact',
+  } }));
+  assert.equal(response.status, 409);
+  assert.match(parse(response).error, /snapshot conflict/);
+});
 
 test('compaction retains finite scoring values only and canonical hashing is deterministic', () => {
   const rows = compactProjectionPayload({

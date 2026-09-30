@@ -26,7 +26,7 @@ function jsonResponse(status, body, extraHeaders = {}) {
       'Content-Type': 'application/json',
       'Cache-Control': 'no-store',
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Authorization, Content-Type',
       ...extraHeaders,
     },
@@ -112,21 +112,28 @@ function parsePostBody(rawBody) {
   };
 }
 
-function validateCalendarCoordinate({ season, decisionWeek, canonicalCutoffAt }, firstDecisionWeekLocalDate) {
+function validateCalendarConfiguration(firstDecisionWeekLocalDate, season) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(firstDecisionWeekLocalDate || '')) {
     throw new HttpError(503, 'capture is unavailable until the season calendar is configured');
   }
   const [firstYear, firstMonth, firstDay] = firstDecisionWeekLocalDate.split('-').map(Number);
   const firstLocalDay = new Date(Date.UTC(firstYear, firstMonth - 1, firstDay));
   if (
-    firstYear !== season
+    (season !== undefined && firstYear !== season)
     || firstLocalDay.getUTCFullYear() !== firstYear
     || firstLocalDay.getUTCMonth() !== firstMonth - 1
     || firstLocalDay.getUTCDate() !== firstDay
     || firstLocalDay.getUTCDay() !== 2
   ) {
-    throw new HttpError(503, 'the configured season calendar must be a Tuesday in the requested season');
+    throw new HttpError(503, season === undefined
+      ? 'the configured season calendar must be a valid Tuesday'
+      : 'the configured season calendar must be a Tuesday in the requested season');
   }
+  return firstLocalDay;
+}
+
+function validateCalendarCoordinate({ season, decisionWeek, canonicalCutoffAt }, firstDecisionWeekLocalDate) {
+  const firstLocalDay = validateCalendarConfiguration(firstDecisionWeekLocalDate, season);
   const expectedDay = firstLocalDay.getTime() + (decisionWeek - 1) * 7 * 86400000;
   const parts = zonedParts(new Date(canonicalCutoffAt));
   const actualDay = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day));
@@ -230,6 +237,19 @@ function describeCaptureTiming(snapshot) {
 
 function createProjectionSnapshotService({ repository, fetchImpl = fetch, schedulerSecret, firstDecisionWeekLocalDate, now = () => new Date() }) {
   return {
+    async health(req) {
+      try {
+        if (!isAuthorized(getHeader(req.headers, 'authorization'), schedulerSecret)) throw new HttpError(401, 'unauthorized');
+        validateCalendarConfiguration(firstDecisionWeekLocalDate);
+        const response = jsonResponse(204, {});
+        response.body = '';
+        return response;
+      } catch (error) {
+        const status = error instanceof HttpError ? error.status : 500;
+        return jsonResponse(status, { error: status === 500 ? 'scheduler health check failed' : error.message });
+      }
+    },
+
     async post(req) {
       if (!isAuthorized(getHeader(req.headers, 'authorization'), schedulerSecret)) return jsonResponse(401, { error: 'Unauthorized' }, { 'WWW-Authenticate': 'Bearer' });
       try {
@@ -237,6 +257,28 @@ function createProjectionSnapshotService({ repository, fetchImpl = fetch, schedu
         validateCalendarCoordinate(input, firstDecisionWeekLocalDate);
         const startedAt = now();
         validateCaptureTiming(input, startedAt);
+
+        if (input.provenance === 'exact') {
+          const existing = await repository.findCompletedMetadata({
+            source: SOURCE,
+            season: input.season,
+            decisionWeek: input.decisionWeek,
+            canonicalCutoffAt: input.canonicalCutoffAt,
+            provenance: input.provenance,
+          });
+          if (existing) {
+            return jsonResponse(200, {
+              snapshotId: existing.snapshotId,
+              status: existing.status,
+              created: false,
+              alreadyCompleted: true,
+              provenance: existing.provenance,
+              rowCount: existing.rowCount,
+              contentHash: existing.contentHash,
+            });
+          }
+        }
+
         const rows = await fetchRemainingProjections({ fetchImpl, ...input });
         const fetchedAt = now();
         validateCaptureTiming(input, startedAt, fetchedAt);
@@ -291,7 +333,7 @@ function createProjectionSnapshotService({ repository, fetchImpl = fetch, schedu
 }
 
 module.exports = {
-  CAPTURE_TIME_ZONE, ENDPOINT_TEMPLATE, EXACT_CAPTURE_WINDOW_MS, HttpError, canonicalCutoffForLocalDate, canonicalizeRows,
+  CAPTURE_TIME_ZONE, ENDPOINT_TEMPLATE, EXACT_CAPTURE_WINDOW_MS, MAX_WEEK, HttpError, canonicalCutoffForLocalDate, canonicalizeRows,
   compactProjectionPayload, createProjectionSnapshotService, describeCaptureTiming, fetchRemainingProjections, hashRows, isAuthorized,
-  isCanonicalCutoff, parseGetQuery, parsePostBody, validateCalendarCoordinate, validateCaptureTiming, zonedParts,
+  isCanonicalCutoff, parseGetQuery, parseIsoTimestamp, parsePostBody, validateCalendarConfiguration, validateCalendarCoordinate, validateCaptureTiming, zonedParts,
 };

@@ -1,3 +1,41 @@
+# SNAPSHOT RELIABILITY HARDENING — REVIEW-ONLY HANDOFF (2026-09-30)
+
+## Status / delivery
+
+- Implemented and locally verified on `fix/projection-snapshot-reliability`. The orchestrator, not this worker, will independently verify, push, and open the review PR. **Review PR: pending orchestrator.**
+- No merge, production deploy, production workflow dispatch/capture, production config/Supabase mutation, or PR #14/#15 change occurred. `main` was not touched.
+
+## Evidence-bounded diagnosis
+
+- **Scheduler:** workflow `367263137` was active on default branch `main` >3 days before W4. There were zero runs `02:45Z–04:30Z`; the only event arrived `09:03:53Z` and skipped at local Wednesday 02:03. GitHub documents delayed/dropped schedules and start-of-hour load. Therefore activation/default-branch timing is ruled out; at least one tick dropped and one tick was delayed 5–6 hours. The prior combined cron cannot identify whether the 03:00 or 04:00 tick emitted.
+- **Authorization:** production logs used the exact production SWA endpoint. The production control-plane setting exists, but a direct request using that setting returned 401. In source, auth precedes parsing; matching auth with `{}` must return 400 without fetch/write. This establishes managed-function runtime/config divergence. It does **not** establish the underlying Azure recycle/propagation mechanism because no runtime env/App Insights introspection exists.
+- **W4:** honestly retained as reconstructed/post-cutoff ID `90681181-3c51-4f68-91cd-ca1637ffbd95`, 15,761 rows, hash `9463b40e63b71c0088a311675d47bdc508a627ba446d703a54b5ba2ced4dc523`. Never label it exact.
+
+## Design
+
+- Six independent schedules at minutes 02/07/12 for both 03/04 UTC avoid top-of-hour and cover PDT/PST. Runtime resolves Pacific coordinates after queueing and refuses starts at/after minute 13, retaining >=2 minutes before the unchanged DB/API finish deadline at cutoff +15m. Wrong DST hour and delayed jobs skip without POST. Manual `exact` is timing-guarded too; reconstructed dispatch stays available.
+- Authenticated `HEAD /api/projection-snapshots` checks runtime secret and calendar configuration without creating a repository, fetching Sleeper, or touching DB. Workflow diagnostics separate missing workflow secret/endpoint, endpoint/auth mismatch, late window, and API failure. Health must pass before POST.
+- Exact POST performs one bounded run-metadata query (no 15k child values). Existing completed exact evidence returns immediately and skips Sleeper/ingestion. Workflow concurrency serializes normal attempts. If truly concurrent requests both miss, the unchanged transactional RPC remains authoritative: identical evidence is idempotent; differing evidence is HTTP 409 and cannot overwrite.
+- No migration and no weakening of exact semantics: actual capture start must be >= cutoff and actual finish <= cutoff +15m in both API and DB.
+
+## W5 owner runbook (Tue 2026-10-06 PDT)
+
+1. Before Tuesday, review/merge/deploy only with owner approval. Reconcile the SWA managed-function runtime config using an owner-selected restart/redeploy/config-refresh action; do not infer that a control-plane write alone propagated.
+2. Confirm workflow/runtime scheduler secrets are synchronized without printing them; confirm endpoint and season calendar variables. Production `HEAD` must return 204.
+3. Review local timing simulations for PDT minute 02/07/12, minute-13 rejection, wrong UTC hour, and 5–6-hour delay. Optional broader Sleeper/hash/DB dry-run remains a separate owner decision.
+4. Observe scheduled opportunities at 20:02, 20:07, and 20:12 PDT. Do not launch blind post-window retries.
+5. Shortly after capture, public GET must report Decision Week 5 same-week `exact`, with ID/hash/count recorded. If absent and still inside the immutable +15m window, the owner may invoke the already-validated direct exact fallback. At/after +15m, do not claim exact; preserve only reconstructed evidence.
+
+## Remaining owner decisions / risks
+
+- Merge/deploy timing and the concrete Azure runtime refresh mechanism.
+- Whether to enable App Insights/runtime environment observability.
+- Whether to add the broader non-persisting Sleeper canonicalization/hash/read-only DB preflight later. This bounded change provides an auth/config canary and local timing simulation, not that broader production preflight.
+- GitHub schedule delivery is best-effort; multiple independent off-hour opportunities reduce but cannot eliminate platform-wide event loss. The direct owner fallback remains necessary.
+- A cross-instance race can still duplicate upstream fetch work before either exact row commits; immutability/idempotency prevents duplicate/conflicting storage. Avoiding even that fetch race would require a reviewed DB reservation/lock design and migration, intentionally out of scope.
+
+---
+
 # IMPLEMENTATION COMPLETE — Non-VORP replacement-level zeroing (2026-09-27)
 
 ## Status
