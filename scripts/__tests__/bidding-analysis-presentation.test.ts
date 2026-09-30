@@ -19,11 +19,12 @@ beforeAll(async () => {
 });
 
 describe('owner-facing bidding analysis presentation', () => {
-  it('normalizes only volatile Chromium PDF timestamps', () => {
-    const first = Buffer.from("%PDF /CreationDate (D:20260927101000+00'00') /ModDate (D:20260927101000+00'00') body", 'latin1');
-    const second = Buffer.from("%PDF /CreationDate (D:20260927101159+00'00') /ModDate (D:20260927101159+00'00') body", 'latin1');
+  it('normalizes volatile Chromium PDF timestamps and tagged-node IDs', () => {
+    const first = Buffer.from("%PDF /CreationDate (D:20260927101000+00'00') /ModDate (D:20260927101000+00'00') /Headers [(node00002365)] /ID (node00002365) /ID (node00002366) body", 'latin1');
+    const second = Buffer.from("%PDF /CreationDate (D:20260927101159+00'00') /ModDate (D:20260927101159+00'00') /Headers [(node00001790)] /ID (node00001790) /ID (node00001791) body", 'latin1');
     expect(normalizePdfMetadata(first)).toEqual(normalizePdfMetadata(second));
     expect(normalizePdfMetadata(first).toString('latin1')).toContain("D:20260925230008+00'00'");
+    expect(normalizePdfMetadata(first).toString('latin1')).toContain('/Headers [(node00000001)] /ID (node00000001) /ID (node00000002)');
   });
 
   it('reproduces the audited fixture values and distinguishes sample from robust result', () => {

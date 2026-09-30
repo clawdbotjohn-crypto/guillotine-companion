@@ -86,18 +86,24 @@ describe('weekly top-three and median-market analysis', () => {
     const bullets = plainFiveBulletAnswer(analysis);
     const markdown = renderWeeklyMarketMarkdown(analysis);
     expect(bullets).toHaveLength(5);
-    expect(bullets[1]).toContain('W2');
-    expect(bullets[1]).toContain('W3');
-    expect(bullets[1]).toContain('W4');
-    expect(bullets.join('\n')).toContain('closest overall serious-median strategy is Current-team VoRP');
-    expect(bullets.join('\n')).toContain('Max VORP');
-    expect(bullets.join('\n')).toContain('Current-team VoRP');
-    expect(bullets.join('\n')).toContain('Corrected Safe');
-    expect(bullets.join('\n')).toContain('Corrected Weeks as Starter');
-    expect(bullets.join('\n')).not.toContain('Middle VORP');
+    expect(bullets[0]).toContain('Newest supported week W4');
+    expect(bullets[0]).toContain('Pooled season-to-date top-three');
+    expect(bullets[1]).toContain('Newest supported week W4');
+    expect(bullets[1]).toContain('Pooled season-to-date top-three');
+    expect(bullets[2]).toContain('Serious-market raw identity fit — W4');
+    expect(bullets[2]).toContain('Cumulative:');
+    expect(bullets[2]).toMatch(/R² .*MAE .*ρ .*n=/);
+    expect(bullets[3]).toContain('leadership changed Current-team VoRP → Corrected Weeks as Starter');
+    expect(bullets[3]).toContain('Cumulative leader: Current-team VoRP');
+    expect(bullets[4]).toContain('Recommendation: do not change any formula');
+    expect(bullets[4]).toContain('projection_snapshot_runs and projection_snapshot_values');
+    for (const label of ['Max VORP', 'Current-team VoRP', 'Corrected Safe', 'Corrected Weeks as Starter']) {
+      expect(bullets.slice(0, 4).join('\n')).toContain(label);
+    }
+    expect(bullets.join('\n')).not.toMatch(/Middle VORP|Aggressive/);
     expect(markdown.indexOf('## Five-bullet answer')).toBeLessThan(markdown.indexOf('## Weekly top-three'));
-    expect(markdown).toContain('Max VORP 3.34×');
-    expect(markdown).toContain('VoRP 3.00×');
+    expect(markdown).toContain('Max VORP a/g/m 2.74/2.73/2.71×');
+    expect(markdown).toContain('Current-team VoRP R² 0.52, MAE 19.6, ρ 0.72, n=10');
     expect(markdown).toContain('private GET-only catalog match');
     expect(markdown).not.toMatch(/player_[0-9]|manager_[0-9]|league[_ -]?id\s*[0-9]|\b[0-9]{17,20}\b/i);
   });

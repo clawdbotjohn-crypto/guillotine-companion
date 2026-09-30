@@ -571,3 +571,11 @@ No merge, no push to `main`, no `workflow_dispatch`, and no production deploymen
 - Refreshed artifacts: `docs/analysis/bidding-strategy-accuracy-seamex-2026.{md,html,pdf}`. The PDF has 21 visually reviewed pages with no clipping or overflow.
 - Current decision: **no product formula change**. W4 serious-market medians favor Corrected Weeks as Starter, W4 winners favor Corrected Safe, and aggregate serious/all-bid results still favor Current-team VoRP; lens instability plus reconstructed provenance keeps Middle VORP analysis-only.
 - Validation to rerun: `npm run check`, `npm test`, `npm run analyze:bidding`, and `npm run analyze:bidding:presentation`.
+
+## 2026-09-30 final five-bullet QA closure
+
+- Reworked the generated answer to exactly five direct bullets: latest eligible and pooled season-to-date top-three winning/serious-market a/g/m multipliers with coverage; latest and cumulative four-method raw identity fit; current/prior/cumulative leadership; material week-over-week trend; and an explicit no-formula-change recommendation/provenance caveat.
+- The calculation discovers latest/previous eligible weeks and pools raw top-three rows; no W4 or two-week constants were added. Aggressive and Middle VORP remain outside the five bullets; Middle stays in the separate analysis-only appendix.
+- Generated provenance now names read-only Supabase tables `projection_snapshot_runs`/`projection_snapshot_values` and the Sleeper league, player-catalog, and weekly-transaction GET endpoint shapes without printing IDs or credentials.
+- Focused report/presentation tests: 10 passed. `npm run check`: passed (one pre-existing unrelated React set-state lint warning). `git diff --check` and privacy scans passed. HTML DOM/render sanity passed; generated report structure retained 21 PDF pages.
+- Markdown, HTML, and PDF are byte-identical across immediate repeat generation. Chromium timestamp and tagged-node IDs are normalized without changing PDF byte widths/xref offsets. Final SHA-256: MD `6bbaac9cb2ec646f4c3b7cd67ebc4780e5c57f13d4a2f828b0f57214dbb5b13b`; HTML `500768be1b240e16335fa45ef6b9f0dc02f44baae592e7abd9756d4c747ddefb`; PDF `30e816f8dd4dcc451c705fdcf065ca6200b4450c788507d1c7fa605874e878c4`. No merge, deploy, main push, workflow dispatch, or external-data mutation.

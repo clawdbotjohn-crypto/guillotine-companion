@@ -8,6 +8,7 @@ import {
   type WeeklyMarketAnalysis,
   type WeeklyMarketView,
   type WeeklyTopThree,
+  summarizeRatios,
 } from './weekly-market-analysis.ts';
 
 const OWNER_SUMMARY_STRATEGIES = ALL_MARKET_STRATEGIES.filter(([id]) => id !== 'middle-vorp');
@@ -29,8 +30,34 @@ function markdownTable(headers: string[], rows: Array<Array<string | number>>): 
   return [`| ${headers.join(' | ')} |`, `| ${headers.map(() => '---').join(' | ')} |`, ...rows.map((row) => `| ${row.join(' | ')} |`)].join('\n');
 }
 
-function ratioList(summary: Record<MarketStrategyId, RatioSummary>, field: keyof Pick<RatioSummary, 'arithmeticMean' | 'geometricMean' | 'median'> = 'arithmeticMean'): string {
-  return OWNER_SUMMARY_STRATEGIES.map(([id, label]) => `${label} ${number(summary[id][field])}× (${summary[id].defined}/${summary[id].total})`).join('; ');
+function ratioList(summary: Record<MarketStrategyId, RatioSummary>): string {
+  return OWNER_SUMMARY_STRATEGIES.map(([id, label]) => {
+    const value = summary[id];
+    return `${label} a/g/m ${number(value.arithmeticMean)}/${number(value.geometricMean)}/${number(value.median)}× (coverage ${value.defined}/${value.total})`;
+  }).join('; ');
+}
+
+function pooledTopThree(weeks: WeeklyTopThree[], kind: 'winningRatios' | 'marketRatios'): Record<MarketStrategyId, RatioSummary> {
+  return Object.fromEntries(ALL_MARKET_STRATEGIES.map(([id]) => [
+    id,
+    summarizeRatios(weeks.flatMap((week) => week.rows.map((row) => row[kind][id]))),
+  ])) as Record<MarketStrategyId, RatioSummary>;
+}
+
+function signed(value: number): string {
+  return `${value >= 0 ? '+' : ''}${number(value)}`;
+}
+
+function fitList(metrics: MarketMetric[]): string {
+  return ownerMetrics(metrics).map((row) =>
+    `${row.label} R² ${number(row.rSquared, 2)}, MAE ${number(row.mae, 1)}, ρ ${number(row.spearman, 2)}, n=${row.n}`,
+  ).join('; ');
+}
+
+function metricFor(metrics: MarketMetric[], label: string): MarketMetric {
+  const metric = ownerMetrics(metrics).find((row) => row.label === label);
+  if (!metric) throw new Error(`Missing owner-summary metric for ${label}`);
+  return metric;
 }
 
 function weekMetric(view: WeeklyMarketView, week: number): MarketMetricGroup {
@@ -42,17 +69,42 @@ function weekMetric(view: WeeklyMarketView, week: number): MarketMetricGroup {
 /** Exactly five owner-facing bullets, ordered before every detailed appendix section. */
 export function plainFiveBulletAnswer(analysis: WeeklyMarketAnalysis): string[] {
   const view = analysis.ownerDirected;
-  const weeks = view.topThree;
+  const weeks = [...view.topThree].sort((a, b) => a.week - b.week);
   if (!weeks.length) throw new Error('Five-bullet answer requires at least one eligible same-week snapshot');
-  const weekLabels = weeks.map((week) => `W${week.week}`);
-  const scope = weekLabels.length === 1 ? weekLabels[0] : `${weekLabels.slice(0, -1).join(', ')} and ${weekLabels.at(-1)}`;
-  const overall = view.marketMetrics.find((row) => row.week == null)!;
+  const latest = weeks.at(-1)!;
+  const previous = weeks.at(-2);
+  const latestMetrics = weekMetric(view, latest.week);
+  const overall = view.marketMetrics.find((row) => row.week == null);
+  if (!overall) throw new Error('Five-bullet answer requires cumulative market metrics');
+
+  const latestLeader = ownerClosest(latestMetrics.metrics);
+  const overallLeader = ownerClosest(overall.metrics);
+  const latestLeaderMetric = metricFor(latestMetrics.metrics, latestLeader);
+  const previousLeader = previous ? ownerClosest(weekMetric(view, previous.week).metrics) : null;
+  const previousSameMetric = previous ? metricFor(weekMetric(view, previous.week).metrics, latestLeader) : null;
+  const leaderChange = previous && previousLeader && previousSameMetric
+    ? ` Versus W${previous.week}, ${latestLeader}'s MAE changed ${latestLeaderMetric.mae - previousSameMetric.mae >= 0 ? '+' : ''}${number(latestLeaderMetric.mae - previousSameMetric.mae, 1)}; leadership ${previousLeader === latestLeader ? 'was unchanged' : `changed ${previousLeader} → ${latestLeader}`}.`
+    : ' No prior eligible week exists for a week-over-week comparison.';
+
+  const trend = previous
+    ? OWNER_SUMMARY_STRATEGIES.flatMap(([id]) => {
+      const current = latest.marketMultipliers[id].arithmeticMean;
+      const prior = previous.marketMultipliers[id].arithmeticMean;
+      return current == null || prior == null ? [] : [current - prior];
+    })
+    : [];
+  const up = trend.filter((delta) => delta > 0).length;
+  const down = trend.filter((delta) => delta < 0).length;
+  const trendText = previous && trend.length
+    ? `Material trend W${previous.week}→W${latest.week}: serious-market top-three arithmetic multipliers rose for ${up}/${trend.length} comparable methods and fell for ${down}/${trend.length} (Δ range ${signed(Math.min(...trend))}× to ${signed(Math.max(...trend))}×).`
+    : `Material trend: ${previous ? `W${previous.week} and W${latest.week} have no comparable multiplier coverage` : `only W${latest.week} is eligible`}, so no week-over-week direction can be claimed.`;
+
   return [
-    `Scope: ${scope} have same-week reconstructed snapshots. The top three are unique canonical winners after ${analysis.exclusion.marker} (${analysis.exclusion.proof}; proof matches=${analysis.exclusion.canonicalMatchCount}).`,
-    `Top-three winning-price arithmetic multipliers (observed/intrinsic): ${weeks.map((week) => `W${week.week}: ${ratioList(week.winnerMultipliers)}`).join('; ')}.`,
-    `Top-three serious-market-median arithmetic multipliers: ${weeks.map((week) => `W${week.week}: ${ratioList(week.marketMultipliers)}`).join('; ')}.`,
-    `Closest serious-market strategy by eligible weekly cluster: ${weeks.map((week) => `W${week.week} ${ownerClosest(weekMetric(view, week.week).metrics)}`).join('; ')}.`,
-    `Across all eligible weeks, the closest overall serious-median strategy is ${ownerClosest(overall.metrics)}; raw evidence is retained in the labeled with-target sensitivity view, and weekly scale remains distinct from strategy shape.`,
+    `Newest supported week W${latest.week} top-three winning multipliers (arithmetic/geometric/median; coverage): ${ratioList(latest.winnerMultipliers)}. Pooled season-to-date top-three: ${ratioList(pooledTopThree(weeks, 'winningRatios'))}.`,
+    `Newest supported week W${latest.week} top-three serious-market multipliers (arithmetic/geometric/median; coverage): ${ratioList(latest.marketMultipliers)}. Pooled season-to-date top-three: ${ratioList(pooledTopThree(weeks, 'marketRatios'))}.`,
+    `Serious-market raw identity fit — W${latest.week}: ${fitList(latestMetrics.metrics)}. Cumulative: ${fitList(overall.metrics)}. R² is an unfitted prediction score, not fitted-regression R².`,
+    `Closest current strategy: W${latest.week} ${latestLeader} (MAE ${number(latestLeaderMetric.mae, 1)}).${leaderChange} Cumulative leader: ${overallLeader} (MAE ${number(metricFor(overall.metrics, overallLeader).mae, 1)}).`,
+    `${trendText} Recommendation: do not change any formula from this small reconstructed sample; treat shape and market scale separately. Provenance caveat: deterministic anonymized fixture from read-only Supabase tables projection_snapshot_runs and projection_snapshot_values and Sleeper GET /v1/league/[private], /v1/players/nfl, and /v1/league/[private]/transactions/{week}; same-week snapshots are reconstructed, not proof of the pre-waiver forecast.`,
   ];
 }
 
