@@ -19,6 +19,7 @@ import {
 } from '../api';
 import {
   buildWeeklyScoredPlayers,
+  buildMaxVorpPlayerValues,
   computeEliminations,
   getActiveRosterIds,
   getCompletedLeagueWeek,
@@ -29,9 +30,13 @@ import {
   computeProjectedLineupGroupRanks,
   computeHistoricalRanks,
   orderTeamProjections,
+  rankActiveRosterPositionValues,
+  rankActiveRosterValues,
   type HistoricalRank,
   type PosGroupRank,
   type TeamProjection,
+  type RankedRosterValue,
+  type RosterPositionValueRank,
 } from '../logic';
 import { Card, Skeleton, StatusBadge } from '../components/ui';
 import { TeamBidProfiles } from '../components/ManagerBiddingProfiles';
@@ -43,8 +48,12 @@ import { useSwitchSeason } from '../hooks/useSwitchSeason';
 import { ChevronRight, ShieldCheck, ShieldAlert, Shield, TriangleAlert } from 'lucide-react';
 import { filterTeamsByEliminatedVisibility } from '../logic/teamVisibility';
 import { getTeamPositionGroups, type TeamOrder } from '../logic/teamPositionGroups';
+import { usePlayerValues } from '../hooks/usePlayerValues';
+import { formatWholeDollars } from '../logic/displayCurrency';
+import { buildLeagueContext, buildMaxVorpCalibration } from '../logic/waivers';
+import { orderTeamsByValue } from '../logic/teamValueOrder';
 
-const POS_ORDER = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'SUPER_FLEX', 'K', 'DEF'];
+const POS_ORDER = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB'];
 
 function rankColor(rank: number, outOf: number): string {
   if (outOf <= 1) return '#a5b4fc';
@@ -116,6 +125,22 @@ export function TeamStandingDetails({
   );
 }
 
+export function TeamValueStandingDetails({
+  team,
+  value,
+}: {
+  team: TeamProjection;
+  value: RankedRosterValue | undefined;
+}) {
+  if (team.eliminated) return <StatusBadge status="eliminated" />;
+  if (!value || value.total == null) return <span className="text-[10px] text-[#6b6e99]">Max VORP value unavailable</span>;
+  return (
+    <span className="font-['Space_Mono'] text-[10px] text-[#a5b4fc] tabular-nums" data-testid="current-team-standing">
+      value #{value.rank}/{value.outOf} · {formatWholeDollars(value.total)}
+    </span>
+  );
+}
+
 export function TeamsPage() {
   const navigate = useNavigate();
   const {
@@ -131,6 +156,12 @@ export function TeamsPage() {
   const { data: rosters } = useRosters(leagueId);
   const { data: players, isLoading: playersLoading } = usePlayers();
   const nflStateQuery = useNflState();
+  const playerValuesModel = usePlayerValues({
+    league,
+    nflState: nflStateQuery.data,
+    players,
+    source: 'sleeper',
+  });
   const completedWeek = getCompletedLeagueWeek(league, nflStateQuery.data);
   const { data: matchups, isLoading: matchupsLoading } = useAllMatchups(leagueId, completedWeek);
   const { data: leagueHistory, isLoading: historyLoading } = useLeagueHistory(rootLeagueId);
@@ -174,8 +205,26 @@ export function TeamsPage() {
       league,
     );
     const histRanks = computeHistoricalRanks(elim);
-    return { elim, projections, weeklyScoredPlayers, historicalPosRanks, projectedPosRanks, histRanks };
-  }, [matchups, rosters, users, league, weeklyProjectionQuery.data]);
+    const maxVorpContext = buildLeagueContext(league!, elim, projectionWeek ?? undefined);
+    const maxVorpCalibration = playerValuesModel.sleeperValues
+      ? buildMaxVorpCalibration(
+          playerValuesModel.sleeperValues,
+          maxVorpContext.startersPerPos,
+          maxVorpContext.teamsRemaining,
+          maxVorpContext.budget,
+        )
+      : null;
+    const maxVorpValues = playerValuesModel.sleeperValues
+      ? buildMaxVorpPlayerValues(playerValuesModel.sleeperValues, maxVorpCalibration)
+      : null;
+    const valueRanks = maxVorpValues
+      ? rankActiveRosterValues(rosters, activeRosterIds, maxVorpValues)
+      : new Map<number, RankedRosterValue>();
+    const positionValueRanks = maxVorpValues && playerValuesModel.sleeperValues
+      ? rankActiveRosterPositionValues(rosters, activeRosterIds, maxVorpValues, playerValuesModel.sleeperValues)
+      : new Map<number, RosterPositionValueRank[]>();
+    return { elim, projections, weeklyScoredPlayers, historicalPosRanks, projectedPosRanks, histRanks, valueRanks, positionValueRanks };
+  }, [matchups, rosters, users, league, weeklyProjectionQuery.data, projectionWeek, playerValuesModel.sleeperValues]);
 
   if (!leagueId) {
     return (
@@ -195,7 +244,7 @@ export function TeamsPage() {
     );
   }
 
-  const { elim, projections, weeklyScoredPlayers, historicalPosRanks, projectedPosRanks, histRanks } = model;
+  const { elim, projections, weeklyScoredPlayers, historicalPosRanks, projectedPosRanks, histRanks, valueRanks, positionValueRanks } = model;
   const hasScores = elim.weeks.length > 0;
   const scoredPlayers = weeklyScoredPlayers ?? new Map();
   const playerValues = new Map<string, number>(
@@ -223,7 +272,9 @@ export function TeamsPage() {
     projectedPositionRanks: projectedPosRanks.byRosterId,
   });
 
-  const rows = orderTeamProjections(projections, histRanks, orderBy);
+  const rows = orderBy === 'value'
+    ? orderTeamsByValue(projections, valueRanks)
+    : orderTeamProjections(projections, histRanks, orderBy);
   const eliminatedCount = projections.filter((team) => team.eliminated).length;
   const visibleRows = filterTeamsByEliminatedVisibility(rows, showEliminatedTeams);
 
@@ -267,8 +318,8 @@ export function TeamsPage() {
       ) : (<>
       {/* Order toggle */}
       {hasScores && (
-        <div className="flex gap-1 bg-[#0a0d1a] rounded-lg p-1 mb-2 w-fit">
-          {(['projected', 'historical'] as const).map((o) => (
+        <div className="grid w-full grid-cols-3 gap-1 rounded-lg bg-[#0a0d1a] p-1 mb-2">
+          {(['projected', 'historical', 'value'] as const).map((o) => (
             <button
               key={o}
               onClick={() => setOrderBy(o)}
@@ -278,7 +329,7 @@ export function TeamsPage() {
                   : 'text-[#4a4d77] hover:text-[#6b6e99]'
                 }`}
             >
-              {o === 'projected' ? 'Projected' : 'Historical'}
+              {o === 'projected' ? 'Projected' : o === 'historical' ? 'Historical' : 'Value'}
             </button>
           ))}
         </div>
@@ -294,6 +345,16 @@ export function TeamsPage() {
         </p>
       )}
 
+      {hasScores && orderBy === 'value' && (
+        <p className="text-[10px] text-[#4a4d77] mb-4">
+          {playerValuesModel.isLoading
+            ? 'Loading Max VORP Team Value…'
+            : valueRanks.size > 0
+              ? 'Max VORP · Sleeper rest-of-season projections · active-team ranks'
+              : playerValuesModel.unavailableReason ?? 'Max VORP Team Value unavailable.'}
+        </p>
+      )}
+
       {!hasScores && (
         <p className="text-[#6b6e99] text-sm mb-4">
           Projections appear once the season has weekly scores. Showing roster list.
@@ -303,16 +364,21 @@ export function TeamsPage() {
       <div className="space-y-2">
         {visibleRows.map((t) => {
           const hist = histRanks.get(t.rosterId);
-          const groups = getTeamPositionGroups(
-            t.rosterId,
-            orderBy,
-            projectedPosRanks.byRosterId,
-            historicalPosRanks,
-          )
-            .filter((g) => g.outOf > 0)
+          const groups = orderBy === 'value'
+            ? []
+            : getTeamPositionGroups(
+                t.rosterId,
+                orderBy,
+                projectedPosRanks.byRosterId,
+                historicalPosRanks,
+              )
+                .filter((g) => g.outOf > 0)
+                .sort((a, b) => POS_ORDER.indexOf(a.position) - POS_ORDER.indexOf(b.position));
+          const valueGroups = (positionValueRanks.get(t.rosterId) ?? [])
+            .filter((group) => group.outOf > 0)
             .sort((a, b) => POS_ORDER.indexOf(a.position) - POS_ORDER.indexOf(b.position));
           const isMine = t.rosterId === myRosterId;
-          const modeRisk = orderBy === 'projected' ? t.risk : hist?.risk ?? 'warning';
+          const modeRisk = orderBy === 'historical' ? hist?.risk ?? 'warning' : t.risk;
           const isOpen = expanded === t.rosterId;
 
           return (
@@ -326,8 +392,9 @@ export function TeamsPage() {
                       {t.displayName}{isMine && <span className="text-[#6366f1] text-[10px] ml-1">YOU</span>}
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">
-                      {hasScores && (
-                        <TeamStandingDetails team={t} historical={hist} orderBy={orderBy} />
+                      {hasScores && (orderBy === 'value'
+                        ? <TeamValueStandingDetails team={t} value={valueRanks.get(t.rosterId)} />
+                        : <TeamStandingDetails team={t} historical={hist} orderBy={orderBy} />
                       )}
                     </div>
                   </div>
@@ -338,13 +405,20 @@ export function TeamsPage() {
               {/* Position-group breakdown */}
               {isOpen && (
                 <div className="mt-3 pt-3 border-t border-[#1a1e3a]">
-                  <PositionGroupBreakdown
-                    groups={groups}
-                    eliminated={t.eliminated}
-                    unavailableMessage={orderBy === 'projected'
-                      ? 'Projected lineup-group rankings unavailable.'
-                      : 'No starter scoring data yet.'}
-                  />
+                  {orderBy === 'value' ? (
+                    <PositionValueBreakdown
+                      groups={valueGroups}
+                      eliminated={t.eliminated}
+                    />
+                  ) : (
+                    <PositionGroupBreakdown
+                      groups={groups}
+                      eliminated={t.eliminated}
+                      unavailableMessage={orderBy === 'projected'
+                        ? 'Projected lineup-group rankings unavailable.'
+                        : 'No starter scoring data yet.'}
+                    />
+                  )}
                   <button
                     onClick={() => navigate(`/teams/${t.rosterId}`)}
                     className="mt-3 text-[11px] text-[#6366f1] underline underline-offset-4 hover:text-[#8b5cf6]"
@@ -385,6 +459,28 @@ export function PositionGroupBreakdown({
     <div className="grid grid-cols-4 gap-2">
       {groups.map((g) => (
         <PosCell key={g.position} g={g} />
+      ))}
+    </div>
+  );
+}
+
+export function PositionValueBreakdown({
+  groups,
+  eliminated,
+}: {
+  groups: RosterPositionValueRank[];
+  eliminated: boolean;
+}) {
+  if (eliminated) return <p className="text-[10px] text-[#4a4d77]">Eliminated — no current positional standing.</p>;
+  if (groups.length === 0) return <p className="text-[10px] text-[#4a4d77]">Max VORP position values unavailable.</p>;
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      {groups.map((group) => (
+        <div key={group.position} className="rounded-lg border border-[#1a1e3a] bg-[#0e1025] p-2 text-center">
+          <div className="text-[9px] uppercase tracking-wider text-[#6b6e99]">{group.position}</div>
+          <div className="font-['Space_Mono'] text-sm font-bold tabular-nums text-[#10b981]">{formatWholeDollars(group.total)}</div>
+          <div className="font-['Space_Mono'] text-[8px] text-[#4a4d77]">#{group.rank}/{group.outOf}</div>
+        </div>
       ))}
     </div>
   );

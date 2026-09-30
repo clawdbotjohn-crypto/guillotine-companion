@@ -89,13 +89,24 @@ export function useBiddingProfiles({
     historicalEvidence,
   ), [rosters, selectedBidEvents, historicalEvidence]);
 
+  const isLoading = transactionsQuery.isLoading
+    || (selectedBidEvents.length > 0 && snapshotQuery.isLoading);
+  const error = (transactionsQuery.error instanceof Error ? transactionsQuery.error : null)
+    ?? snapshotQuery.error;
+  const isReady = !!league
+    && !!rosters
+    && !!players
+    && transactionsQuery.data != null
+    && !isLoading
+    && !error
+    && (selectedBidEvents.length === 0 || snapshotQuery.data != null);
+
   return {
     profiles,
     hasHistory: selectedBidEvents.length > 0,
-    isLoading: transactionsQuery.isLoading
-      || (selectedBidEvents.length > 0 && snapshotQuery.isLoading),
-    error: (transactionsQuery.error instanceof Error ? transactionsQuery.error : null)
-      ?? snapshotQuery.error,
+    isLoading,
+    isReady,
+    error,
     partialErrorCount: snapshotQuery.data?.errors.size ?? 0,
     retry: () => {
       void transactionsQuery.refetch();

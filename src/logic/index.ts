@@ -108,7 +108,9 @@ export {
   summarizeRosterValue,
   rankActiveRosterValues,
   buildSelectedRosterValueDisplay,
+  rankActiveRosterPositionValues,
   type RosterValueSummary,
   type RankedRosterValue,
   type SelectedRosterValueDisplay,
+  type RosterPositionValueRank,
 } from './playerValues';

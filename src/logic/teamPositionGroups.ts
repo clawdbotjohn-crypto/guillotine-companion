@@ -1,6 +1,6 @@
 import type { PosGroupRank, ProjectedLineupGroupRank } from './analytics';
 
-export type TeamOrder = 'projected' | 'historical';
+export type TeamOrder = 'projected' | 'historical' | 'value';
 
 /** Keep expanded team-card details on the same model as the selected team ordering. */
 export function getTeamPositionGroups(

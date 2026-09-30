@@ -1,6 +1,6 @@
 // Waivers page — recommended bids per strategy, weekly context, and predicted winning bid.
 import { useMemo, useState, type ReactNode } from 'react';
-import { AlertTriangle, ChevronDown, ShoppingCart, Info, RefreshCw } from 'lucide-react';
+import { AlertTriangle, ShoppingCart, Info, RefreshCw } from 'lucide-react';
 import { Button, Card, Skeleton } from '../components/ui';
 import { FaabOverBudgetWarning } from '../components/FaabOverBudgetWarning';
 import { WaiverManagerPredictions } from '../components/ManagerBiddingProfiles';
@@ -287,9 +287,9 @@ export function WaiverPlayerCard({
             aria-expanded={predictionsOpen}
             aria-controls={`player-bids-${row.playerId}`}
             onClick={() => setPredictionsOpen((open) => !open)}
-            className="w-10 shrink-0 border-l border-[#20264d] text-[#9ca3c7] hover:bg-[#161a3a] hover:text-[#f0f0ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#818cf8]"
+            className="shrink-0 border-l border-[#20264d] px-3 text-[10px] font-semibold uppercase tracking-wider text-[#9ca3c7] hover:bg-[#161a3a] hover:text-[#f0f0ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#818cf8]"
           >
-            <ChevronDown size={16} aria-hidden="true" className={`mx-auto transition-transform ${predictionsOpen ? 'rotate-180' : ''}`} />
+            {predictionsOpen ? 'Hide bids' : 'Bids'}
           </button>
         )}
         </div>
@@ -311,6 +311,9 @@ export function WaiverPlayerCard({
           age,
           status,
           injuryStatus,
+          nextWeek: currentWeek == null ? null : currentWeek + 1,
+          nextWeekPoints: weeklyPoints ?? null,
+          byeWeek: byeWeek ?? null,
           sourceLabel,
           valueLabel: sourceMetric.label,
           valueDisplay: sourceMetric.display,
@@ -759,7 +762,7 @@ export function WaiversPage() {
             if (rank) positionRanks.set(managerRosterId, { rank: rank.rank, outOf: rank.outOf });
           }
           const biddingBaseline = resolveBiddingBaseline(row);
-          const predictions = biddingProfiles.hasHistory && !biddingProfiles.error
+          const predictions = biddingProfiles.isReady && biddingProfiles.hasHistory
             && biddingBaseline != null
             ? buildManagerPredictions({
               profiles: biddingProfiles.profiles,

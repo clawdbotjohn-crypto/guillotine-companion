@@ -7,6 +7,7 @@ import {
   buildModeledPositionRanks,
   buildSelectedRosterValueDisplay,
   collectRosterPlayerIds,
+  rankActiveRosterPositionValues,
   rankActiveRosterValues,
   summarizeRosterValue,
 } from './playerValues';
@@ -121,4 +122,37 @@ describe('Hub roster Team Value', () => {
       leagueHigh: 20,
     });
   });
+  it('keeps Teams totals exactly equal to the Hub selected-team display', () => {
+    const rosters = [roster(1, ['a', 'b']), roster(2, ['c'])];
+    const active = new Set([1, 2]);
+    const values = new Map([['a', 40], ['b', 0], ['c', 20]]);
+    const teams = rankActiveRosterValues(rosters, active, values);
+    const hub = buildSelectedRosterValueDisplay(rosters[0], rosters, active, values);
+    expect(teams.get(1)).toMatchObject({ total: hub.total, rank: hub.rank, outOf: hub.outOf });
+  });
+
+  it('uses exclusive native positions with deterministic ties, zeros, and no FLEX double count', () => {
+    const projections = new Map<string, RosPlayerProjection>([
+      ['qb1', { ...projection('qb1', 10), position: 'QB' }],
+      ['rb1', { ...projection('rb1', 10), position: 'RB' }],
+      ['rb2', { ...projection('rb2', 10), position: 'RB' }],
+      ['rb3', { ...projection('rb3', 10), position: 'RB' }],
+    ]);
+    const values = new Map([['qb1', 12], ['rb1', 8], ['rb2', 8], ['rb3', 0]]);
+    const ranked = rankActiveRosterPositionValues(
+      [roster(1, ['qb1', 'rb1', 'rb1']), roster(2, ['rb2']), roster(3, ['rb3']), roster(4, ['qb1'])],
+      new Set([1, 2, 3]),
+      values,
+      projections,
+    );
+    expect(ranked.get(1)).toEqual([
+      { position: 'QB', total: 12, rank: 1, outOf: 3 },
+      { position: 'RB', total: 8, rank: 1, outOf: 3 },
+    ]);
+    expect(ranked.get(2)?.find((row) => row.position === 'RB')).toEqual({ position: 'RB', total: 8, rank: 1, outOf: 3 });
+    expect(ranked.get(3)?.find((row) => row.position === 'RB')).toEqual({ position: 'RB', total: 0, rank: 3, outOf: 3 });
+    expect([...ranked.values()].flat().some((row) => row.position === 'FLEX')).toBe(false);
+    expect(ranked.has(4)).toBe(false);
+  });
+
 });

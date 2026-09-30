@@ -118,10 +118,10 @@ describe('waiver controls', () => {
     expect(screen.queryByText('$61')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Test Runner, suggested bid/i }));
     const dialog = screen.getByRole('dialog', { name: 'Test Runner' });
-    expect(within(dialog).getByText('Predicted Bidding')).toBeTruthy();
+    expect(within(dialog).getByText(/Predicted bidding/i)).toBeTruthy();
     expect(within(dialog).getByText('Hidden Manager')).toBeTruthy();
-    expect(within(dialog).getByText('$40')).toBeTruthy();
-    expect(within(dialog).getByText('Bidding History')).toBeTruthy();
+    expect(within(dialog).getAllByText('$40')).toHaveLength(2);
+    expect(within(dialog).getByText(/Bidding history/i)).toBeTruthy();
   });
 
   it('preserves full accessible manager prediction rows and detail access beside player details', () => {
@@ -191,6 +191,32 @@ describe('waiver controls', () => {
     expect(getWaiverStrategyExplanation('vorp', 16, true)).toBe('Value over Replacement Player (VoRP) calculates value from the replacement-team count you set, estimates the average VoRP required for a top-four roster, and prices players relative to that benchmark.');
     expect(getWaiverStrategyExplanation('vorp', 16, false, 'Sleeper ROS missing')).toContain('VoRP is unavailable: Sleeper ROS missing');
     expect(getWaiverStrategyExplanation('max-vorp', 16, false, 'all stages could not calibrate')).toContain('Max VORP is unavailable: all stages could not calibrate');
+  });
+
+
+  it('suppresses every partial predicted amount until the model is confirmed ready', () => {
+    const predictions: ManagerPredictionDisplay[] = [{
+      rosterId: 1, managerName: 'Delayed Manager', predictedBid: 40, currentFaab: 100,
+      cappedByFaab: false, likelihood: 'Likely',
+      profile: { managerRosterId: 1, managerMultiplier: 1, style: 'standard', confidence: 'low', usableEvidenceCount: 1, baselineStrategyId: 'max-vorp', baselineStrategyVersion: 'max-vorp-v1', evidence: [] },
+    }];
+    const { rerender } = render(<WaiverPlayerCard {...cardProps} strategy="safe" managerPredictions={predictions} showManagerPredictions={false} />);
+    expect(screen.queryByText('$40')).toBeNull();
+    expect(screen.queryByText(/Predicted bid \$40/)).toBeNull();
+    expect(screen.queryByRole('button', { name: /bid predictions/i })).toBeNull();
+    rerender(<WaiverPlayerCard {...cardProps} strategy="safe" managerPredictions={predictions} showManagerPredictions />);
+    expect(screen.getByText((_text, element) => element?.textContent === 'Predicted bid $40')).toBeTruthy();
+  });
+
+  it('keeps rostered and unrostered cards at the same collapsed density without an arrow icon', () => {
+    const { rerender } = render(<WaiverPlayerCard {...cardProps} strategy="safe" />);
+    const available = screen.getByRole('button', { name: /Test Runner, suggested bid/i });
+    expect(available.className).toContain('min-h-20');
+    expect(available.querySelector('svg')).toBeNull();
+    rerender(<WaiverPlayerCard {...cardProps} strategy="safe" owner={{ rosterId: 9, ownerName: 'Other' }} />);
+    const rostered = screen.getByRole('button', { name: /rostered by another team/i });
+    expect(rostered.className).toContain('min-h-20');
+    expect(rostered.querySelector('svg')).toBeNull();
   });
 
 });

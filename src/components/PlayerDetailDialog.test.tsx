@@ -35,8 +35,9 @@ describe('PlayerDetailDialog', () => {
     expect(within(dialog).queryByText('FantasyCalc · RB #7')).toBeNull();
     expect(within(dialog).getByText('Winning Team')).toBeTruthy();
     expect(within(dialog).getByText('Competing Team')).toBeTruthy();
-    expect(within(dialog).getByText('Week 2 · Won · canonical waiver event')).toBeTruthy();
-    expect(within(dialog).getByText('Week 2 · Lost · canonical waiver event')).toBeTruthy();
+    expect(within(dialog).getByText('Week 2 · Won')).toBeTruthy();
+    expect(within(dialog).getByText('Week 2 · Lost')).toBeTruthy();
+    expect(within(dialog).queryByText(/canonical/i)).toBeNull();
     expect(within(dialog).getByRole('region', { name: 'Winning bids' })).toBeTruthy();
     expect(within(dialog).getByRole('region', { name: 'Other bids' })).toBeTruthy();
   });
@@ -72,4 +73,25 @@ describe('PlayerDetailDialog', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(document.activeElement).toBe(opener);
   });
+  it('merges status and injury, exposes projection provenance, and uses collapsible empty states', () => {
+    render(<PlayerDetailDialog open onClose={vi.fn()} data={{
+      ...data,
+      status: 'Active',
+      injuryStatus: 'Questionable',
+      nextWeek: 7,
+      nextWeekPoints: 13.4,
+      byeWeek: 8,
+      history: [],
+    }} />);
+    const dialog = screen.getByRole('dialog', { name: 'Detail Player' });
+    expect(within(dialog).getByText('Status: Questionable')).toBeTruthy();
+    expect(within(dialog).queryByText(/Injury:/)).toBeNull();
+    expect(within(dialog).getByText('Bye Week 8')).toBeTruthy();
+    expect(within(dialog).getByText('Week 7: 13.4 projected pts')).toBeTruthy();
+    expect(within(dialog).getByText('Sleeper weekly projection')).toBeTruthy();
+    expect(within(dialog).getByText('Bidding history · None')).toBeTruthy();
+    expect(within(dialog).getByText('None')).toBeTruthy();
+    expect(within(dialog).queryByText('Free agent context')).toBeNull();
+  });
+
 });

@@ -5,10 +5,13 @@ import { orderTeamProjections, type HistoricalRank, type TeamProjection } from '
 import { filterTeamsByEliminatedVisibility } from '../logic/teamVisibility';
 import { getTeamPositionGroups } from '../logic/teamPositionGroups';
 import { useAppStore } from '../store';
+import { orderTeamsByValue } from '../logic/teamValueOrder';
 import {
   EliminatedTeamsVisibilityToggle,
   PositionGroupBreakdown,
+  PositionValueBreakdown,
   TeamStandingDetails,
+  TeamValueStandingDetails,
 } from './TeamsPage';
 
 describe('PositionGroupBreakdown', () => {
@@ -305,5 +308,29 @@ describe('Teams current standings', () => {
     expect(screen.getByText('Eliminated')).toBeTruthy();
     expect(screen.queryByTestId('current-team-standing')).toBeNull();
     expect(screen.queryByText(/#29\/32/)).toBeNull();
+  });
+});
+
+
+describe('Teams Value mode', () => {
+  it('shows summed Max VORP dollars with an active-only rank', () => {
+    render(<TeamValueStandingDetails team={projectedTeam} value={{ rosterId: 29, total: 94, matched: 8, missing: 1, playerCount: 9, rank: 26, outOf: 26 }} />);
+    expect(screen.getByText('value #26/26 · $94')).toBeTruthy();
+  });
+
+  it('keeps eliminated teams last and excludes their huge value from ordering', () => {
+    const second = { ...projectedTeam, rosterId: 30 };
+    const rankings = new Map([
+      [29, { rosterId: 29, total: 10, matched: 1, missing: 0, playerCount: 1, rank: 2, outOf: 2 }],
+      [30, { rosterId: 30, total: 20, matched: 1, missing: 0, playerCount: 1, rank: 1, outOf: 2 }],
+    ]);
+    expect(orderTeamsByValue([eliminatedTeam, projectedTeam, second], rankings).map((team) => team.rosterId)).toEqual([30, 29, 3]);
+  });
+
+  it('renders exclusive position dollars and N/D ranks', () => {
+    render(<PositionValueBreakdown eliminated={false} groups={[{ position: 'RB', total: 42, rank: 2, outOf: 4 }]} />);
+    expect(screen.getByText('RB')).toBeTruthy();
+    expect(screen.getByText('$42')).toBeTruthy();
+    expect(screen.getByText('#2/4')).toBeTruthy();
   });
 });

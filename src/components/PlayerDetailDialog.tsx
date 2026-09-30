@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import type { CanonicalBidEvent } from '../logic';
 import type { ManagerDetailData } from '../logic/managerDetails';
-import { orderManagerPredictions, type ManagerPredictionDisplay } from '../logic/managerPredictionDisplay';
+import { isEligibleBuyerPrediction, orderManagerPredictions, type ManagerPredictionDisplay } from '../logic/managerPredictionDisplay';
 import { formatDisplayCurrency } from '../logic/displayCurrency';
 import { WaiverManagerPredictions } from './ManagerBiddingProfiles';
 
@@ -15,6 +15,9 @@ export interface PlayerDetailData {
   age?: number | null;
   status?: string | null;
   injuryStatus?: string | null;
+  nextWeek?: number | null;
+  nextWeekPoints?: number | null;
+  byeWeek?: number | null;
   sourceLabel: string;
   /** Native label and preformatted display for this source metric (never inferred as currency). */
   valueLabel: string;
@@ -45,6 +48,8 @@ export function PlayerDetailDialog({ open, onClose, data }: { open: boolean; onC
   const otherBidGroups = groupedHistory.map((events) => events.filter((event) => event.outcome === 'legitimate-loss')).filter((events) => events.length > 0);
   const orderedPredictions = orderManagerPredictions(data.managerPredictions ?? []);
   const supportsPrediction = !data.owned && typeof data.suggestedBid === 'number' && Number.isFinite(data.suggestedBid) && data.suggestedBid > 0;
+  const predictedBid = orderedPredictions.find(isEligibleBuyerPrediction)?.predictedBid ?? null;
+  const playerStatus = data.injuryStatus || data.status || 'Unavailable';
   const closeDialog = useCallback(() => onClose(), [onClose]);
 
   useEffect(() => {
@@ -73,7 +78,7 @@ export function PlayerDetailDialog({ open, onClose, data }: { open: boolean; onC
     <div key={event.transactionId} className="flex items-start justify-between gap-3 rounded-lg bg-[#121735] p-3 text-xs">
       <div className="min-w-0">
         <div className="truncate font-semibold text-[#f0f0ff]">{managerLabel(event)}</div>
-        <div className="mt-0.5 text-[10px] text-[#9ca3c7]">Week {event.decisionWeek} · {event.outcome === 'won' ? 'Won' : 'Lost'} · canonical waiver event</div>
+        <div className="mt-0.5 text-[10px] text-[#9ca3c7]">Week {event.decisionWeek} · {event.outcome === 'won' ? 'Won' : 'Lost'}</div>
       </div>
       <span className="shrink-0 font-['Space_Mono'] text-sm font-bold text-[#f59e0b]">{formatDisplayCurrency(event.actualBid)}</span>
     </div>
@@ -100,19 +105,19 @@ export function PlayerDetailDialog({ open, onClose, data }: { open: boolean; onC
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <section aria-label="Player profile" className="grid grid-cols-2 gap-2 pb-4 text-xs">
             <div className="min-w-0 rounded-lg bg-[#121735] p-3"><div className="text-[10px] uppercase tracking-wider text-[#6b6e99]">{data.valueLabel}</div><div className="mt-1 truncate font-['Space_Mono'] text-lg font-bold text-[#a5b4fc]">{data.valueDisplay}</div><div className="mt-1 text-[10px] text-[#6b6e99]">{data.sourceLabel}{data.positionRank != null ? ` · ${data.position} #${data.positionRank}` : ''}</div></div>
-            <div className="min-w-0 rounded-lg bg-[#121735] p-3"><div className="text-[10px] uppercase tracking-wider text-[#6b6e99]">Profile</div><div className="mt-1 text-[#f0f0ff]">Age {data.age ?? 'unavailable'}</div><div className="mt-1 text-[#9ca3c7]">Status: {data.status || 'Unavailable'}</div><div className="mt-1 text-[#9ca3c7]">Injury: {data.injuryStatus || 'None reported'}</div></div>
+            <div className="min-w-0 rounded-lg bg-[#121735] p-3"><div className="text-[10px] uppercase tracking-wider text-[#6b6e99]">Profile</div><div className="mt-1 text-[#f0f0ff]">Age {data.age ?? 'unavailable'}</div><div className="mt-1 text-[#9ca3c7]">Status: {playerStatus}</div><div className="mt-1 text-[#9ca3c7]">{data.byeWeek != null ? `Bye Week ${data.byeWeek}` : 'Bye week unavailable'}</div><div className="mt-1 text-[#9ca3c7]">{data.nextWeek != null ? `Week ${data.nextWeek}: ${data.nextWeekPoints != null ? `${data.nextWeekPoints.toFixed(1)} projected pts` : 'projection unavailable'}` : 'Next-week projection unavailable'}</div>{data.nextWeek != null && <div className="mt-1 text-[9px] text-[#6b6e99]">Sleeper weekly projection</div>}</div>
           </section>
 
           <section className="rounded-lg border border-[#20264d] p-3" aria-label={data.owned ? 'Roster status' : 'Acquisition context'}>
-            {data.owned ? <><h3 className="text-xs font-semibold uppercase tracking-wider text-[#10b981]">Owned / rostered</h3><p className="mt-1 text-xs text-[#9ca3c7]">{data.ownerLabel ?? 'This player is currently rostered.'} Acquisition impact is not calculated for owned players.</p></> : <><h3 className="text-xs font-semibold uppercase tracking-wider text-[#f59e0b]">Free agent context</h3><p className="mt-2 text-xs text-[#9ca3c7]">Suggested bid <strong className="font-['Space_Mono'] text-[#f0f0ff]">{formatDisplayCurrency(data.suggestedBid, 'Unavailable')}</strong></p></>}
+            {data.owned ? <><h3 className="text-xs font-semibold uppercase tracking-wider text-[#10b981]">Owned / rostered</h3><p className="mt-1 text-xs text-[#9ca3c7]">{data.ownerLabel ?? 'This player is currently rostered.'} Acquisition impact is not calculated for owned players.</p></> : <div className="grid grid-cols-2 gap-2"><div><div className="text-[10px] uppercase tracking-wider text-[#6b6e99]">Suggested</div><strong className="mt-1 block font-['Space_Mono'] text-lg text-[#f59e0b]">{formatDisplayCurrency(data.suggestedBid, 'Unavailable')}</strong></div><div><div className="text-[10px] uppercase tracking-wider text-[#6b6e99]">Predicted</div><strong className="mt-1 block font-['Space_Mono'] text-lg text-[#a5b4fc]">{formatDisplayCurrency(predictedBid, '—')}</strong></div></div>}
           </section>
 
-          {!data.owned && <section className="mt-4" aria-labelledby={`${titleId}-predictions`}><h3 id={`${titleId}-predictions`} className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#f0f0ff]">Predicted Bidding</h3>{supportsPrediction && orderedPredictions.length > 0 ? <WaiverManagerPredictions predictions={orderedPredictions} detailsByRosterId={data.managerDetails} getPlayerName={data.getPlayerName ?? (() => 'Unknown player')} /> : <p className="rounded-lg bg-[#121735] p-3 text-xs text-[#9ca3c7]">{supportsPrediction ? 'No supported current manager prediction is available.' : 'Predicted bidding is unavailable for a $0 or unsupported acquisition value.'}</p>}</section>}
+          {!data.owned && <details className="mt-4 rounded-lg border border-[#20264d] p-3"><summary className="cursor-pointer text-xs font-semibold uppercase tracking-wider text-[#f0f0ff]">Predicted bidding</summary><div className="mt-3">{supportsPrediction && orderedPredictions.length > 0 ? <WaiverManagerPredictions predictions={orderedPredictions} detailsByRosterId={data.managerDetails} getPlayerName={data.getPlayerName ?? (() => 'Unknown player')} /> : <p className="rounded-lg bg-[#121735] p-3 text-xs text-[#9ca3c7]">{supportsPrediction ? 'No supported current manager prediction is available.' : 'Predicted bidding is unavailable for a $0 or unsupported acquisition value.'}</p>}</div></details>}
 
-          <section className="mt-4" aria-labelledby={`${titleId}-history`}>
-            <h3 id={`${titleId}-history`} className="text-xs font-semibold uppercase tracking-wider text-[#f0f0ff]">Bidding History</h3>
-            {data.history.length === 0 ? <p className="mt-2 rounded-lg bg-[#121735] p-3 text-xs text-[#9ca3c7]">No canonical waiver history is available for this player in the loaded league weeks.</p> : <div className="mt-2 space-y-4">{winningGroups.length > 0 && <section aria-label="Winning bids"><h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#10b981]">Winning bids</h4><div className="space-y-3">{winningGroups.map((events) => <div key={events[0].batchKey} aria-label={`Week ${events[0].decisionWeek} waiver event`} className="space-y-2">{events.map(renderBid)}</div>)}</div></section>}{otherBidGroups.length > 0 && <section aria-label="Other bids"><h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#a5b4fc]">Other bids</h4><div className="space-y-3">{otherBidGroups.map((events) => <div key={events[0].batchKey} aria-label={`Week ${events[0].decisionWeek} waiver event`} className="space-y-2">{events.map(renderBid)}</div>)}</div></section>}</div>}
-          </section>
+          <details className="mt-4 rounded-lg border border-[#20264d] p-3">
+            <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wider text-[#f0f0ff]">Bidding history · {data.history.length || 'None'}</summary>
+            {data.history.length === 0 ? <p className="mt-3 rounded-lg bg-[#121735] p-3 text-xs text-[#9ca3c7]">None</p> : <div className="mt-3 space-y-4">{winningGroups.length > 0 && <section aria-label="Winning bids"><h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#10b981]">Winning bids</h4><div className="space-y-3">{winningGroups.map((events) => <div key={events[0].batchKey} aria-label={`Week ${events[0].decisionWeek} waiver event`} className="space-y-2">{events.map(renderBid)}</div>)}</div></section>}{otherBidGroups.length > 0 && <section aria-label="Other bids"><h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#a5b4fc]">Other bids</h4><div className="space-y-3">{otherBidGroups.map((events) => <div key={events[0].batchKey} aria-label={`Week ${events[0].decisionWeek} waiver event`} className="space-y-2">{events.map(renderBid)}</div>)}</div></section>}</div>}
+          </details>
         </div>
       </div>
     </div>, document.body,

@@ -17,6 +17,14 @@ export interface RankedRosterValue extends RosterValueSummary {
   outOf: number;
 }
 
+
+export interface RosterPositionValueRank {
+  position: string;
+  total: number;
+  rank: number;
+  outOf: number;
+}
+
 export interface SelectedRosterValueDisplay extends RosterValueSummary {
   eliminated: boolean;
   rank: number | null;
@@ -151,4 +159,52 @@ export function buildSelectedRosterValueDisplay(
     outOf: activeRosterIds.size,
     leagueHigh,
   };
+}
+
+
+/**
+ * Build exclusive native-position buckets for active rosters. A player contributes to exactly
+ * one bucket from the same ROS projection used by Max VORP, so FLEX/SUPER_FLEX lineup
+ * eligibility can never double-count them. Empty modeled buckets are honest $0 totals.
+ */
+export function rankActiveRosterPositionValues(
+  rosters: readonly Roster[],
+  activeRosterIds: ReadonlySet<number>,
+  values: ReadonlyMap<string, number>,
+  projections: ReadonlyMap<string, RosPlayerProjection>,
+): Map<number, RosterPositionValueRank[]> {
+  const positions = [...new Set([...projections.values()]
+    .map((projection) => projection.position)
+    .filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const totalsByRoster = new Map<number, Map<string, number>>();
+  for (const roster of rosters) {
+    if (!activeRosterIds.has(roster.roster_id)) continue;
+    const totals = new Map(positions.map((position) => [position, 0]));
+    for (const playerId of collectRosterPlayerIds(roster)) {
+      const projection = projections.get(playerId);
+      const value = values.get(playerId);
+      if (!projection?.position || value == null || !Number.isFinite(value)) continue;
+      totals.set(projection.position, (totals.get(projection.position) ?? 0) + value);
+    }
+    totalsByRoster.set(roster.roster_id, totals);
+  }
+
+  const rowsByRoster = new Map<number, RosterPositionValueRank[]>();
+  for (const position of positions) {
+    const sorted = [...totalsByRoster].map(([rosterId, totals]) => ({
+      rosterId,
+      total: totals.get(position) ?? 0,
+    })).sort((a, b) => b.total - a.total || a.rosterId - b.rosterId);
+    let previousTotal: number | null = null;
+    let previousRank = 0;
+    sorted.forEach((row, index) => {
+      const rank = previousTotal === row.total ? previousRank : index + 1;
+      previousTotal = row.total;
+      previousRank = rank;
+      const rosterRows = rowsByRoster.get(row.rosterId) ?? [];
+      rosterRows.push({ position, total: row.total, rank, outOf: activeRosterIds.size });
+      rowsByRoster.set(row.rosterId, rosterRows);
+    });
+  }
+  return rowsByRoster;
 }
