@@ -36,12 +36,12 @@ describe('owner-facing bidding analysis presentation', () => {
       managerWinRows: { length: 50 },
       sampleWinner: { label: 'Legacy Aggressive' },
       seriousSampleWinner: { label: 'Legacy Aggressive' },
-      robustLeaders: ['Legacy Aggressive', 'Legacy Aggressive', 'Corrected Safe (PR #13)'],
+      robustLeaders: ['Legacy Aggressive', 'Legacy Aggressive', 'Legacy Aggressive'],
     });
-    expect(model.sampleWinner.metrics.mae).toBeCloseTo(22.0277778, 7);
-    expect(model.sampleWinner.interval?.[0]).toBeCloseTo(14.6663194, 7);
-    expect(model.sampleWinner.interval?.[1]).toBeCloseTo(30.4590278, 7);
-    expect(model.seriousSampleWinner.metrics.mae).toBeCloseTo(33.9761905, 7);
+    expect(model.sampleWinner.metrics.mae).toBeCloseTo(20.2361111, 7);
+    expect(model.sampleWinner.interval?.[0]).toBeCloseTo(12.4166667, 7);
+    expect(model.sampleWinner.interval?.[1]).toBeCloseTo(29.7659722, 7);
+    expect(model.seriousSampleWinner.metrics.mae).toBeCloseTo(33.452381, 7);
     expect(model.allMetrics.find((row) => row.label === 'Current-team VoRP')?.metrics.mae).toBeCloseTo(26.3464789, 7);
     expect(model.managerMetrics.mae).toBeCloseTo(28.7901235, 7);
     expect(model.managerWinMetrics.mae).toBeCloseTo(18.86, 7);

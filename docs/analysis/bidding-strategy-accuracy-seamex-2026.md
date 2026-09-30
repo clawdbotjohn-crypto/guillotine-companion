@@ -489,7 +489,7 @@ The five primary intrinsic strategies describe **target shape**—which players 
 
 ## Executive result
 
-Among 72 usable winning bids, **Legacy Aggressive** has the lowest in-sample MAE (22.0). After the predeclared token rule, **Legacy Aggressive** is lowest (34.0). Robust-filter leaders are ratio-gap flag removed: Legacy Aggressive; MAD flag removed: Legacy Aggressive; IQR flag removed: Corrected Safe (PR #13); the serious-bid leader is **not** stable across them. This is descriptive evidence from one 32-team league, 3 reconstructed decision weeks, not a universal strategy ranking. Do **not** change the production default from this study alone.
+Among 72 usable winning bids, **Legacy Aggressive** has the lowest in-sample MAE (20.2). After the predeclared token rule, **Legacy Aggressive** is lowest (33.5). Robust-filter leaders are ratio-gap flag removed: Legacy Aggressive; MAD flag removed: Legacy Aggressive; IQR flag removed: Legacy Aggressive; the serious-bid leader is stable across them. This is descriptive evidence from one 32-team league, 3 reconstructed decision weeks, not a universal strategy ranking. Do **not** change the production default from this study alone.
 
 The executable comparison preserves the five production-registry strategies, adds **Middle VORP only in this offline analysis**, and separately labels the corrected PR #13 Safe/Weeks curves versus legacy branch outputs. The P0 label “Weekly” is **not** silently mapped to VoRP; the naming audit below establishes why it is excluded as undefined. No production registry, default, or UI behavior is changed.
 
@@ -566,9 +566,9 @@ Production-registry values come from `buildWaiverBoard` using the shared impleme
 | Current-team VoRP | 355 | 26.3 | 17.2–35.9 | 15.0 | -9.5 | 0.78 | 31.8% | 0–80 |
 | Corrected Safe (PR #13) | 355 | 32.3 | 24.7–38.7 | 25.0 | 10.2 | 0.77 | 28.5% | 0–106 |
 | Corrected Weeks as Starter (PR #13) | 355 | 27.4 | 18.8–34.9 | 16.0 | -0.6 | 0.77 | 35.2% | 0–106 |
-| Legacy Safe | 355 | 38.1 | 31.9–43.8 | 33.0 | 14.8 | 0.69 | 16.3% | 0–105 |
-| Legacy Aggressive | 355 | 44.4 | 34.1–53.1 | 35.0 | 34.2 | 0.72 | 27.0% | 0–184 |
-| Legacy Weeks as Starter | 355 | 28.9 | 21.4–35.7 | 21.0 | 1.2 | 0.72 | 29.9% | 0–105 |
+| Legacy Safe | 355 | 30.8 | 23.2–37.4 | 23.0 | 4.7 | 0.74 | 29.0% | 0–106 |
+| Legacy Aggressive | 355 | 36.2 | 25.3–45.5 | 19.0 | 22.2 | 0.77 | 33.8% | 0–186 |
+| Legacy Weeks as Starter | 355 | 26.6 | 17.9–34.2 | 14.0 | -5.4 | 0.77 | 34.4% | 0–106 |
 
 ### Winning bids
 
@@ -579,9 +579,9 @@ Production-registry values come from `buildWaiverBoard` using the shared impleme
 | Current-team VoRP | 72 | 27.6 | 16.8–39.9 | 6.0 | -25.5 | 0.75 | 45.8% | 0–80 |
 | Corrected Safe (PR #13) | 72 | 23.5 | 14.3–34.5 | 6.0 | -15.4 | 0.75 | 50.0% | 0–106 |
 | Corrected Weeks as Starter (PR #13) | 72 | 24.7 | 14.9–36.3 | 5.0 | -22.8 | 0.75 | 52.8% | 0–106 |
-| Legacy Safe | 72 | 29.9 | 20.7–40.1 | 12.5 | -7.8 | 0.67 | 33.3% | 0–105 |
-| Legacy Aggressive | 72 | 22.0 | 14.7–30.5 | 6.5 | -5.4 | 0.69 | 48.6% | 0–184 |
-| Legacy Weeks as Starter | 72 | 26.5 | 16.8–37.7 | 10.0 | -20.1 | 0.69 | 43.1% | 0–105 |
+| Legacy Safe | 72 | 24.9 | 15.1–36.1 | 6.0 | -18.6 | 0.73 | 48.6% | 0–106 |
+| Legacy Aggressive | 72 | 20.2 | 12.4–29.8 | 6.0 | -14.7 | 0.76 | 52.8% | 0–186 |
+| Legacy Weeks as Starter | 72 | 26.5 | 16.3–38.0 | 5.5 | -25.3 | 0.76 | 50.0% | 0–106 |
 
 ### Serious/non-token bids
 
@@ -592,9 +592,9 @@ Production-registry values come from `buildWaiverBoard` using the shared impleme
 | Current-team VoRP | 240 | 34.1 | 22.4–45.3 | 20.0 | -18.5 | 0.65 | 19.2% | 0–80 |
 | Corrected Safe (PR #13) | 240 | 38.8 | 31.3–46.1 | 33.5 | 6.5 | 0.64 | 20.0% | 0–106 |
 | Corrected Weeks as Starter (PR #13) | 240 | 35.8 | 26.3–43.9 | 24.5 | -5.3 | 0.64 | 21.3% | 0–106 |
-| Legacy Safe | 240 | 41.9 | 35.4–48.6 | 38.0 | 7.5 | 0.57 | 15.8% | 0–105 |
-| Legacy Aggressive | 240 | 52.4 | 41.2–62.1 | 40.5 | 37.4 | 0.59 | 19.6% | 0–184 |
-| Legacy Weeks as Starter | 240 | 35.3 | 26.3–43.5 | 26.0 | -5.4 | 0.61 | 19.6% | 0–105 |
+| Legacy Safe | 240 | 37.6 | 29.7–45.1 | 30.0 | -0.5 | 0.60 | 18.8% | 0–106 |
+| Legacy Aggressive | 240 | 46.3 | 35.2–56.7 | 34.5 | 26.1 | 0.63 | 20.0% | 0–186 |
+| Legacy Weeks as Starter | 240 | 35.2 | 25.8–43.7 | 23.0 | -11.6 | 0.63 | 20.0% | 0–106 |
 
 ### Serious competitive clusters
 
@@ -605,19 +605,19 @@ Production-registry values come from `buildWaiverBoard` using the shared impleme
 | Current-team VoRP | 224 | 35.3 | 23.3–47.3 | 21.0 | -18.7 | 0.63 | 20.1% | 0–80 |
 | Corrected Safe (PR #13) | 224 | 40.3 | 32.4–47.8 | 36.0 | 7.7 | 0.61 | 20.1% | 0–106 |
 | Corrected Weeks as Starter (PR #13) | 224 | 37.0 | 27.3–45.7 | 28.5 | -4.4 | 0.61 | 21.9% | 0–106 |
-| Legacy Safe | 224 | 43.4 | 36.4–50.5 | 39.0 | 8.2 | 0.55 | 15.2% | 11–105 |
-| Legacy Aggressive | 224 | 54.6 | 43.1–65.7 | 45.0 | 40.7 | 0.57 | 19.6% | 2–184 |
-| Legacy Weeks as Starter | 224 | 36.5 | 27.2–45.2 | 27.5 | -4.7 | 0.59 | 19.2% | 1–105 |
+| Legacy Safe | 224 | 38.9 | 31.0–46.6 | 32.0 | 0.3 | 0.58 | 18.8% | 0–106 |
+| Legacy Aggressive | 224 | 48.3 | 36.2–59.7 | 37.5 | 29.1 | 0.61 | 20.5% | 0–186 |
+| Legacy Weeks as Starter | 224 | 36.4 | 26.6–45.4 | 24.0 | -11.1 | 0.61 | 20.5% | 0–106 |
 
 ## Sensitivity of winning-bid MAE
 
 | Sensitivity case | n wins | Max VORP MAE | Middle VORP MAE | Current-team VoRP MAE | Corrected Safe (PR #13) MAE | Corrected Weeks as Starter (PR #13) MAE | Legacy Safe MAE | Legacy Aggressive MAE | Legacy Weeks as Starter MAE |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| All usable winning bids | 72 | 26.5 | 32.2 | 27.6 | 23.5 | 24.7 | 29.9 | 22.0 | 26.5 |
-| Non-token winning bids | 42 | 44.1 | 54.4 | 45.9 | 38.1 | 41.3 | 43.2 | 34.0 | 43.1 |
-| Non-token, ratio-gap flag removed | 41 | 40.0 | 50.0 | 41.8 | 34.2 | 36.9 | 40.1 | 30.7 | 39.4 |
-| Non-token, MAD flag removed | 38 | 35.2 | 45.3 | 36.5 | 30.2 | 32.7 | 36.3 | 29.7 | 35.3 |
-| Non-token, IQR flag removed | 38 | 35.1 | 45.0 | 36.4 | 30.0 | 32.4 | 37.0 | 30.4 | 35.7 |
+| All usable winning bids | 72 | 26.5 | 32.2 | 27.6 | 23.5 | 24.7 | 24.9 | 20.2 | 26.5 |
+| Non-token winning bids | 42 | 44.1 | 54.4 | 45.9 | 38.1 | 41.3 | 40.7 | 33.5 | 44.5 |
+| Non-token, ratio-gap flag removed | 41 | 40.0 | 50.0 | 41.8 | 34.2 | 36.9 | 36.8 | 29.1 | 40.1 |
+| Non-token, MAD flag removed | 38 | 35.2 | 45.3 | 36.5 | 30.2 | 32.7 | 32.6 | 27.8 | 36.0 |
+| Non-token, IQR flag removed | 38 | 35.1 | 45.0 | 36.4 | 30.0 | 32.4 | 32.8 | 27.8 | 35.9 |
 
 95% intervals are deterministic 2000-replicate cluster bootstraps (seed 20260927); resampling the player/batch cluster keeps correlated win/loss bids together. They quantify sampling variation in this observed set, not projection-history error.
 
@@ -630,9 +630,9 @@ Production-registry values come from `buildWaiverBoard` using the shared impleme
 | Current-team VoRP | 0.75 | 0–300 | 0–80 |
 | Corrected Safe (PR #13) | 0.75 | 0–300 | 0–106 |
 | Corrected Weeks as Starter (PR #13) | 0.75 | 0–300 | 0–106 |
-| Legacy Safe | 0.67 | 0–300 | 0–105 |
-| Legacy Aggressive | 0.69 | 0–300 | 0–184 |
-| Legacy Weeks as Starter | 0.69 | 0–300 | 0–105 |
+| Legacy Safe | 0.73 | 0–300 | 0–106 |
+| Legacy Aggressive | 0.76 | 0–300 | 0–186 |
+| Legacy Weeks as Starter | 0.76 | 0–300 | 0–106 |
 
 A serious-cluster prediction is “covered” when it falls inside that target's observed non-token bid range (minimum serious loss through winning bid).
 
@@ -643,9 +643,9 @@ A serious-cluster prediction is “covered” when it falls inside that target's
 | Current-team VoRP | 26 | 19 | 73.1% |
 | Corrected Safe (PR #13) | 26 | 15 | 57.7% |
 | Corrected Weeks as Starter (PR #13) | 26 | 17 | 65.4% |
-| Legacy Safe | 26 | 15 | 57.7% |
-| Legacy Aggressive | 26 | 14 | 53.8% |
-| Legacy Weeks as Starter | 26 | 20 | 76.9% |
+| Legacy Safe | 26 | 17 | 65.4% |
+| Legacy Aggressive | 26 | 16 | 61.5% |
+| Legacy Weeks as Starter | 26 | 18 | 69.2% |
 
 ## Normalized winning-bid error
 
@@ -656,8 +656,8 @@ A serious-cluster prediction is “covered” when it falls inside that target's
 | Current-team VoRP | 5.5% | 6.1% |
 | Corrected Safe (PR #13) | 4.7% | 5.1% |
 | Corrected Weeks as Starter (PR #13) | 4.9% | 5.4% |
-| Legacy Safe | 6.0% | 6.4% |
-| Legacy Aggressive | 4.4% | 4.7% |
+| Legacy Safe | 5.0% | 5.4% |
+| Legacy Aggressive | 4.0% | 4.5% |
 | Legacy Weeks as Starter | 5.3% | 5.8% |
 
 Pre-bid normalization is shown only because the ledger denominator is positive; reconstruction confidence remains visible above. It does not reinterpret intrinsic strategy values as manager-specific willingness.
@@ -667,16 +667,16 @@ Pre-bid normalization is shown only because the ledger denominator is positive; 
 | Dimension | Slice | n | Lowest MAE strategy (MAE) |
 | --- | --- | --- | --- |
 | decision week | W2 | 20 | Corrected Safe (PR #13) (27.0) |
-| decision week | W3 | 27 | Legacy Aggressive (22.9) |
-| decision week | W4 | 25 | Legacy Aggressive (13.7) |
-| position | QB | 8 | Legacy Aggressive (31.4) |
-| position | RB | 20 | Max VORP (33.6) |
+| decision week | W3 | 27 | Legacy Aggressive (21.2) |
+| decision week | W4 | 25 | Legacy Aggressive (13.8) |
+| position | QB | 8 | Legacy Aggressive (31.0) |
+| position | RB | 20 | Legacy Aggressive (32.3) |
 | position | TE | 12 | Corrected Weeks as Starter (PR #13) (10.2) |
-| position | WR | 32 | Legacy Aggressive (11.2) |
+| position | WR | 32 | Legacy Aggressive (11.5) |
 | Max-VORP target tier | bottom-quartile | 19 | Corrected Safe (PR #13) (7.0) |
 | Max-VORP target tier | middle-half | 36 | Max VORP (15.0) |
-| Max-VORP target tier | top-quartile | 17 | Legacy Aggressive (45.4) |
-| cap state | below-90%-prebid | 72 | Legacy Aggressive (22.0) |
+| Max-VORP target tier | top-quartile | 17 | Legacy Aggressive (45.0) |
+| cap state | below-90%-prebid | 72 | Legacy Aggressive (20.2) |
 
 Slices are descriptive and often tiny. Player tier is a deterministic within-decision-week quartile of target Max-VORP value; cap state means actual bid ≥90% of reconstructed pre-bid FAAB.
 
@@ -698,4 +698,4 @@ Because every underlying historical projection is reconstructed, these forecasts
 - Reconstructed snapshots were captured after their canonical cutoffs. Historical player ranks and values may differ from what managers saw. No current projection is substituted for an absent decision week.
 - Historical roster ownership is not required by these formulas for a known claimed target, but league settings are only observed current-season state. Active-team counts are formula-derived progression estimates.
 - One league, early season, correlated bids, and small slices mean strategy ordering can change with one extreme target. Bootstrap intervals do not repair systematic snapshot error.
-- Recommendation: keep production behavior unchanged. No strategy is a robust winner: **Legacy Aggressive** leads the serious-bid view, but another strategy leads at least one fixed outlier sensitivity. Collect exact Tuesday 8 PM captures and repeat across materially more weeks before drawing product conclusions.
+- Recommendation: keep production behavior unchanged. Use **Legacy Aggressive** only as a preregistered hypothesis, not a winner. Collect exact Tuesday 8 PM captures and repeat across materially more weeks before drawing product conclusions.
