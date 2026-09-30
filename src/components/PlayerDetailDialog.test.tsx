@@ -124,25 +124,61 @@ describe('PlayerDetailDialog', () => {
     expect(within(dialog).queryByText('Lineup pts')).toBeNull();
   });
 
-  it('merges status and injury, exposes projection provenance, and uses collapsible empty states', () => {
+  it('uses compact profile copy and renders empty history as static content', () => {
     render(<PlayerDetailDialog open onClose={vi.fn()} data={{
       ...data,
       status: 'Active',
       injuryStatus: 'Questionable',
-      nextWeek: 7,
+      nextWeek: 4,
       nextWeekPoints: 13.4,
+      projectionState: 'loaded',
       byeWeek: 8,
       history: [],
     }} />);
     const dialog = screen.getByRole('dialog', { name: 'Detail Player' });
+    expect(within(dialog).getByText('Age: 25')).toBeTruthy();
     expect(within(dialog).getByText('Status: Questionable')).toBeTruthy();
     expect(within(dialog).queryByText(/Injury:/)).toBeNull();
-    expect(within(dialog).getByText('Bye Week 8')).toBeTruthy();
-    expect(within(dialog).getByText('Week 7: 13.4 projected pts')).toBeTruthy();
-    expect(within(dialog).getByText('Sleeper weekly projection')).toBeTruthy();
-    expect(within(dialog).getByText('Bidding history · None')).toBeTruthy();
-    expect(within(dialog).getByText('None')).toBeTruthy();
+    expect(within(dialog).getByText('Bye: 8')).toBeTruthy();
+    expect(within(dialog).getByText('Proj.: 13.4 (W4)')).toBeTruthy();
+    expect(within(dialog).queryByText(/Sleeper weekly proj/i)).toBeNull();
+    expect(within(dialog).getByRole('region', { name: 'Bidding history' }).textContent).toContain('No bidding history.');
+    expect(within(dialog).queryByText('Bidding history · None')).toBeNull();
     expect(within(dialog).queryByText('Free agent context')).toBeNull();
+  });
+
+  it('shows loaded missing and numeric-zero projections as 0 while preserving loading and error states', () => {
+    const { rerender } = render(<PlayerDetailDialog open onClose={vi.fn()} data={{
+      ...data, nextWeek: 4, nextWeekPoints: null, projectionState: 'loaded',
+    }} />);
+    const dialog = screen.getByRole('dialog', { name: 'Detail Player' });
+    expect(within(dialog).getByText('Proj.: 0 (W4)')).toBeTruthy();
+
+    rerender(<PlayerDetailDialog open onClose={vi.fn()} data={{
+      ...data, nextWeek: 4, nextWeekPoints: 0, projectionState: 'loaded',
+    }} />);
+    expect(within(dialog).getByText('Proj.: 0 (W4)')).toBeTruthy();
+
+    rerender(<PlayerDetailDialog open onClose={vi.fn()} data={{
+      ...data, nextWeek: 4, nextWeekPoints: null, projectionState: 'loading',
+    }} />);
+    expect(within(dialog).getByText('Proj.: Loading… (W4)')).toBeTruthy();
+
+    rerender(<PlayerDetailDialog open onClose={vi.fn()} data={{
+      ...data, nextWeek: 4, nextWeekPoints: null, projectionState: 'error',
+    }} />);
+    expect(within(dialog).getByText('Proj.: Unavailable (W4)')).toBeTruthy();
+  });
+
+  it('opens filled bidding history by default and omits empty owned status', () => {
+    const { rerender } = render(<PlayerDetailDialog open onClose={vi.fn()} data={data} />);
+    const dialog = screen.getByRole('dialog', { name: 'Detail Player' });
+    const historySummary = within(dialog).getByText('Bidding history · 2');
+    expect((historySummary.closest('details') as HTMLDetailsElement).open).toBe(true);
+
+    rerender(<PlayerDetailDialog open onClose={vi.fn()} data={{ ...data, owned: true, ownerLabel: undefined }} />);
+    expect(within(dialog).queryByText('Owned / rostered')).toBeNull();
+    expect(within(dialog).queryByRole('region', { name: 'Roster status' })).toBeNull();
   });
 
 });

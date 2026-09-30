@@ -8,7 +8,7 @@ import {
 import {
   buildExternalRankingMap,
   getProjectionScoring,
-  getRestOfSeasonStartWeek,
+  getUpcomingPlayingWeek,
   sumRestOfSeasonProjections,
   type WaiverRankingSource,
 } from '../logic';
@@ -27,7 +27,7 @@ export function usePlayerValues({
   source: WaiverRankingSource;
 }) {
   const currentSeason = !!league && !!nflState && league.season === nflState.season;
-  const startWeek = currentSeason ? getRestOfSeasonStartWeek(nflState) : null;
+  const startWeek = getUpcomingPlayingWeek(league, nflState);
   const sleeperQuery = useRestOfSeasonProjectionWeeks(
     league?.season ?? null,
     startWeek,

@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import type { HubRosterRow } from '../logic/hubRoster';
 import { Card, PositionBadge } from './ui';
-import { PlayerDetailDialog, type PlayerDetailData } from './PlayerDetailDialog';
+import { PlayerDetailDialog, type PlayerDetailData, type PlayerProjectionState } from './PlayerDetailDialog';
 import { formatWholeDollars } from '../logic/displayCurrency';
 
-function projectionLabel(row: HubRosterRow): string {
-  return row.projection == null ? 'Projection unavailable' : `${row.projection.toFixed(1)} projected points`;
+function projectionLabel(row: HubRosterRow, state: PlayerProjectionState): string {
+  if (state === 'loading') return 'Projection loading';
+  if (state === 'error' || state === 'unavailable') return 'Projection unavailable';
+  const points = row.projection ?? 0;
+  return `${points === 0 ? '0' : points.toFixed(1)} projected points`;
 }
 
 function acquisitionLabel(row: HubRosterRow): string {
@@ -16,9 +19,10 @@ function acquisitionLabel(row: HubRosterRow): string {
   return 'Acquisition price unavailable';
 }
 
-function RosterPlayerRow({ row, value, onOpen }: {
+function RosterPlayerRow({ row, value, projectionState, onOpen }: {
   row: HubRosterRow;
   value: number | null;
+  projectionState: PlayerProjectionState;
   onOpen: () => void;
 }) {
   const status = row.injuryStatus || (row.status && row.status !== 'Active' ? row.status : null);
@@ -45,8 +49,12 @@ function RosterPlayerRow({ row, value, onOpen }: {
           </div>
         </div>
         <div className="shrink-0 text-right">
-          <div aria-label={projectionLabel(row)} className="font-['Space_Mono'] text-xs tabular-nums text-[#a5b4fc]">
-            {row.projection == null ? '— proj' : `${row.projection.toFixed(1)} proj`}
+          <div aria-label={projectionLabel(row, projectionState)} className="font-['Space_Mono'] text-xs tabular-nums text-[#a5b4fc]">
+            {projectionState === 'loading'
+              ? 'Loading…'
+              : projectionState === 'error' || projectionState === 'unavailable'
+                ? '— proj'
+                : `${row.projection == null || row.projection === 0 ? '0' : row.projection.toFixed(1)} proj`}
           </div>
           <div className="mt-0.5 font-['Space_Mono'] text-[10px] tabular-nums text-[#10b981]" aria-label={value == null || !Number.isFinite(value) ? 'Max VORP value unavailable' : `Max VORP value ${formatWholeDollars(value)}`}>
             Max VORP value {formatWholeDollars(value)}
@@ -74,12 +82,14 @@ export function HubRosterCard({
   optimized,
   values = new Map(),
   details = new Map(),
+  projectionState = 'loaded',
 }: {
   rows: HubRosterRow[];
   week: number | null;
   optimized: boolean;
   values?: ReadonlyMap<string, number | null>;
   details?: ReadonlyMap<string, PlayerDetailData>;
+  projectionState?: PlayerProjectionState;
 }) {
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const starters = rows.filter((row) => row.isStarter);
@@ -102,11 +112,11 @@ export function HubRosterCard({
           <div className="space-y-4">
             <section aria-labelledby="hub-starters-heading">
               <h3 id="hub-starters-heading" className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#a5b4fc]">Starters</h3>
-              <div className="space-y-1.5">{starters.map((row) => <RosterPlayerRow key={row.playerId} row={row} value={values.get(row.playerId) ?? null} onOpen={() => setSelectedPlayerId(row.playerId)} />)}</div>
+              <div className="space-y-1.5">{starters.map((row) => <RosterPlayerRow key={row.playerId} row={row} value={values.get(row.playerId) ?? null} projectionState={projectionState} onOpen={() => setSelectedPlayerId(row.playerId)} />)}</div>
             </section>
             <section aria-labelledby="hub-bench-heading">
               <h3 id="hub-bench-heading" className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#6b6e99]">Bench</h3>
-              <div className="space-y-1.5">{bench.map((row) => <RosterPlayerRow key={row.playerId} row={row} value={values.get(row.playerId) ?? null} onOpen={() => setSelectedPlayerId(row.playerId)} />)}</div>
+              <div className="space-y-1.5">{bench.map((row) => <RosterPlayerRow key={row.playerId} row={row} value={values.get(row.playerId) ?? null} projectionState={projectionState} onOpen={() => setSelectedPlayerId(row.playerId)} />)}</div>
             </section>
           </div>
         )}

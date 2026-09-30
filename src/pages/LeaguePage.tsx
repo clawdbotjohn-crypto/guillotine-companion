@@ -11,7 +11,7 @@ import {
   getCompletedLeagueWeek,
   extractBids,
   getProjectionScoring,
-  getRestOfSeasonStartWeek,
+  getUpcomingPlayingWeek,
   projectAllTeams,
 } from '../logic';
 import { Card, Skeleton, StatusBadge, PositionBadge } from '../components/ui';
@@ -33,9 +33,7 @@ export function LeaguePage() {
   const { data: matchups, isLoading: matchupsLoading } = useAllMatchups(leagueId, completedWeek);
   const { data: transactions } = useAllTransactions(leagueId, 18);
   const { data: leagueHistory, isLoading: historyLoading } = useLeagueHistory(rootLeagueId);
-  const projectionWeek = league && nflStateQuery.data && league.season === nflStateQuery.data.season
-    ? getRestOfSeasonStartWeek(nflStateQuery.data)
-    : null;
+  const projectionWeek = getUpcomingPlayingWeek(league, nflStateQuery.data);
   const weeklyProjectionQuery = useWeeklyProjections(
     league?.season ?? null,
     projectionWeek,

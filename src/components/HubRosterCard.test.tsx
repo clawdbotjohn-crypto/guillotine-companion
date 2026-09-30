@@ -84,7 +84,8 @@ describe('HubRosterCard', () => {
     expect(drafted.getByText('Team unavailable')).toBeTruthy();
     expect(drafted.getByText('Bye unavailable')).toBeTruthy();
     expect(drafted.getByText('Injured Reserve')).toBeTruthy();
-    expect(drafted.getByLabelText('Projection unavailable')).toBeTruthy();
+    expect(drafted.getByLabelText('0 projected points')).toBeTruthy();
+    expect(drafted.getByText('0 proj')).toBeTruthy();
     expect(drafted.getByLabelText('Drafted').textContent).toBe('Drafted');
     expect(drafted.getByText('Max VORP value —')).toBeTruthy();
   });
@@ -107,6 +108,18 @@ describe('HubRosterCard', () => {
     expect(screen.getByText('Max VORP value')).toBeTruthy();
     expect(screen.getByText('$77')).toBeTruthy();
     expect(screen.getByText('Sleeper ROS · league-calibrated · RB #5')).toBeTruthy();
+  });
+
+  it('does not turn projection loading or errors into numeric zero', () => {
+    const row = rosterRow({ playerId: 'pending', name: 'Pending Player' });
+    const { rerender } = render(<HubRosterCard rows={[row]} week={4} optimized projectionState="loading" />);
+    const pending = within(screen.getByTestId('roster-player-pending'));
+    expect(pending.getByLabelText('Projection loading')).toBeTruthy();
+    expect(pending.queryByText('0 proj')).toBeNull();
+
+    rerender(<HubRosterCard rows={[row]} week={4} optimized projectionState="error" />);
+    expect(pending.getByLabelText('Projection unavailable')).toBeTruthy();
+    expect(pending.queryByText('0 proj')).toBeNull();
   });
 
   it('labels the honest lineup fallback when optimization data is unavailable', () => {

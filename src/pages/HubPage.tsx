@@ -26,8 +26,7 @@ import {
   extractBids,
   formatProjectedCurrentRank,
   getProjectionScoring,
-  getRestOfSeasonStartWeek,
-  getHubByeWindowWeek,
+  getUpcomingPlayingWeek,
   projectAllTeams,
   classifyCanonicalBidEvents,
   getActiveRosterIds,
@@ -46,7 +45,7 @@ import { Calendar } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { formatHistoricalWeekRank } from '../logic/rankFormat';
 import { usePlayerValues } from '../hooks/usePlayerValues';
-import type { PlayerDetailData } from '../components/PlayerDetailDialog';
+import type { PlayerDetailData, PlayerProjectionState } from '../components/PlayerDetailDialog';
 import { formatWholeDollars } from '../logic/displayCurrency';
 import { managerName } from '../logic/managerPredictionDisplay';
 import { buildLeagueContext, buildMaxVorpCalibration } from '../logic/waivers';
@@ -135,9 +134,7 @@ export function HubPage() {
   const { data: transactions } = useAllTransactions(leagueId, 18);
   const { data: draftPicks } = useDraftPicks(league?.draft_id ?? null);
   const { data: leagueHistory, isLoading: historyLoading } = useLeagueHistory(rootLeagueId);
-  const projectionWeek = league && nflStateQuery.data && league.season === nflStateQuery.data.season
-    ? getRestOfSeasonStartWeek(nflStateQuery.data)
-    : null;
+  const projectionWeek = getUpcomingPlayingWeek(league, nflStateQuery.data);
   const weeklyProjectionQuery = useWeeklyProjections(
     league?.season ?? null,
     projectionWeek,
@@ -249,6 +246,13 @@ export function HubPage() {
           : !weeklyScoredPlayers?.size
             ? 'Sleeper has no usable projections for this scoring week.'
             : undefined;
+  const playerProjectionState: PlayerProjectionState = projectionLoading
+    ? 'loading'
+    : nflStateQuery.isError || weeklyProjectionQuery.isError
+      ? 'error'
+      : projectionWeek == null
+        ? 'unavailable'
+        : 'loaded';
   const projectedGroupRankings = computeProjectedLineupGroupRanks(
     projections,
     weeklyScoredPlayers,
@@ -303,6 +307,10 @@ export function HubPage() {
       age: player?.age,
       status: player?.status ?? row.status,
       injuryStatus: row.injuryStatus,
+      nextWeek: projectionWeek,
+      nextWeekPoints: row.projection,
+      projectionState: playerProjectionState,
+      byeWeek: row.byeWeek,
       sourceLabel: 'Sleeper ROS · league-calibrated',
       valueLabel: 'Max VORP value',
       valueDisplay: formatWholeDollars(rosterValueMap.get(row.playerId) ?? null, 'Unavailable'),
@@ -314,10 +322,7 @@ export function HubPage() {
       history: canonicalHistoryByPlayer.get(row.playerId) ?? [],
     }];
   }));
-  const byeWindowWeek = league && nflStateQuery.data?.season === league.season
-    ? getHubByeWindowWeek(nflStateQuery.data)
-    : null;
-  const byeWarnings = buildUpcomingByeWarnings(rosterRows, byeWindowWeek);
+  const byeWarnings = buildUpcomingByeWarnings(rosterRows, projectionWeek);
   const totalBudget = league?.settings?.waiver_budget ?? 1000;
   const budgetUsed = myRoster?.settings?.waiver_budget_used ?? 0;
   const budgetRemaining = totalBudget - budgetUsed;
@@ -440,6 +445,7 @@ export function HubPage() {
           optimized={rosterIsOptimized}
           values={rosterValueMap}
           details={playerDetails}
+          projectionState={playerProjectionState}
         />
 
         {/* Recent bids (unlikely pre-season but safe to show) */}
@@ -573,6 +579,7 @@ export function HubPage() {
         optimized={rosterIsOptimized}
         values={rosterValueMap}
         details={playerDetails}
+        projectionState={playerProjectionState}
       />
 
       {/* Week-by-week scores */}

@@ -24,7 +24,7 @@ import {
   getActiveRosterIds,
   getCompletedLeagueWeek,
   getProjectionScoring,
-  getRestOfSeasonStartWeek,
+  getUpcomingPlayingWeek,
   projectAllTeams,
   computePositionGroupRanks,
   computeProjectedLineupGroupRanks,
@@ -193,9 +193,7 @@ export function TeamsPage() {
   const completedWeek = getCompletedLeagueWeek(league, nflStateQuery.data);
   const { data: matchups, isLoading: matchupsLoading } = useAllMatchups(leagueId, completedWeek);
   const { data: leagueHistory, isLoading: historyLoading } = useLeagueHistory(rootLeagueId);
-  const projectionWeek = league && nflStateQuery.data && league.season === nflStateQuery.data.season
-    ? getRestOfSeasonStartWeek(nflStateQuery.data)
-    : null;
+  const projectionWeek = getUpcomingPlayingWeek(league, nflStateQuery.data);
   const weeklyProjectionQuery = useWeeklyProjections(
     league?.season ?? null,
     projectionWeek,

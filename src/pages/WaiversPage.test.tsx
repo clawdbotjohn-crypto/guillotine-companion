@@ -20,7 +20,7 @@ const waiverRow: WaiverPlayerRow = {
   ], predictedWinningBid: 61,
 };
 
-const cardProps = { row: waiverRow, remainingFaab: 100, nflTeam: 'SEA', weeklyPoints: 13.4, weeklyRank: 16, byeWeek: 8, currentWeek: 6 };
+const cardProps = { row: waiverRow, remainingFaab: 100, nflTeam: 'SEA', weeklyPoints: 13.4, weeklyRank: 16, byeWeek: 8, playingWeek: 7 };
 
 describe('waiver controls', () => {
   it('uses a compact accessible source selector with source help behind a disclosure', () => {
@@ -90,6 +90,21 @@ describe('waiver controls', () => {
     expect(screen.queryByText('Free agent context')).toBeNull();
   });
 
+  it('uses the upcoming playing week directly and treats a loaded missing projection as 0', () => {
+    render(<WaiverPlayerCard
+      {...cardProps}
+      playingWeek={4}
+      weeklyPoints={undefined}
+      weeklyRank={undefined}
+      projectionState="loaded"
+      strategy="safe"
+    />);
+    expect(screen.getByText('W4 0 pts · Bye W8')).toBeTruthy();
+    expect(screen.queryByText(/W5/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Test Runner, suggested bid/i }));
+    expect(within(screen.getByRole('dialog', { name: 'Test Runner' })).getByText('Proj.: 0 (W4)')).toBeTruthy();
+  });
+
   it('opens details for a $0 player without a prediction', () => {
     const zeroRow: WaiverPlayerRow = {
       ...waiverRow,
@@ -121,7 +136,7 @@ describe('waiver controls', () => {
     expect(within(dialog).getByText(/Predicted bidding/i)).toBeTruthy();
     expect(within(dialog).getByText('Hidden Manager')).toBeTruthy();
     expect(within(dialog).getAllByText('$40')).toHaveLength(2);
-    expect(within(dialog).getByText(/Bidding history/i)).toBeTruthy();
+    expect(within(dialog).getByRole('heading', { name: 'Bidding history' })).toBeTruthy();
   });
 
   it('preserves full accessible manager prediction rows and detail access beside player details', () => {

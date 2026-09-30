@@ -5,7 +5,7 @@ import { Button, Card, Skeleton } from '../components/ui';
 import { FaabOverBudgetWarning } from '../components/FaabOverBudgetWarning';
 import { WaiverManagerPredictions } from '../components/ManagerBiddingProfiles';
 import { buildManagerDetailData, type ManagerDetailData } from '../logic/managerDetails';
-import { PlayerDetailDialog } from '../components/PlayerDetailDialog';
+import { PlayerDetailDialog, type PlayerProjectionState } from '../components/PlayerDetailDialog';
 import { buildManagerPredictions, isEligibleBuyerPrediction, managerName, orderManagerPredictions, type ManagerPredictionDisplay } from '../logic/managerPredictionDisplay';
 import { formatDisplayCurrency } from '../logic/displayCurrency';
 import { ContextDisclosure } from '../components/ContextDisclosure';
@@ -206,7 +206,8 @@ export function WaiverPlayerCard({
   weeklyPoints,
   weeklyRank,
   byeWeek,
-  currentWeek,
+  playingWeek,
+  projectionState = 'loaded',
   owner,
   selectedRosterId,
   managerPredictions = [],
@@ -229,7 +230,8 @@ export function WaiverPlayerCard({
   weeklyPoints?: number;
   weeklyRank?: number;
   byeWeek?: number | null;
-  currentWeek?: number | null;
+  playingWeek?: number | null;
+  projectionState?: PlayerProjectionState;
   owner?: RosteredPlayerOwner;
   selectedRosterId?: number | null;
   managerPredictions?: ManagerPredictionDisplay[];
@@ -246,10 +248,19 @@ export function WaiverPlayerCard({
   const [predictionsOpen, setPredictionsOpen] = useState(false);
   const suggestion = row.suggestions.find((item) => item.strategy === strategy);
   const value = suggestion?.value ?? 0;
-  const projectionWeek = currentWeek == null ? '—' : currentWeek + 1;
-  const weeklyMeta = weeklyPoints != null
-    ? `W${projectionWeek} ${weeklyPoints.toFixed(1)} pts${byeWeek != null ? ` · Bye W${byeWeek}` : ''}`
-    : byeWeek != null ? `Bye W${byeWeek}` : null;
+  const projectionWeek = playingWeek == null ? '—' : playingWeek;
+  const weeklyProjection = projectionState === 'loading'
+    ? 'Loading…'
+    : projectionState === 'error' || projectionState === 'unavailable'
+      ? 'Unavailable'
+      : `${weeklyPoints == null || weeklyPoints === 0 ? '0' : weeklyPoints.toFixed(1)} pts`;
+  const weeklyMeta = playingWeek != null
+    ? `W${projectionWeek} ${weeklyProjection}${byeWeek != null ? ` · Bye W${byeWeek}` : ''}`
+    : projectionState === 'loading'
+      ? 'Projection loading…'
+      : projectionState === 'error'
+        ? 'Projection unavailable'
+        : byeWeek != null ? `Bye W${byeWeek}` : null;
   const selectedTeamOwner = owner?.rosterId === selectedRosterId;
   const sourceMetric = formatWaiverSourceMetric(row, rankingSource);
   const orderedPredictions = orderManagerPredictions(managerPredictions);
@@ -298,7 +309,7 @@ export function WaiverPlayerCard({
                 {owner && <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${selectedTeamOwner ? 'bg-[#10b981]/15 text-[#6ee7b7]' : 'bg-[#20243f] text-[#8b8eac]'}`}>Rostered</span>}
               </div>
               <div className="mt-0.5 truncate text-[10px] text-[#6b6e99]">
-                {row.position} #{row.posRank} · {nflTeam || 'FA'}{weeklyRank != null ? ` · W${projectionWeek} #${weeklyRank}` : ''}
+                {row.position} #{row.posRank} · {nflTeam || 'FA'}{playingWeek != null && weeklyRank != null ? ` · W${projectionWeek} #${weeklyRank}` : ''}
               </div>
               {weeklyMeta && <div className="mt-1 truncate text-[10px] text-[#8b8eac]">{weeklyMeta}</div>}
             </div>
@@ -343,8 +354,9 @@ export function WaiverPlayerCard({
           age,
           status,
           injuryStatus,
-          nextWeek: currentWeek == null ? null : currentWeek + 1,
+          nextWeek: playingWeek ?? null,
           nextWeekPoints: weeklyPoints ?? null,
+          projectionState,
           byeWeek: byeWeek ?? null,
           sourceLabel,
           valueLabel: sourceMetric.label,
@@ -697,6 +709,13 @@ export function WaiversPage() {
     ? displayRows
     : displayRows.filter((row) => row.position === posFilter);
   const filtered = sortWaiverRowsByStrategy(positionRows, strategy);
+  const weeklyProjectionState: PlayerProjectionState = nflStateQuery.isLoading || weeklyProjectionQuery.isLoading
+    ? 'loading'
+    : nflStateQuery.isError || weeklyProjectionQuery.isError
+      ? 'error'
+      : projectionStartWeek == null
+        ? 'unavailable'
+        : 'loaded';
   const weeklyContext = weeklyProjectionQuery.data && playersQuery.data && league
     ? buildWeeklyProjectionContext(
       weeklyProjectionQuery.data,
@@ -841,7 +860,8 @@ export function WaiversPage() {
               weeklyPoints={weekly?.points}
               weeklyRank={weekly?.positionRank}
               byeWeek={byeWeek}
-              currentWeek={ctx.currentWeek}
+              playingWeek={projectionStartWeek}
+              projectionState={weeklyProjectionState}
               age={player?.age}
               status={player?.status}
               injuryStatus={player?.injury_status}
