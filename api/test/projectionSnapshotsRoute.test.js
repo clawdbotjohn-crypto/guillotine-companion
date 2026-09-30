@@ -51,6 +51,7 @@ test('HEAD fails closed for missing scheduler workflow/runtime configuration', a
   const ctx = context();
   await handler(ctx, { method: 'HEAD', headers: {} });
   assert.equal(ctx.res.status, 500);
+  assert.equal(JSON.parse(ctx.res.body).code, 'CONFIGURATION_ERROR');
   assert.match(ctx.res.body, /SCHEDULER_SECRET/);
   assert.equal(initialized, false);
 });
@@ -61,6 +62,36 @@ test('POST still requires configured scheduler secret before repository initiali
   const ctx = context();
   await handler(ctx, { method: 'POST', query: {}, headers: {}, body: {} });
   assert.equal(ctx.res.status, 500);
+  assert.equal(JSON.parse(ctx.res.body).code, 'CONFIGURATION_ERROR');
   assert.match(ctx.res.body, /SCHEDULER_SECRET/);
   assert.equal(initialized, false);
+});
+
+test('POST route returns stable CALENDAR_MISMATCH code without upstream or storage work', async () => {
+  const authValue = 'test-scheduler-value-'.repeat(2);
+  let touched = false;
+  const handler = createHandler({
+    env: {
+      PROJECTION_SNAPSHOT_SCHEDULER_SECRET: authValue,
+      PROJECTION_FIRST_DECISION_WEEK_LOCAL_DATE: '2026-09-08',
+    },
+    repositoryFactory: () => new Proxy({}, {
+      get() { touched = true; throw new Error('repository must not be read'); },
+    }),
+  });
+  const ctx = context();
+  await handler(ctx, {
+    method: 'POST',
+    query: {},
+    headers: { authorization: `Bearer ${authValue}` },
+    body: {
+      season: 2026,
+      decisionWeek: 4,
+      canonicalCutoffAt: '2026-10-07T03:00:00Z',
+      provenance: 'reconstructed',
+    },
+  });
+  assert.equal(ctx.res.status, 409);
+  assert.equal(JSON.parse(ctx.res.body).code, 'CALENDAR_MISMATCH');
+  assert.equal(touched, false);
 });

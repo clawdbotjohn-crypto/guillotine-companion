@@ -18,7 +18,7 @@ function createHandler({ env = process.env, repositoryFactory = () => createSupa
       context.res = {
         status: 405,
         headers: { Allow: 'GET, HEAD, POST, OPTIONS', 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
-        body: JSON.stringify({ error: 'Method not allowed' }),
+        body: JSON.stringify({ code: 'METHOD_NOT_ALLOWED', error: 'Method not allowed' }),
       };
       return;
     }
@@ -42,7 +42,10 @@ function createHandler({ env = process.env, repositoryFactory = () => createSupa
       context.res = {
         status: 500,
         headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
-        body: JSON.stringify({ error: error instanceof Error ? error.message : 'Projection snapshot service is unavailable' }),
+        body: JSON.stringify({
+          code: 'CONFIGURATION_ERROR',
+          error: error instanceof Error ? error.message : 'Projection snapshot service is unavailable',
+        }),
       };
     }
   };

@@ -1,4 +1,5 @@
 const {
+  EXACT_FETCH_DEADLINE_OFFSET_MS,
   MAX_WEEK,
   canonicalCutoffForLocalDate,
   parseIsoTimestamp,
@@ -8,7 +9,7 @@ const {
 // The database permits exact captures to finish through cutoff + 15 minutes.
 // Refuse to start after minute 12 so every accepted workflow attempt retains
 // at least two minutes (plus the remainder of minute 12) to finish.
-const LATEST_CAPTURE_START_OFFSET_MS = 13 * 60 * 1000;
+const LATEST_CAPTURE_START_OFFSET_MS = EXACT_FETCH_DEADLINE_OFFSET_MS;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function parseSeason(value) {

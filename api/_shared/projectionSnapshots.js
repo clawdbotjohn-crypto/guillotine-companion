@@ -5,6 +5,9 @@ const ENDPOINT_TEMPLATE = 'https://api.sleeper.app/v1/projections/nfl/regular/{s
 const MAX_WEEK = 18;
 const CAPTURE_TIME_ZONE = 'America/Los_Angeles';
 const EXACT_CAPTURE_WINDOW_MS = 15 * 60 * 1000;
+// Exact upstream work must stop two minutes before the immutable finish boundary so
+// canonicalization and transactional ingestion are not competing with the cutoff.
+const EXACT_FETCH_DEADLINE_OFFSET_MS = 13 * 60 * 1000;
 const PROVENANCE = new Set(['exact', 'reconstructed']);
 const POINT_FIELDS = [
   ['pts_std', 'pts_std'],
@@ -13,9 +16,16 @@ const POINT_FIELDS = [
 ];
 
 class HttpError extends Error {
-  constructor(status, message) {
+  constructor(status, message, code) {
     super(message);
     this.status = status;
+    this.code = code || ({
+      400: 'INVALID_REQUEST',
+      401: 'UNAUTHORIZED',
+      404: 'NOT_FOUND',
+      409: 'REQUEST_CONFLICT',
+      503: 'SERVICE_UNAVAILABLE',
+    }[status] || 'INTERNAL_ERROR');
   }
 }
 
@@ -114,7 +124,7 @@ function parsePostBody(rawBody) {
 
 function validateCalendarConfiguration(firstDecisionWeekLocalDate, season) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(firstDecisionWeekLocalDate || '')) {
-    throw new HttpError(503, 'capture is unavailable until the season calendar is configured');
+    throw new HttpError(503, 'capture is unavailable until the season calendar is configured', 'CALENDAR_UNAVAILABLE');
   }
   const [firstYear, firstMonth, firstDay] = firstDecisionWeekLocalDate.split('-').map(Number);
   const firstLocalDay = new Date(Date.UTC(firstYear, firstMonth - 1, firstDay));
@@ -127,7 +137,7 @@ function validateCalendarConfiguration(firstDecisionWeekLocalDate, season) {
   ) {
     throw new HttpError(503, season === undefined
       ? 'the configured season calendar must be a valid Tuesday'
-      : 'the configured season calendar must be a Tuesday in the requested season');
+      : 'the configured season calendar must be a Tuesday in the requested season', 'CALENDAR_UNAVAILABLE');
   }
   return firstLocalDay;
 }
@@ -138,7 +148,7 @@ function validateCalendarCoordinate({ season, decisionWeek, canonicalCutoffAt },
   const parts = zonedParts(new Date(canonicalCutoffAt));
   const actualDay = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day));
   if (actualDay !== expectedDay) {
-    throw new HttpError(409, 'capture cutoff does not match the configured decision-week calendar');
+    throw new HttpError(409, 'capture cutoff does not match the configured decision-week calendar', 'CALENDAR_MISMATCH');
   }
 }
 
@@ -147,14 +157,17 @@ function validateCaptureTiming({ canonicalCutoffAt, provenance }, captureStarted
   const startedMs = captureStartedAt.getTime();
   const finishedMs = captureFinishedAt.getTime();
   if (finishedMs < startedMs) {
-    throw new HttpError(409, 'capture finish cannot precede capture start');
+    throw new HttpError(409, 'capture finish cannot precede capture start', 'CAPTURE_TIMING_INVALID');
   }
   if (provenance !== 'exact') return;
   if (startedMs < cutoffMs) {
-    throw new HttpError(409, 'exact capture cannot start before the canonical cutoff');
+    throw new HttpError(409, 'exact capture cannot start before the canonical cutoff', 'WINDOW_NOT_OPEN');
+  }
+  if (startedMs >= cutoffMs + EXACT_FETCH_DEADLINE_OFFSET_MS) {
+    throw new HttpError(409, 'exact capture cannot start after the upstream fetch deadline', 'WINDOW_CLOSED');
   }
   if (finishedMs > cutoffMs + EXACT_CAPTURE_WINDOW_MS) {
-    throw new HttpError(409, 'exact capture must finish within 15 minutes after the canonical cutoff');
+    throw new HttpError(409, 'exact capture must finish within 15 minutes after the canonical cutoff', 'WINDOW_CLOSED');
   }
 }
 
@@ -208,12 +221,15 @@ function hashRows(rows) {
   return crypto.createHash('sha256').update(JSON.stringify(canonicalizeRows(rows))).digest('hex');
 }
 
-async function fetchRemainingProjections({ fetchImpl, season, decisionWeek }) {
+async function fetchRemainingProjections({ fetchImpl, season, decisionWeek, signal }) {
   const requests = [];
   for (let week = decisionWeek; week <= MAX_WEEK; week += 1) {
     requests.push((async () => {
       const url = ENDPOINT_TEMPLATE.replace('{season}', season).replace('{week}', week);
-      const response = await fetchImpl(url, { headers: { Accept: 'application/json', 'User-Agent': 'GuillotineCompanion/1.0' } });
+      const response = await fetchImpl(url, {
+        headers: { Accept: 'application/json', 'User-Agent': 'GuillotineCompanion/1.0' },
+        ...(signal ? { signal } : {}),
+      });
       if (!response.ok) throw new Error(`Sleeper week ${week} returned ${response.status}`);
       return compactProjectionPayload(await response.json(), week);
     })());
@@ -235,7 +251,31 @@ function describeCaptureTiming(snapshot) {
     : 'post-cutoff-reconstruction';
 }
 
-function createProjectionSnapshotService({ repository, fetchImpl = fetch, schedulerSecret, firstDecisionWeekLocalDate, now = () => new Date() }) {
+function createDeadlineSignal(timeoutMs) {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new HttpError(409, 'exact capture upstream fetch deadline has passed', 'WINDOW_CLOSED');
+  }
+  return AbortSignal.timeout(Math.max(1, Math.floor(timeoutMs)));
+}
+
+function isAbortError(error) {
+  return error?.name === 'AbortError' || error?.name === 'TimeoutError' || error?.code === 'ABORT_ERR';
+}
+
+function errorResponse(error, fallbackStatus, fallbackMessage, fallbackCode) {
+  const status = error instanceof HttpError ? error.status : fallbackStatus;
+  const code = error instanceof HttpError ? error.code : fallbackCode;
+  return jsonResponse(status, { code, error: error instanceof Error ? error.message : fallbackMessage });
+}
+
+function createProjectionSnapshotService({
+  repository,
+  fetchImpl = fetch,
+  schedulerSecret,
+  firstDecisionWeekLocalDate,
+  now = () => new Date(),
+  deadlineSignalFactory = createDeadlineSignal,
+}) {
   return {
     async health(req) {
       try {
@@ -245,13 +285,14 @@ function createProjectionSnapshotService({ repository, fetchImpl = fetch, schedu
         response.body = '';
         return response;
       } catch (error) {
-        const status = error instanceof HttpError ? error.status : 500;
-        return jsonResponse(status, { error: status === 500 ? 'scheduler health check failed' : error.message });
+        return errorResponse(error, 500, 'scheduler health check failed', 'HEALTH_CHECK_FAILED');
       }
     },
 
     async post(req) {
-      if (!isAuthorized(getHeader(req.headers, 'authorization'), schedulerSecret)) return jsonResponse(401, { error: 'Unauthorized' }, { 'WWW-Authenticate': 'Bearer' });
+      if (!isAuthorized(getHeader(req.headers, 'authorization'), schedulerSecret)) {
+        return jsonResponse(401, { code: 'UNAUTHORIZED', error: 'Unauthorized' }, { 'WWW-Authenticate': 'Bearer' });
+      }
       try {
         const input = parsePostBody(req.body);
         validateCalendarCoordinate(input, firstDecisionWeekLocalDate);
@@ -279,10 +320,28 @@ function createProjectionSnapshotService({ repository, fetchImpl = fetch, schedu
           }
         }
 
-        const rows = await fetchRemainingProjections({ fetchImpl, ...input });
+        let signal;
+        if (input.provenance === 'exact') {
+          const fetchStartedAt = now();
+          validateCaptureTiming(input, fetchStartedAt);
+          const fetchDeadlineMs = new Date(input.canonicalCutoffAt).getTime() + EXACT_FETCH_DEADLINE_OFFSET_MS;
+          signal = deadlineSignalFactory(fetchDeadlineMs - fetchStartedAt.getTime());
+        }
+
+        let rows;
+        try {
+          rows = await fetchRemainingProjections({ fetchImpl, signal, ...input });
+        } catch (error) {
+          if (input.provenance === 'exact' && isAbortError(error)) {
+            throw new HttpError(409, 'exact capture upstream fetch did not finish before its deadline', 'WINDOW_CLOSED');
+          }
+          throw error;
+        }
+        const contentHash = hashRows(rows);
+        // This is the immutable exact capture finish instant. It is sampled after
+        // upstream completion and canonicalization, immediately before ingestion.
         const fetchedAt = now();
         validateCaptureTiming(input, startedAt, fetchedAt);
-        const contentHash = hashRows(rows);
         const saved = await repository.ingest({
           source: SOURCE, endpointTemplate: ENDPOINT_TEMPLATE,
           captureStartedAt: startedAt.toISOString(), fetchedAt: fetchedAt.toISOString(), contentHash, rows, ...input,
@@ -292,8 +351,10 @@ function createProjectionSnapshotService({ repository, fetchImpl = fetch, schedu
           fetchedWeeks: { from: input.decisionWeek, through: MAX_WEEK }, rowCount: saved.rowCount, contentHash: saved.contentHash || contentHash,
         });
       } catch (error) {
-        const status = error instanceof HttpError ? error.status : error && error.code === 'SNAPSHOT_CONFLICT' ? 409 : 502;
-        return jsonResponse(status, { error: error instanceof Error ? error.message : 'Snapshot ingestion failed' });
+        if (error && error.code === 'SNAPSHOT_CONFLICT') {
+          return jsonResponse(409, { code: 'SNAPSHOT_CONFLICT', error: error.message });
+        }
+        return errorResponse(error, 502, 'Snapshot ingestion failed', 'SNAPSHOT_INGESTION_FAILED');
       }
     },
 
@@ -301,7 +362,7 @@ function createProjectionSnapshotService({ repository, fetchImpl = fetch, schedu
       try {
         const input = parseGetQuery(req.query);
         const snapshot = await repository.findLatest(input);
-        if (!snapshot) return jsonResponse(404, { error: 'No completed snapshot is available at or before the requested decision week' });
+        if (!snapshot) return jsonResponse(404, { code: 'SNAPSHOT_NOT_FOUND', error: 'No completed snapshot is available at or before the requested decision week' });
         if (snapshot.season !== input.season) throw new Error('Snapshot lookup crossed the requested season boundary');
         const matchesRequestedDecisionWeek = snapshot.decisionWeek === input.decisionWeek;
         const effectiveKind = matchesRequestedDecisionWeek ? snapshot.provenance : 'reconstructed';
@@ -325,15 +386,15 @@ function createProjectionSnapshotService({ repository, fetchImpl = fetch, schedu
           rows: snapshot.rows,
         });
       } catch (error) {
-        const status = error instanceof HttpError ? error.status : 502;
-        return jsonResponse(status, { error: error instanceof Error ? error.message : 'Snapshot lookup failed' });
+        return errorResponse(error, 502, 'Snapshot lookup failed', 'SNAPSHOT_LOOKUP_FAILED');
       }
     },
   };
 }
 
 module.exports = {
-  CAPTURE_TIME_ZONE, ENDPOINT_TEMPLATE, EXACT_CAPTURE_WINDOW_MS, MAX_WEEK, HttpError, canonicalCutoffForLocalDate, canonicalizeRows,
-  compactProjectionPayload, createProjectionSnapshotService, describeCaptureTiming, fetchRemainingProjections, hashRows, isAuthorized,
-  isCanonicalCutoff, parseGetQuery, parseIsoTimestamp, parsePostBody, validateCalendarConfiguration, validateCalendarCoordinate, validateCaptureTiming, zonedParts,
+  CAPTURE_TIME_ZONE, ENDPOINT_TEMPLATE, EXACT_CAPTURE_WINDOW_MS, EXACT_FETCH_DEADLINE_OFFSET_MS, MAX_WEEK, HttpError,
+  canonicalCutoffForLocalDate, canonicalizeRows, compactProjectionPayload, createDeadlineSignal, createProjectionSnapshotService,
+  describeCaptureTiming, fetchRemainingProjections, hashRows, isAuthorized, isCanonicalCutoff, parseGetQuery, parseIsoTimestamp,
+  parsePostBody, validateCalendarConfiguration, validateCalendarCoordinate, validateCaptureTiming, zonedParts,
 };

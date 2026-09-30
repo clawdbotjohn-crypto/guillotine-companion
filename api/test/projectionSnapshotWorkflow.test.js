@@ -9,6 +9,7 @@ const {
   resolveScheduledCapture,
 } = require('../_shared/projectionSnapshotSchedule');
 const { main } = require('../scripts/resolve-projection-snapshot-schedule');
+const { classifyProjectionSnapshotResponse } = require('../scripts/report-projection-snapshot-response');
 
 const workflow = fs.readFileSync(path.join(__dirname, '../../.github/workflows/projection-snapshot.yml'), 'utf8');
 const config = { season: '2026', firstDecisionWeekLocalDate: '2026-09-08' };
@@ -20,6 +21,7 @@ for (const [label, timestamp, expectedWeek, expectedCutoff] of [
   ['PST minute 02', '2026-11-11T04:02:00Z', 10, '2026-11-11T04:00:00.000Z'],
   ['PST minute 07', '2026-11-11T04:07:00Z', 10, '2026-11-11T04:00:00.000Z'],
   ['PST minute 12', '2026-11-11T04:12:59Z', 10, '2026-11-11T04:00:00.000Z'],
+  ['Week 18 January crossing', '2027-01-06T04:07:00Z', 18, '2027-01-06T04:00:00.000Z'],
 ]) {
   test(`runtime timing resolver accepts ${label} with DST-aware coordinates`, () => {
     const result = resolveScheduledCapture({ now: new Date(timestamp), ...config });
@@ -51,6 +53,13 @@ test('runtime timing resolver skips delayed and wrong-DST-hour jobs with complet
   assert.deepEqual(resolveScheduledCapture({ now: new Date('2027-01-20T04:02:00Z'), ...config }), {
     capture: false, reason: 'outside-season',
   });
+});
+
+test('final timing recheck safely closes an exact attempt delayed by the health check', () => {
+  const initial = resolveScheduledCapture({ now: new Date('2026-09-30T03:12:59Z'), ...config });
+  const final = resolveScheduledCapture({ now: new Date('2026-09-30T03:13:00Z'), ...config });
+  assert.equal(initial.capture, true);
+  assert.deepEqual(final, { capture: false, reason: 'late-window' });
 });
 
 test('manual exact dispatch is timing-guarded while reconstructed dispatch remains available', () => {
@@ -90,9 +99,10 @@ test('workflow uses independent off-hour PDT/PST opportunities and the tested ru
   }
   assert.doesNotMatch(workflow, /cron: '0 /);
   assert.match(workflow, /actions\/checkout@v4/);
-  assert.match(workflow, /resolve-projection-snapshot-schedule\.js/);
-  assert.match(workflow, /group: projection-snapshot-capture/);
-  assert.match(workflow, /cancel-in-progress: false/);
+  assert.equal((workflow.match(/resolve-projection-snapshot-schedule\.js/g) || []).length, 2);
+  assert.doesNotMatch(workflow, /^concurrency:/m);
+  assert.doesNotMatch(workflow, /projection-snapshot-capture/);
+  assert.match(workflow, /timeout-minutes: 10/);
 });
 
 test('workflow health canary is side-effect-free and reports actionable failure classes', () => {
@@ -106,10 +116,33 @@ test('workflow health canary is side-effect-free and reports actionable failure 
   assert.ok(workflow.indexOf('--request HEAD') < workflow.indexOf('--request POST'));
 });
 
-test('workflow has no blind capture retry and only posts after timing and health gates', () => {
+test('workflow has bounded requests, a final post-health timing recheck, and no blind retry', () => {
   assert.doesNotMatch(workflow, /for .*retry|while .*retry|sleep [0-9]/i);
   assert.match(workflow, /id: health/);
-  assert.match(workflow, /if: steps\.coordinates\.outputs\.capture == 'true' && steps\.health\.outcome == 'success'/);
-  assert.match(workflow, /no post-window retry will run/i);
-  assert.match(workflow, /already completed \(upstream fetch skipped\)/);
+  assert.match(workflow, /id: final_coordinates/);
+  assert.match(workflow, /Recheck capture coordinates immediately before POST/);
+  assert.match(workflow, /if: steps\.final_coordinates\.outputs\.capture == 'true' && steps\.health\.outcome == 'success'/);
+  assert.match(workflow, /SEASON: \$\{\{ steps\.final_coordinates\.outputs\.season \}\}/);
+  assert.equal((workflow.match(/--connect-timeout 5/g) || []).length, 2);
+  assert.match(workflow, /--max-time 20/);
+  assert.match(workflow, /--max-time 150/);
+  assert.match(workflow, /report-projection-snapshot-response\.js/);
+});
+
+test('workflow response classifier distinguishes immutable, timing, and calendar 409 codes', () => {
+  const conflict = classifyProjectionSnapshotResponse(409, { code: 'SNAPSHOT_CONFLICT' });
+  assert.equal(conflict.title, 'Immutable snapshot conflict');
+  assert.match(conflict.message, /different immutable evidence/);
+
+  const closed = classifyProjectionSnapshotResponse(409, { code: 'WINDOW_CLOSED' });
+  assert.equal(closed.title, 'Exact capture window closed');
+  assert.doesNotMatch(closed.message, /different immutable evidence/);
+
+  const early = classifyProjectionSnapshotResponse(409, { code: 'WINDOW_NOT_OPEN' });
+  assert.equal(early.title, 'Exact capture window not open');
+  assert.doesNotMatch(early.message, /different immutable evidence/);
+
+  const calendar = classifyProjectionSnapshotResponse(409, { code: 'CALENDAR_MISMATCH' });
+  assert.equal(calendar.title, 'Snapshot calendar mismatch');
+  assert.doesNotMatch(calendar.message, /different immutable evidence/);
 });

@@ -44,6 +44,9 @@ test('calendar coordinate validation covers reconstructed and exact W1-W4 coordi
       season: 2026, decisionWeek: index + 1, canonicalCutoffAt, provenance,
     }, firstDate)));
   }
+  assert.doesNotThrow(() => validateCalendarCoordinate({
+    season: 2026, decisionWeek: 18, canonicalCutoffAt: '2027-01-06T04:00:00Z', provenance: 'exact',
+  }, firstDate));
   assert.throws(() => validateCalendarCoordinate({
     season: 2026, decisionWeek: 4, canonicalCutoffAt: '2026-10-07T03:00:00Z', provenance: 'reconstructed',
   }, firstDate), /decision-week calendar/);
@@ -63,6 +66,7 @@ test('POST rejects missing auth before fetching or writing', async () => {
   });
   const response = await service.post(request({ headers: {} }));
   assert.equal(response.status, 401);
+  assert.equal(parse(response).code, 'UNAUTHORIZED');
   assert.equal(touched, false);
 });
 
@@ -107,7 +111,9 @@ test('reconstructed POST also requires the configured season/week calendar mappi
     repository, schedulerSecret: SECRET, firstDecisionWeekLocalDate: '2026-09-01',
     fetchImpl: sleeperFetch(), now: () => new Date('2026-12-20T00:00:00Z'),
   });
-  assert.equal((await unrelated.post(request())).status, 409);
+  const mismatch = await unrelated.post(request());
+  assert.equal(mismatch.status, 409);
+  assert.equal(parse(mismatch).code, 'CALENDAR_MISMATCH');
   assert.equal(touched, false);
 });
 
@@ -135,7 +141,7 @@ for (const scenario of [
         },
       },
       schedulerSecret: SECRET, firstDecisionWeekLocalDate: '2026-09-08', fetchImpl: sleeperFetch(),
-      now: sequencedClock(scenario.start, scenario.finish),
+      now: sequencedClock(scenario.start, scenario.start, scenario.finish),
     });
     const response = await service.post(request({ body: input }));
     assert.equal(response.status, 201);
@@ -153,6 +159,7 @@ for (const scenario of [
     });
     const response = await service.post(request({ body: input }));
     assert.equal(response.status, 409);
+    assert.equal(parse(response).code, 'WINDOW_NOT_OPEN');
     assert.match(parse(response).error, /cannot start before/);
     assert.equal(touched, false);
   });
@@ -163,14 +170,87 @@ for (const scenario of [
     const service = createProjectionSnapshotService({
       repository: { findCompletedMetadata: async () => null, ingest: async () => { written = true; } }, schedulerSecret: SECRET,
       firstDecisionWeekLocalDate: '2026-09-08', fetchImpl: sleeperFetch(),
-      now: sequencedClock(scenario.start, scenario.late),
+      now: sequencedClock(scenario.start, scenario.start, scenario.late),
     });
     const response = await service.post(request({ body: input }));
     assert.equal(response.status, 409);
+    assert.equal(parse(response).code, 'WINDOW_CLOSED');
     assert.match(parse(response).error, /finish within 15 minutes/);
     assert.equal(written, false);
   });
 }
+
+test('exact capture at the upstream deadline is WINDOW_CLOSED before metadata, fetch, or write', async () => {
+  let touched = false;
+  const service = createProjectionSnapshotService({
+    schedulerSecret: SECRET,
+    firstDecisionWeekLocalDate: FIRST_DECISION_WEEK,
+    now: () => new Date('2026-09-30T03:13:00Z'),
+    fetchImpl: async () => { touched = true; },
+    repository: new Proxy({}, { get() { touched = true; throw new Error('repository must not be read'); } }),
+  });
+  const response = await service.post(request({ body: {
+    season: 2026, decisionWeek: 4, canonicalCutoffAt: '2026-09-30T03:00:00Z', provenance: 'exact',
+  } }));
+  assert.equal(response.status, 409);
+  assert.equal(parse(response).code, 'WINDOW_CLOSED');
+  assert.equal(touched, false);
+});
+
+test('exact capture gives every Sleeper request one bounded deadline signal with two minutes reserved', async () => {
+  const signal = { test: 'deadline-signal' };
+  const observedSignals = [];
+  let timeoutMs;
+  const service = createProjectionSnapshotService({
+    schedulerSecret: SECRET,
+    firstDecisionWeekLocalDate: FIRST_DECISION_WEEK,
+    now: sequencedClock(
+      '2026-09-30T03:07:00Z',
+      '2026-09-30T03:07:30Z',
+      '2026-09-30T03:07:31Z',
+    ),
+    deadlineSignalFactory: (remainingMs) => { timeoutMs = remainingMs; return signal; },
+    fetchImpl: async (_url, options) => {
+      observedSignals.push(options.signal);
+      return sleeperFetch()();
+    },
+    repository: {
+      findCompletedMetadata: async () => null,
+      ingest: async (snapshot) => ({ snapshotId: 'id', created: true, rowCount: snapshot.rows.length, status: 'completed' }),
+    },
+  });
+  const response = await service.post(request({ body: {
+    season: 2026, decisionWeek: 4, canonicalCutoffAt: '2026-09-30T03:00:00Z', provenance: 'exact',
+  } }));
+  assert.equal(response.status, 201);
+  assert.equal(timeoutMs, 5.5 * 60 * 1000);
+  assert.equal(observedSignals.length, 15);
+  assert.ok(observedSignals.every((candidate) => candidate === signal));
+});
+
+test('exact Sleeper deadline abort is WINDOW_CLOSED and never persists evidence', async () => {
+  let written = false;
+  const aborted = new Error('deadline elapsed');
+  aborted.name = 'AbortError';
+  const service = createProjectionSnapshotService({
+    schedulerSecret: SECRET,
+    firstDecisionWeekLocalDate: FIRST_DECISION_WEEK,
+    now: sequencedClock('2026-09-30T03:12:00Z', '2026-09-30T03:12:01Z'),
+    deadlineSignalFactory: () => ({ test: 'deadline-signal' }),
+    fetchImpl: async () => { throw aborted; },
+    repository: {
+      findCompletedMetadata: async () => null,
+      ingest: async () => { written = true; },
+    },
+  });
+  const response = await service.post(request({ body: {
+    season: 2026, decisionWeek: 4, canonicalCutoffAt: '2026-09-30T03:00:00Z', provenance: 'exact',
+  } }));
+  assert.equal(response.status, 409);
+  assert.equal(parse(response).code, 'WINDOW_CLOSED');
+  assert.match(parse(response).error, /upstream fetch did not finish/);
+  assert.equal(written, false);
+});
 
 test('exact retry short-circuits from bounded completed metadata before Sleeper fetch or ingestion', async () => {
   let fetches = 0;
@@ -208,7 +288,7 @@ test('racing exact requests still preserve transactional immutable-conflict beha
   const service = createProjectionSnapshotService({
     schedulerSecret: SECRET,
     firstDecisionWeekLocalDate: FIRST_DECISION_WEEK,
-    now: sequencedClock('2026-09-30T03:07:00Z', '2026-09-30T03:07:01Z'),
+    now: sequencedClock('2026-09-30T03:07:00Z', '2026-09-30T03:07:00Z', '2026-09-30T03:07:01Z'),
     fetchImpl: sleeperFetch(),
     repository: {
       findCompletedMetadata: async () => null,
@@ -219,6 +299,7 @@ test('racing exact requests still preserve transactional immutable-conflict beha
     season: 2026, decisionWeek: 4, canonicalCutoffAt: '2026-09-30T03:00:00Z', provenance: 'exact',
   } }));
   assert.equal(response.status, 409);
+  assert.equal(parse(response).code, 'SNAPSHOT_CONFLICT');
   assert.match(parse(response).error, /snapshot conflict/);
 });
 
@@ -265,6 +346,7 @@ test('repository conflict is returned honestly as HTTP 409', async () => {
   });
   const response = await service.post(request());
   assert.equal(response.status, 409);
+  assert.equal(parse(response).code, 'SNAPSHOT_CONFLICT');
   assert.match(parse(response).error, /snapshot conflict/);
 });
 

@@ -8,7 +8,7 @@
 
 Sleeper's route `week` is an NFL matchup week, not a Tuesday snapshot. The route has no `as-of` argument or immutable revision contract: live requests return Sleeper's current forecast for that matchup week. The purpose of this service is to preserve one set of those live forecasts at each canonical Tuesday cutoff so the app can later reproduce the historical rest-of-season bidding baseline.
 
-The canonical cutoff is Tuesday **8:00 PM `America/Los_Angeles`**. It is 03:00 UTC during PDT and 04:00 UTC during PST. Calendar-coordinate validation applies to both provenance kinds. `exact` additionally requires the authenticated capture to start at or after the cutoff and finish no later than 15 minutes afterward. Early, late, fallback, and post-hoc captures must be `reconstructed`.
+The canonical cutoff is Tuesday **8:00 PM `America/Los_Angeles`**. It is 03:00 UTC during PDT and 04:00 UTC during PST. Calendar-coordinate validation applies to both provenance kinds. `exact` additionally requires the authenticated capture to start at or after the cutoff and before the API's cutoff +13-minute upstream deadline, then finish no later than 15 minutes after cutoff. Early, late, fallback, and post-hoc captures must be `reconstructed`.
 
 PostgreSQL does not trust the caller's coordinate. The forced-RLS, default-deny `projection_season_calendar` table owns the authoritative Week 1 local Tuesday for each season. The SECURITY INVOKER RPC derives the expected Pacific cutoff from that date plus `(decision_week - 1) * 7 days`; a table trigger independently protects direct inserts. The RPC requires both `p_capture_started_at` and `p_fetched_at`. Exact rows require start >= cutoff, finish >= start, and finish <= cutoff + 15 minutes. Both timestamps, provenance, coordinates, hash, count, and child values are immutable.
 
@@ -49,18 +49,21 @@ A missing or mismatched season is fail-closed in both the API and database.
 
 ## Scheduled workflow setup
 
-`.github/workflows/projection-snapshot.yml` uses six independent, off-hour schedule expressions: minute 02, 07, and 12 in both the 03 UTC (PDT) and 04 UTC (PST) Wednesday hours. GitHub schedule delivery is best-effort; independent opportunities reduce dependence on one event, and off-hour timing avoids documented start-of-hour load. Workflow concurrency serializes ordinary attempts without cancellation.
+`.github/workflows/projection-snapshot.yml` uses six independent, off-hour schedule expressions: minute 02, 07, and 12 in both the 03 UTC (PDT) and 04 UTC (PST) Wednesday hours. GitHub schedule delivery is best-effort; independent opportunities reduce dependence on one event, and off-hour timing avoids documented start-of-hour load. Attempts intentionally have no shared concurrency group; metadata short-circuiting and the transactional immutable RPC protect storage without serializing scheduled and manual runs together.
 
-After any queue delay, the checked-in Node resolver derives the current Pacific date/week/cutoff. Only Tuesday 20:00 through 20:12:59 Pacific can proceed; minute 13 and later skips before health/POST, retaining at least two minutes before the immutable API/database `finish <= cutoff + 15m` boundary. The wrong DST UTC hour, multi-hour-delayed jobs, and late manual `exact` dispatches skip. `reconstructed` manual dispatch remains available because it must record actual late provenance.
+After any queue delay, the checked-in Node resolver derives the current Pacific date/week/cutoff. Only Tuesday 20:00 through 20:12:59 Pacific can proceed; minute 13 and later skips, retaining at least two minutes before the immutable API/database `finish <= cutoff + 15m` boundary. After authenticated HEAD succeeds, the workflow runs the same tested resolver again immediately before POST and uses only that final coordinate set. The wrong DST UTC hour, multi-hour-delayed jobs, and late manual `exact` dispatches skip. `reconstructed` manual dispatch remains available because it must record actual late provenance. The workflow job and both curl calls have explicit timeouts.
+
+The API independently refuses exact upstream work at cutoff +13m and passes one bounded AbortSignal to all Sleeper requests, preserving two minutes for canonicalization and transactional ingestion. It samples exact completion after canonicalization and rejects any finish after cutoff +15m before persistence. Reconstructed fetching is unchanged.
 
 Before POST, the workflow calls authenticated HEAD. HTTP 204 passes. Output separately identifies:
 
 - missing workflow secret;
 - missing workflow endpoint variable;
 - endpoint/auth mismatch (401/403/404);
-- late/outside timing (safe skip, no API/upstream/database capture);
+- late/outside timing (safe skip, no POST/upstream/database capture);
 - API/config/network error;
-- immutable conflict; and
+- immutable `SNAPSHOT_CONFLICT` only when different evidence already occupies the coordinate;
+- `WINDOW_NOT_OPEN`, `WINDOW_CLOSED`, and `CALENDAR_MISMATCH` with distinct actionable diagnostics; and
 - an already-completed exact retry whose upstream fetch was skipped.
 
 No workflow loop or blind post-window retry exists. The multiple scheduled POSTs are expected: after the first exact succeeds, later requests stop at the bounded metadata lookup. A truly concurrent pair can both miss before either commits and both fetch upstream, but the unchanged transactional RPC remains authoritative: identical content is idempotent and differing content conflicts without overwrite.
@@ -85,7 +88,7 @@ Before Tuesday 2026-10-06:
 2. Choose and perform an owner-controlled SWA restart/redeploy/config refresh to reconcile managed-function runtime configuration. A control-plane setting write alone did not prove runtime propagation in W4.
 3. Synchronize workflow/runtime secrets without printing them. Production HEAD must return 204. Confirm endpoint, season, and first-decision-week variables.
 4. Review simulated PDT/PST minute 02/07/12 success, minute-13 rejection, wrong-hour behavior, and the observed multi-hour-delay case. Decide separately whether to implement the broader no-write Sleeper canonicalization/hash/read-only DB preflight; HEAD intentionally does not do those operations.
-5. Observe 20:02, 20:07, and 20:12 PDT. Shortly afterward, GET must report Decision Week 5 same-week exact; record ID/hash/count. If absent and still before cutoff +15m, the owner may invoke the already-validated direct exact fallback. At/after +15m, do not claim exact; retain only reconstructed provenance.
+5. Observe 20:02, 20:07, and 20:12 PDT. Shortly afterward, GET must report Decision Week 5 same-week exact; record ID/hash/count. If absent and still before the API's cutoff +13m upstream deadline, the owner may invoke the already-validated direct exact fallback. At/after +13m, do not claim exact; retain only reconstructed provenance.
 
 Open owner decisions: review/merge/deploy timing, the exact Azure runtime refresh mechanism, whether to enable App Insights/runtime environment observability, and whether to build the broader no-write preflight. GitHub scheduling remains best-effort, so the direct owner fallback remains part of operations.
 

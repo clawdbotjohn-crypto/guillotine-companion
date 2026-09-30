@@ -36,13 +36,10 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: projection-snapshot-capture
-  cancel-in-progress: false
-
 jobs:
   capture:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out timing resolver
         uses: actions/checkout@v4
@@ -86,6 +83,7 @@ jobs:
 
           health_body="$RUNNER_TEMP/projection-snapshot-health.txt"
           if ! health_status=$(curl --silent --show-error --output "$health_body" --write-out '%{http_code}' \
+            --connect-timeout 5 --max-time 20 \
             --request HEAD \
             --header "Authorization: Bearer $SCHEDULER_SECRET" \
             "$API_URL"); then
@@ -107,20 +105,42 @@ jobs:
               ;;
           esac
 
-      - name: Capture immutable projection snapshot
+      - name: Recheck capture coordinates immediately before POST
+        id: final_coordinates
         if: steps.coordinates.outputs.capture == 'true' && steps.health.outcome == 'success'
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          PROJECTION_SEASON: ${{ vars.PROJECTION_SEASON }}
+          PROJECTION_FIRST_DECISION_WEEK_LOCAL_DATE: ${{ vars.PROJECTION_FIRST_DECISION_WEEK_LOCAL_DATE }}
+          INPUT_SEASON: ${{ inputs.season }}
+          INPUT_DECISION_WEEK: ${{ inputs.decision_week }}
+          INPUT_CANONICAL_CUTOFF_AT: ${{ inputs.canonical_cutoff_at }}
+          INPUT_PROVENANCE: ${{ inputs.provenance }}
+        run: node api/scripts/resolve-projection-snapshot-schedule.js
+
+      - name: Report timing window closed after health check
+        if: steps.coordinates.outputs.capture == 'true' && steps.health.outcome == 'success' && steps.final_coordinates.outputs.capture != 'true'
+        env:
+          SKIP_REASON: ${{ steps.final_coordinates.outputs.reason }}
+        run: |
+          echo "::notice title=Projection snapshot skipped::$SKIP_REASON after health check; no POST or upstream capture was attempted."
+          printf '### Projection snapshot skipped after health check\n\n- Reason: `%s`\n- No POST, Sleeper fetch, or database write was attempted.\n' "$SKIP_REASON" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Capture immutable projection snapshot
+        if: steps.final_coordinates.outputs.capture == 'true' && steps.health.outcome == 'success'
         env:
           API_URL: ${{ secrets.PROJECTION_SNAPSHOT_API_URL }}
           SCHEDULER_SECRET: ${{ secrets.PROJECTION_SNAPSHOT_SCHEDULER_SECRET }}
-          SEASON: ${{ steps.coordinates.outputs.season }}
-          DECISION_WEEK: ${{ steps.coordinates.outputs.decision_week }}
-          CANONICAL_CUTOFF_AT: ${{ steps.coordinates.outputs.canonical_cutoff_at }}
-          PROVENANCE: ${{ steps.coordinates.outputs.provenance }}
+          SEASON: ${{ steps.final_coordinates.outputs.season }}
+          DECISION_WEEK: ${{ steps.final_coordinates.outputs.decision_week }}
+          CANONICAL_CUTOFF_AT: ${{ steps.final_coordinates.outputs.canonical_cutoff_at }}
+          PROVENANCE: ${{ steps.final_coordinates.outputs.provenance }}
         run: |
           set -euo pipefail
           request_body=$(node -e 'process.stdout.write(JSON.stringify({ season: Number(process.env.SEASON), decisionWeek: Number(process.env.DECISION_WEEK), canonicalCutoffAt: process.env.CANONICAL_CUTOFF_AT, provenance: process.env.PROVENANCE }))')
           response_body="$RUNNER_TEMP/projection-snapshot-response.json"
           if ! response_status=$(curl --silent --show-error --output "$response_body" --write-out '%{http_code}' \
+            --connect-timeout 5 --max-time 150 \
             --request POST \
             --header "Authorization: Bearer $SCHEDULER_SECRET" \
             --header 'Content-Type: application/json' \
@@ -130,20 +150,4 @@ jobs:
             exit 1
           fi
 
-          case "$response_status" in
-            200|201)
-              node -e 'const fs=require("fs"); const value=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); console.log(`Snapshot ${value.snapshotId}: ${value.alreadyCompleted ? "already completed (upstream fetch skipped)" : value.created ? "created" : "idempotent retry"}; rows=${value.rowCount}; provenance=${value.provenance}`)' "$response_body"
-              ;;
-            401|403|404)
-              echo "::error title=Endpoint/auth mismatch::Capture returned HTTP $response_status after health passed. Stop and inspect endpoint/runtime configuration; no retry will run."
-              exit 1
-              ;;
-            409)
-              echo "::error title=Immutable snapshot conflict::The exact coordinate already contains different immutable evidence. No overwrite or retry was attempted."
-              exit 1
-              ;;
-            *)
-              echo "::error title=Snapshot API error::Capture returned HTTP $response_status; no post-window retry will run."
-              exit 1
-              ;;
-          esac
+          node api/scripts/report-projection-snapshot-response.js "$response_status" "$response_body"

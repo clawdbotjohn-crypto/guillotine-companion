@@ -13,10 +13,10 @@
 
 ## Design
 
-- Six independent schedules at minutes 02/07/12 for both 03/04 UTC avoid top-of-hour and cover PDT/PST. Runtime resolves Pacific coordinates after queueing and refuses starts at/after minute 13, retaining >=2 minutes before the unchanged DB/API finish deadline at cutoff +15m. Wrong DST hour and delayed jobs skip without POST. Manual `exact` is timing-guarded too; reconstructed dispatch stays available.
-- Authenticated `HEAD /api/projection-snapshots` checks runtime secret and calendar configuration without creating a repository, fetching Sleeper, or touching DB. Workflow diagnostics separate missing workflow secret/endpoint, endpoint/auth mismatch, late window, and API failure. Health must pass before POST.
-- Exact POST performs one bounded run-metadata query (no 15k child values). Existing completed exact evidence returns immediately and skips Sleeper/ingestion. Workflow concurrency serializes normal attempts. If truly concurrent requests both miss, the unchanged transactional RPC remains authoritative: identical evidence is idempotent; differing evidence is HTTP 409 and cannot overwrite.
-- No migration and no weakening of exact semantics: actual capture start must be >= cutoff and actual finish <= cutoff +15m in both API and DB.
+- Six independent schedules at minutes 02/07/12 for both 03/04 UTC avoid top-of-hour and cover PDT/PST. Runtime resolves Pacific coordinates after queueing and re-runs the same tested resolver after `HEAD`, immediately before POST. Starts at/after minute 13 are refused, retaining >=2 minutes before the unchanged DB/API finish deadline at cutoff +15m. Wrong DST hour and delayed jobs skip without POST. Manual `exact` is timing-guarded too; reconstructed dispatch stays available.
+- Authenticated `HEAD /api/projection-snapshots` checks runtime secret and calendar configuration without creating a repository, fetching Sleeper, or touching DB. Workflow diagnostics separate missing workflow secret/endpoint, endpoint/auth mismatch, immutable conflict, early/closed timing windows, calendar mismatch, and API failure using stable response codes. Health must pass before POST. The job and both curl calls have explicit bounds.
+- Exact POST performs one bounded run-metadata query (no 15k child values). Existing completed exact evidence returns immediately and skips Sleeper/ingestion. Exact Sleeper requests share an API-side abort deadline at cutoff +13m, reserving two minutes for canonicalization/transactional ingestion. Workflow attempts intentionally have no shared concurrency group. If concurrent requests both miss, the unchanged transactional RPC remains authoritative: identical evidence is idempotent; differing evidence returns `SNAPSHOT_CONFLICT` and cannot overwrite.
+- No migration and no weakening of exact semantics: actual capture start must be >= cutoff and before the upstream deadline, and actual finish must be <= cutoff +15m in both API and DB. Reconstructed behavior is unchanged.
 
 ## W5 owner runbook (Tue 2026-10-06 PDT)
 
@@ -24,7 +24,7 @@
 2. Confirm workflow/runtime scheduler secrets are synchronized without printing them; confirm endpoint and season calendar variables. Production `HEAD` must return 204.
 3. Review local timing simulations for PDT minute 02/07/12, minute-13 rejection, wrong UTC hour, and 5–6-hour delay. Optional broader Sleeper/hash/DB dry-run remains a separate owner decision.
 4. Observe scheduled opportunities at 20:02, 20:07, and 20:12 PDT. Do not launch blind post-window retries.
-5. Shortly after capture, public GET must report Decision Week 5 same-week `exact`, with ID/hash/count recorded. If absent and still inside the immutable +15m window, the owner may invoke the already-validated direct exact fallback. At/after +15m, do not claim exact; preserve only reconstructed evidence.
+5. Shortly after capture, public GET must report Decision Week 5 same-week `exact`, with ID/hash/count recorded. If absent and still before the API's cutoff +13m upstream deadline, the owner may invoke the already-validated direct exact fallback. At/after +13m, do not claim exact; preserve only reconstructed evidence.
 
 ## Remaining owner decisions / risks
 
