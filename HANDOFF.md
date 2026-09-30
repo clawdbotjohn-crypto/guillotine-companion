@@ -2,8 +2,8 @@
 
 ## Status / delivery
 
-- Implemented and locally verified on `fix/projection-snapshot-reliability`. The orchestrator, not this worker, will independently verify, push, and open the review PR. **Review PR: pending orchestrator.**
-- No merge, production deploy, production workflow dispatch/capture, production config/Supabase mutation, or PR #14/#15 change occurred. `main` was not touched.
+- Implemented and locally verified on `fix/projection-snapshot-reliability`. Review-only PR #16 is open: https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/16. Do not merge or deploy.
+- The coding implementation/worker made no production calls, captures, writes, config changes, workflow dispatches, or deploys. Separately, after source review, the orchestrator sent one deliberately invalid `{}` POST auth canary using the Azure control-plane value; it returned 401 before body parsing. Source guarantees this path cannot fetch Sleeper or initialize/use the repository, so it was non-writing and not a real capture. No merge or PR #14/#15 change occurred; `main` was not touched.
 
 ## Evidence-bounded diagnosis
 
