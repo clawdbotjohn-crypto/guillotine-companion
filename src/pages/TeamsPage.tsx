@@ -1,6 +1,6 @@
 // Teams page — rethought per John feedback (2026-09-22).
 // - Rank teams by PROJECTED best-lineup points for the coming week
-// - Show risk (safe / warning / at-risk) from projection
+// - Show risk (safe / warning / danger) from projection
 // - Per team: historical points rank + position-group scoring breakdown (FLEX its own category)
 // Toggle between Projected and Historical ordering.
 
@@ -23,6 +23,7 @@ import {
   computeEliminations,
   getActiveRosterIds,
   getCompletedLeagueWeek,
+  getCurrentElimsPerWeek,
   getProjectionScoring,
   getUpcomingPlayingWeek,
   projectAllTeams,
@@ -32,6 +33,7 @@ import {
   orderTeamProjections,
   rankActiveRosterPositionValues,
   rankActiveRosterValues,
+  riskForActiveRank,
   type HistoricalRank,
   type PosGroupRank,
   type TeamProjection,
@@ -128,16 +130,27 @@ export function TeamStandingDetails({
 export function TeamValueStandingDetails({
   team,
   value,
+  elimsPerWeek,
 }: {
   team: TeamProjection;
   value: RankedRosterValue | undefined;
+  elimsPerWeek: number;
 }) {
   if (team.eliminated) return <StatusBadge status="eliminated" />;
-  if (!value || value.total == null) return <span className="text-[10px] text-[#6b6e99]">Max VORP value unavailable</span>;
+  if (!value || value.total == null || value.rank == null) {
+    return <span className="text-[10px] text-[#6b6e99]">Max VORP value unavailable</span>;
+  }
+  const risk = riskForActiveRank(value.rank, value.outOf, elimsPerWeek);
   return (
-    <span className="font-['Space_Mono'] text-[10px] text-[#a5b4fc] tabular-nums" data-testid="current-team-standing">
-      value #{value.rank}/{value.outOf} · {formatWholeDollars(value.total)}
-    </span>
+    <>
+      <span className="font-['Space_Mono'] text-[10px] text-[#a5b4fc] tabular-nums" data-testid="current-team-standing">
+        value #{value.rank}/{value.outOf} ·{' '}
+        <span data-testid="team-value-total" style={{ color: rankColor(value.rank, value.outOf) }}>
+          {formatWholeDollars(value.total)}
+        </span>
+      </span>
+      <StatusBadge status={risk} />
+    </>
   );
 }
 
@@ -278,6 +291,7 @@ export function TeamsPage() {
   }
 
   const { elim, projections, weeklyScoredPlayers, historicalPosRanks, projectedPosRanks, histRanks, valueRanks, positionValueRanks } = model;
+  const elimsPerWeek = getCurrentElimsPerWeek(elim);
   const hasScores = elim.weeks.length > 0;
   const scoredPlayers = weeklyScoredPlayers ?? new Map();
   const playerValues = new Map<string, number>(
@@ -410,8 +424,15 @@ export function TeamsPage() {
           const valueGroups = (positionValueRanks.get(t.rosterId) ?? [])
             .filter((group) => group.outOf > 0)
             .sort((a, b) => POS_ORDER.indexOf(a.position) - POS_ORDER.indexOf(b.position));
+          const teamValue = valueRanks.get(t.rosterId);
           const isMine = t.rosterId === myRosterId;
-          const modeRisk = orderBy === 'historical' ? hist?.risk ?? 'warning' : t.risk;
+          const modeRisk = orderBy === 'historical'
+            ? hist?.risk ?? 'warning'
+            : orderBy === 'value'
+              ? teamValue?.rank != null
+                ? riskForActiveRank(teamValue.rank, teamValue.outOf, elimsPerWeek)
+                : 'unavailable'
+              : t.risk;
           const isOpen = expanded === t.rosterId;
 
           return (
@@ -430,7 +451,7 @@ export function TeamsPage() {
                     </div>
                     <div className="mt-0.5 flex items-center gap-2">
                       {hasScores && (orderBy === 'value'
-                        ? <TeamValueStandingDetails team={t} value={valueRanks.get(t.rosterId)} />
+                        ? <TeamValueStandingDetails team={t} value={teamValue} elimsPerWeek={elimsPerWeek} />
                         : <TeamStandingDetails team={t} historical={hist} orderBy={orderBy} />
                       )}
                     </div>
@@ -511,18 +532,29 @@ export function PositionValueBreakdown({
   if (groups.length === 0) return <p className="text-[10px] text-[#4a4d77]">Max VORP position values unavailable.</p>;
   return (
     <div className="grid grid-cols-3 gap-2">
-      {groups.map((group) => (
-        <div key={group.position} className="rounded-lg border border-[#1a1e3a] bg-[#0e1025] p-2 text-center">
-          <div className="text-[9px] uppercase tracking-wider text-[#6b6e99]">{group.position}</div>
-          <div className="font-['Space_Mono'] text-sm font-bold tabular-nums text-[#10b981]">{formatWholeDollars(group.total)}</div>
-          <div className="font-['Space_Mono'] text-[8px] text-[#4a4d77]">#{group.rank}/{group.outOf}</div>
-        </div>
-      ))}
+      {groups.map((group) => {
+        const color = group.rank == null ? '#a5b4fc' : rankColor(group.rank, group.outOf);
+        return (
+          <div key={group.position} className="rounded-lg border border-[#1a1e3a] bg-[#0e1025] p-2 text-center">
+            <div className="text-[9px] uppercase tracking-wider text-[#6b6e99]">{group.position}</div>
+            <div
+              className="font-['Space_Mono'] text-sm font-bold tabular-nums"
+              data-testid={`position-value-${group.position}`}
+              style={{ color }}
+            >
+              {formatWholeDollars(group.total)}
+            </div>
+            {group.rank != null && (
+              <div className="font-['Space_Mono'] text-[8px] text-[#4a4d77]">#{group.rank}/{group.outOf}</div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-function RiskIcon({ risk }: { risk: 'safe' | 'warning' | 'at-risk' | 'eliminated' }) {
+function RiskIcon({ risk }: { risk: 'safe' | 'warning' | 'at-risk' | 'eliminated' | 'unavailable' }) {
   if (risk === 'safe') return <ShieldCheck size={18} className="text-[#10b981] shrink-0" />;
   if (risk === 'at-risk') return <ShieldAlert size={18} className="text-[#f43f5e] shrink-0" />;
   if (risk === 'warning') return <TriangleAlert size={18} className="text-[#f59e0b] shrink-0" />;

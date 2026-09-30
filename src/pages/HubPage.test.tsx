@@ -64,7 +64,7 @@ describe('Hub rank contexts', () => {
     expect(screen.getByText('123.5')).toBeTruthy();
     expect(screen.getByText('13/28')).toBeTruthy();
     expect(screen.getByLabelText('Active survivor projection rank 13 of 28')).toBeTruthy();
-    expect(screen.getByText('At Risk')).toBeTruthy();
+    expect(screen.getByText('Danger')).toBeTruthy();
     expect(screen.queryByText(/original rosters/i)).toBeNull();
     expect(screen.getByText('Sleeper weekly projections')).toBeTruthy();
   });

@@ -3,6 +3,7 @@ import type { Roster } from '../api/types';
 import type { RosPlayerProjection } from './projections';
 import { buildMaxVorpCalibration } from './waivers';
 import { buildLeagueValuePositionBuckets } from './teamPositionGroups';
+import { riskForActiveRank } from './analytics';
 import {
   buildMaxVorpPlayerValues,
   buildModeledPositionRanks,
@@ -84,6 +85,31 @@ describe('Hub roster Team Value', () => {
     expect(ranked.get(2)).toMatchObject({ rank: 1, outOf: 3 });
     expect(ranked.get(3)).toMatchObject({ rank: 3, outOf: 3 });
     expect(ranked.has(4)).toBe(false);
+    expect(riskForActiveRank(ranked.get(1)!.rank!, ranked.get(1)!.outOf, 1))
+      .toBe(riskForActiveRank(ranked.get(2)!.rank!, ranked.get(2)!.outOf, 1));
+  });
+
+  it('keeps tied active values on one competition rank and status without eliminated contamination', () => {
+    const ranked = rankActiveRosterValues(
+      [
+        roster(1, ['a']), roster(2, ['b']), roster(3, ['c']),
+        roster(4, ['d']), roster(5, ['e']), roster(6, ['f']),
+        roster(7, ['eliminated']),
+      ],
+      new Set([1, 2, 3, 4, 5, 6]),
+      new Map([
+        ['a', 60], ['b', 50], ['c', 40], ['d', 30],
+        ['e', 20], ['f', 20], ['eliminated', 999],
+      ]),
+    );
+    const tiedA = ranked.get(5)!;
+    const tiedB = ranked.get(6)!;
+
+    expect(tiedA).toMatchObject({ rank: 5, outOf: 6 });
+    expect(tiedB).toMatchObject({ rank: 5, outOf: 6 });
+    expect(riskForActiveRank(tiedA.rank!, tiedA.outOf, 1)).toBe('warning');
+    expect(riskForActiveRank(tiedB.rank!, tiedB.outOf, 1)).toBe('warning');
+    expect(ranked.has(7)).toBe(false);
   });
 
   it('uses the active-team denominator and league high without eliminated totals', () => {
@@ -177,6 +203,9 @@ describe('Hub roster Team Value', () => {
 
     expect(selectedRows.map((row) => row.position)).toEqual(['DEF', 'K', 'QB', 'RB', 'TE', 'WR']);
     expect(selectedRows.reduce((sum, row) => sum + row.total, 0)).toBe(94);
+    expect(selectedRows.find((row) => row.position === 'K')).toMatchObject({ total: 0, rank: null, outOf: 2 });
+    expect(selectedRows.find((row) => row.position === 'DEF')).toMatchObject({ total: 0, rank: null, outOf: 2 });
+    expect(selectedRows.filter((row) => !['K', 'DEF'].includes(row.position)).every((row) => row.rank != null)).toBe(true);
     expect(selectedRows.some((row) => ['C', 'CB', 'DE', 'DT', 'FB', 'NT', 'SS', 'DL', 'LB', 'DB', 'FLEX'].includes(row.position))).toBe(false);
   });
 

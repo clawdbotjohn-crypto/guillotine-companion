@@ -39,6 +39,8 @@ export {
 export {
   formatCurrentRank,
   formatProjectedCurrentRank,
+  riskForActiveRank,
+  getCurrentElimsPerWeek,
   parseLineupSlots,
   projectBestLineup,
   projectAllTeams,

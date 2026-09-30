@@ -21,7 +21,8 @@ export interface RankedRosterValue extends RosterValueSummary {
 export interface RosterPositionValueRank {
   position: string;
   total: number;
-  rank: number;
+  /** K and DEF values are displayed but intentionally not ranked. */
+  rank: number | null;
   outOf: number;
 }
 
@@ -202,12 +203,15 @@ export function rankActiveRosterPositionValues(
       rosterId,
       total: totals.get(position) ?? 0,
     })).sort((a, b) => b.total - a.total || a.rosterId - b.rosterId);
+    const isRankedPosition = position !== 'K' && position !== 'DEF';
     let previousTotal: number | null = null;
     let previousRank = 0;
     sorted.forEach((row, index) => {
-      const rank = previousTotal === row.total ? previousRank : index + 1;
+      const rank = isRankedPosition
+        ? previousTotal === row.total ? previousRank : index + 1
+        : null;
       previousTotal = row.total;
-      previousRank = rank;
+      if (rank != null) previousRank = rank;
       const rosterRows = rowsByRoster.get(row.rosterId) ?? [];
       rosterRows.push({ position, total: row.total, rank, outOf: activeRosterIds.size });
       rowsByRoster.set(row.rosterId, rosterRows);
