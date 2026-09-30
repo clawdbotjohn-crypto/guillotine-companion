@@ -57,6 +57,14 @@ export {
 } from './analytics';
 
 export {
+  buildFreeAgentTeamImpact,
+  type FreeAgentTeamImpact,
+  type AvailableFreeAgentTeamImpact,
+  type UnavailableFreeAgentTeamImpact,
+  type TeamImpactMetric,
+} from './teamImpact';
+
+export {
   rankQuartile,
   faabQuartile,
   faabQuartileLabel,

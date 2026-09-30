@@ -32,8 +32,12 @@ import {
   projectAllTeams,
   computeProjectedLineupGroupRanks,
   classifyCanonicalBidEvents,
+  buildFreeAgentTeamImpact,
+  type EliminationResult,
+  type WeeklyScoredPlayer,
   type WaiverRankingSource,
 } from '../logic';
+import type { League, Roster } from '../api/types';
 import {
   buildLeagueContext,
   buildMaxVorpCalibration,
@@ -184,6 +188,13 @@ export function VorpControls({
   );
 }
 
+interface TeamImpactContext {
+  rosters: readonly Roster[];
+  league: League;
+  elimination: EliminationResult;
+  weeklyProjections: ReadonlyMap<string, WeeklyScoredPlayer> | null;
+}
+
 export function WaiverPlayerCard({
   row,
   strategy,
@@ -206,6 +217,7 @@ export function WaiverPlayerCard({
   sourceLabel = 'Sleeper ROS',
   rankingSource = 'sleeper',
   canonicalHistory = [],
+  teamImpactContext,
 }: {
   row: WaiverPlayerRow;
   strategy: StrategyKey;
@@ -228,6 +240,7 @@ export function WaiverPlayerCard({
   sourceLabel?: string;
   rankingSource?: WaiverRankingSource;
   canonicalHistory?: import('../logic').CanonicalBidEvent[];
+  teamImpactContext?: TeamImpactContext;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [predictionsOpen, setPredictionsOpen] = useState(false);
@@ -247,6 +260,25 @@ export function WaiverPlayerCard({
   const cardLabel = owner
     ? `${row.name}, ${selectedTeamOwner ? 'owned by your selected team' : 'rostered by another team'}. Open player details`
     : `${row.name}, suggested bid ${formatDisplayCurrency(value)}. Open player details`;
+  const teamImpact = useMemo(() => {
+    if (!detailsOpen || owner || !teamImpactContext) return undefined;
+    return buildFreeAgentTeamImpact({
+      playerId: row.playerId,
+      playerPosition: row.position,
+      selectedRosterId,
+      rosters: teamImpactContext.rosters,
+      league: teamImpactContext.league,
+      elimination: teamImpactContext.elimination,
+      weeklyProjections: teamImpactContext.weeklyProjections,
+    });
+  }, [
+    detailsOpen,
+    owner,
+    row.playerId,
+    row.position,
+    selectedRosterId,
+    teamImpactContext,
+  ]);
 
   return (
     <>
@@ -322,6 +354,8 @@ export function WaiverPlayerCard({
           owned: !!owner,
           ownerLabel: owner ? (selectedTeamOwner ? 'This player is on your selected roster.' : 'This player is currently rostered by another team.') : undefined,
           suggestedBid: owner ? null : value,
+          remainingFaab,
+          teamImpact,
           managerPredictions: showManagerPredictions ? managerPredictions : [],
           managerDetails,
           managerLabels,
@@ -445,6 +479,23 @@ export function WaiversPage() {
     const elim = computeEliminations(matchups, rosters, users);
     return { elim, ctx: buildLeagueContext(league, elim, projectionStartWeek ?? undefined) };
   }, [matchups, rosters, users, league, projectionStartWeek]);
+  const weeklyScoredPlayers = useMemo(() => weeklyProjectionQuery.data && league
+    ? buildWeeklyScoredPlayers(
+      weeklyProjectionQuery.data,
+      getProjectionScoring(league.scoring_settings?.rec),
+      getPlayerPosition,
+    )
+    : null, [weeklyProjectionQuery.data, league]);
+  const teamImpactContext = useMemo<TeamImpactContext | undefined>(() => (
+    rosters && league && waiverContext
+      ? {
+        rosters,
+        league,
+        elimination: waiverContext.elim,
+        weeklyProjections: weeklyScoredPlayers,
+      }
+      : undefined
+  ), [rosters, league, waiverContext, weeklyScoredPlayers]);
 
   const replacementBounds = getReplacementTeamBounds(waiverContext?.ctx.teamsRemaining ?? 4);
   const normalizedReplacementTarget = normalizeReplacementTeamTarget(
@@ -640,13 +691,6 @@ export function WaiversPage() {
       (playerId) => playersQuery.data?.get(playerId)?.position,
     )
     : new Map();
-  const weeklyScoredPlayers = weeklyProjectionQuery.data && league
-    ? buildWeeklyScoredPlayers(
-      weeklyProjectionQuery.data,
-      getProjectionScoring(league.scoring_settings?.rec),
-      getPlayerPosition,
-    )
-    : null;
   const projectedTeams = projectAllTeams(rosters!, weeklyScoredPlayers, league, waiverContext!.elim);
   const projectedPositionRanks = computeProjectedLineupGroupRanks(
     projectedTeams,
@@ -797,6 +841,7 @@ export function WaiversPage() {
               sourceLabel={sourceInfo.shortLabel}
               rankingSource={rankingSource}
               canonicalHistory={canonicalHistoryByPlayer.get(row.playerId) ?? []}
+              teamImpactContext={teamImpactContext}
             />
           );
         })}

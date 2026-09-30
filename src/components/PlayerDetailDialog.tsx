@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
-import type { CanonicalBidEvent } from '../logic';
+import type { CanonicalBidEvent, FreeAgentTeamImpact } from '../logic';
 import type { ManagerDetailData } from '../logic/managerDetails';
 import { isEligibleBuyerPrediction, orderManagerPredictions, type ManagerPredictionDisplay } from '../logic/managerPredictionDisplay';
 import { formatDisplayCurrency } from '../logic/displayCurrency';
@@ -27,6 +27,8 @@ export interface PlayerDetailData {
   owned: boolean;
   ownerLabel?: string;
   suggestedBid?: number | null;
+  remainingFaab?: number | null;
+  teamImpact?: FreeAgentTeamImpact;
   managerPredictions?: ManagerPredictionDisplay[];
   managerDetails?: ReadonlyMap<number, ManagerDetailData>;
   managerLabels?: ReadonlyMap<number, string>;
@@ -50,6 +52,15 @@ export function PlayerDetailDialog({ open, onClose, data }: { open: boolean; onC
   const supportsPrediction = !data.owned && typeof data.suggestedBid === 'number' && Number.isFinite(data.suggestedBid) && data.suggestedBid > 0;
   const predictedBid = orderedPredictions.find(isEligibleBuyerPrediction)?.predictedBid ?? null;
   const playerStatus = data.injuryStatus || data.status || 'Unavailable';
+  const impact = data.teamImpact;
+  const impactDelta = impact?.status === 'available'
+    ? impact.lineupPoints.after - impact.lineupPoints.before
+    : null;
+  const faabAfterBid = typeof data.remainingFaab === 'number'
+    && typeof data.suggestedBid === 'number'
+    && data.suggestedBid <= data.remainingFaab
+    ? data.remainingFaab - data.suggestedBid
+    : null;
   const closeDialog = useCallback(() => onClose(), [onClose]);
 
   useEffect(() => {
@@ -111,6 +122,40 @@ export function PlayerDetailDialog({ open, onClose, data }: { open: boolean; onC
           <section className="rounded-lg border border-[#20264d] p-3" aria-label={data.owned ? 'Roster status' : 'Acquisition context'}>
             {data.owned ? <><h3 className="text-xs font-semibold uppercase tracking-wider text-[#10b981]">Owned / rostered</h3><p className="mt-1 text-xs text-[#9ca3c7]">{data.ownerLabel ?? 'This player is currently rostered.'} Acquisition impact is not calculated for owned players.</p></> : <div className="grid grid-cols-2 gap-2"><div><div className="text-[10px] uppercase tracking-wider text-[#6b6e99]">Suggested</div><strong className="mt-1 block font-['Space_Mono'] text-lg text-[#f59e0b]">{formatDisplayCurrency(data.suggestedBid, 'Unavailable')}</strong></div><div><div className="text-[10px] uppercase tracking-wider text-[#6b6e99]">Predicted</div><strong className="mt-1 block font-['Space_Mono'] text-lg text-[#a5b4fc]">{formatDisplayCurrency(predictedBid, '—')}</strong></div></div>}
           </section>
+
+          {!data.owned && impact && (
+            <section className="mt-4 rounded-lg border border-[#20264d] p-3" aria-labelledby={`${titleId}-team-impact`}>
+              <h3 id={`${titleId}-team-impact`} className="text-xs font-semibold uppercase tracking-wider text-[#f0f0ff]">Team impact</h3>
+              {impact.status === 'unavailable' ? (
+                <p className="mt-2 rounded-lg bg-[#121735] p-3 text-xs text-[#9ca3c7]">{impact.reason}</p>
+              ) : (
+                <>
+                  <p className="mt-1 text-[10px] text-[#6b6e99]">Optimized next-week lineup · active teams only</p>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                    <div className="min-w-0 rounded-lg bg-[#121735] p-2">
+                      <div className="text-[9px] uppercase tracking-wider text-[#6b6e99]">Overall</div>
+                      <div className="mt-1 whitespace-nowrap font-['Space_Mono'] text-[10px] font-bold text-[#a5b4fc]">{impact.overallRank.before}/{impact.overallRank.outOf} → {impact.overallRank.after}/{impact.overallRank.outOf}</div>
+                    </div>
+                    <div className="min-w-0 rounded-lg bg-[#121735] p-2">
+                      <div className="truncate text-[9px] uppercase tracking-wider text-[#6b6e99]">{impact.position}</div>
+                      <div className="mt-1 whitespace-nowrap font-['Space_Mono'] text-[10px] font-bold text-[#a5b4fc]">{impact.positionRank.before}/{impact.positionRank.outOf} → {impact.positionRank.after}/{impact.positionRank.outOf}</div>
+                    </div>
+                    <div className="min-w-0 rounded-lg bg-[#121735] p-2">
+                      <div className="text-[9px] uppercase tracking-wider text-[#6b6e99]">Lineup pts</div>
+                      <div className="mt-1 whitespace-nowrap font-['Space_Mono'] text-[10px] font-bold text-[#10b981]">{impact.lineupPoints.before.toFixed(1)} → {impact.lineupPoints.after.toFixed(1)}</div>
+                    </div>
+                  </div>
+                  <div className="mt-3 space-y-1.5 text-[10px] leading-relaxed text-[#9ca3c7]">
+                    <p><span className="text-[#6b6e99]">Projection change:</span> <span className="font-['Space_Mono'] text-[#f0f0ff]">{impactDelta != null && impactDelta > 0 ? '+' : ''}{impactDelta?.toFixed(1)} pts</span></p>
+                    <p><span className="text-[#6b6e99]">Starter change:</span> {impact.incomingPlayerStarts ? impact.displacedStarterIds.length > 0 ? `${data.name} enters; ${impact.displacedStarterIds.map((playerId) => data.getPlayerName?.(playerId) ?? playerId).join(', ')} moves out.` : `${data.name} enters the optimized lineup.` : 'Optimized starters are unchanged.'}</p>
+                    <p><span className="text-[#6b6e99]">Assumed drop:</span> {impact.assumedDropPlayerId ? `${data.getPlayerName?.(impact.assumedDropPlayerId) ?? impact.assumedDropPlayerId} · ${impact.dropReason === 'lowest-projected-non-starter' ? 'lowest projected non-starter' : 'lowest projected roster player'}` : 'None needed at the current roster size.'}</p>
+                    <p><span className="text-[#6b6e99]">FAAB:</span> {typeof data.remainingFaab === 'number' && typeof data.suggestedBid === 'number' ? data.suggestedBid <= data.remainingFaab ? `${formatDisplayCurrency(data.remainingFaab)} → ${formatDisplayCurrency(faabAfterBid)}` : `${formatDisplayCurrency(data.suggestedBid)} suggested exceeds ${formatDisplayCurrency(data.remainingFaab)} remaining` : 'Resulting balance unavailable.'}</p>
+                  </div>
+                  <p className="mt-3 border-t border-[#20264d] pt-2 text-[9px] leading-relaxed text-[#6b6e99]">The suggested bid changes FAAB only. It does not change projected points.</p>
+                </>
+              )}
+            </section>
+          )}
 
           {!data.owned && <details className="mt-4 rounded-lg border border-[#20264d] p-3"><summary className="cursor-pointer text-xs font-semibold uppercase tracking-wider text-[#f0f0ff]">Predicted bidding</summary><div className="mt-3">{supportsPrediction && orderedPredictions.length > 0 ? <WaiverManagerPredictions predictions={orderedPredictions} detailsByRosterId={data.managerDetails} getPlayerName={data.getPlayerName ?? (() => 'Unknown player')} /> : <p className="rounded-lg bg-[#121735] p-3 text-xs text-[#9ca3c7]">{supportsPrediction ? 'No supported current manager prediction is available.' : 'Predicted bidding is unavailable for a $0 or unsupported acquisition value.'}</p>}</div></details>}
 

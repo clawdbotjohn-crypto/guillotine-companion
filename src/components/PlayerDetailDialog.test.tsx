@@ -73,6 +73,57 @@ describe('PlayerDetailDialog', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(document.activeElement).toBe(opener);
   });
+  it('shows complete free-agent Team Impact with an honest starter/drop and bid-independent points', () => {
+    const impact = {
+      status: 'available' as const,
+      overallRank: { before: 24, after: 18, outOf: 26 },
+      positionRank: { before: 18, after: 3, outOf: 26 },
+      lineupPoints: { before: 64, after: 77 },
+      position: 'RB',
+      incomingPlayerStarts: true,
+      displacedStarterIds: ['old-rb'],
+      assumedDropPlayerId: 'bench-rb',
+      dropReason: 'lowest-projected-non-starter' as const,
+    };
+    const getPlayerName = (playerId: string) => ({ 'old-rb': 'Old Starter', 'bench-rb': 'Bench Player' })[playerId] ?? playerId;
+    const { rerender } = render(<PlayerDetailDialog open onClose={vi.fn()} data={{
+      ...data,
+      remainingFaab: 100,
+      teamImpact: impact,
+      getPlayerName,
+    }} />);
+    const dialog = screen.getByRole('dialog', { name: 'Detail Player' });
+    expect(within(dialog).getByText('Team impact')).toBeTruthy();
+    expect(within(dialog).getByText('24/26 → 18/26')).toBeTruthy();
+    expect(within(dialog).getByText('18/26 → 3/26')).toBeTruthy();
+    expect(within(dialog).getByText('64.0 → 77.0')).toBeTruthy();
+    expect(within(dialog).getByText(/Detail Player enters; Old Starter moves out/)).toBeTruthy();
+    expect(within(dialog).getByText(/Bench Player · lowest projected non-starter/)).toBeTruthy();
+    expect(within(dialog).getByText('$100 → $88')).toBeTruthy();
+    expect(within(dialog).getByText('The suggested bid changes FAAB only. It does not change projected points.')).toBeTruthy();
+
+    rerender(<PlayerDetailDialog open onClose={vi.fn()} data={{
+      ...data,
+      suggestedBid: 99,
+      remainingFaab: 100,
+      teamImpact: impact,
+      getPlayerName,
+    }} />);
+    expect(within(dialog).getByText('64.0 → 77.0')).toBeTruthy();
+    expect(within(dialog).getByText('$100 → $1')).toBeTruthy();
+  });
+
+  it('does not expose partial Team Impact when a required dependency is unavailable', () => {
+    render(<PlayerDetailDialog open onClose={vi.fn()} data={{
+      ...data,
+      teamImpact: { status: 'unavailable', reason: 'This player has no next-week Sleeper projection.' },
+    }} />);
+    const dialog = screen.getByRole('dialog', { name: 'Detail Player' });
+    expect(within(dialog).getByText('This player has no next-week Sleeper projection.')).toBeTruthy();
+    expect(within(dialog).queryByText('Overall')).toBeNull();
+    expect(within(dialog).queryByText('Lineup pts')).toBeNull();
+  });
+
   it('merges status and injury, exposes projection provenance, and uses collapsible empty states', () => {
     render(<PlayerDetailDialog open onClose={vi.fn()} data={{
       ...data,
