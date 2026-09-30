@@ -406,3 +406,13 @@ Architecture: `docs/BIDDING-PROFILES-PLAN.md`
 - No per-league weekly roster/ownership/needs snapshots in V1.
 - Existing historical weeks are labeled reconstructed; only prospectively captured snapshots are exact.
 - Formula constants are versioned and tested in code.
+
+## 2026-09-30 weekly calibration refresh — W4 eligible
+
+- Preserved the refreshed de-identified fixture and integrated the newly available **W4 same-week reconstructed snapshot** (1,151 projections; fixture content hash `9463b40e…`). Eligible analysis now spans W2–W4 instead of silently assuming two weeks.
+- Generalized the exactly-five-bullet owner answer and all report/presentation scope labels for any eligible week count; the current answer now includes W4 top-three winners `$300/$187/$128`, serious-market medians `$171/$100/$61`, arithmetic observed/intrinsic multipliers, and closest-strategy results.
+- Generalized prior-only scale validation from one W2→W3 pair to **every adjacent eligible pair**; W3→W4 is now included without refitting on the test week (for Middle VORP serious medians: W3 scale `1.185`, W4 `n=5`, MAE `$31.35`).
+- W4 diagnostics: Corrected Weeks as Starter is closest on serious-market medians (MAE `$16.30`), Corrected Safe is closest on canonical winners, and Max VORP is closest on all bids. Across W2–W4, Current-team VoRP remains closest on serious medians/all bids while Corrected Safe remains closest on winners.
+- Manager-aware calibration improved with more data but remains descriptive: all usable bids `n=243`, MAE `$28.79`, R² `0.367`, Spearman `0.649`; winner-only `n=50`, MAE `$18.86`, R² `0.641`, Spearman `0.787`.
+- Regenerated markdown, HTML, and PDF artifacts and visually reviewed all 20 rendered PDF pages (no overlap/clipping/table overflow observed). Privacy scan of the target artifacts found no player names, team IDs, manager IDs, or league IDs.
+- **Product decision: NO FORMULA CHANGE.** Keep Middle VORP analysis-only and retain the existing product bidding formulas. One additional reconstructed week changes leaders by lens and is not enough to promote a new default; continue exact pre-waiver collection and weekly held-out calibration.

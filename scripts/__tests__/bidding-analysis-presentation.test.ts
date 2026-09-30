@@ -28,30 +28,30 @@ describe('owner-facing bidding analysis presentation', () => {
 
   it('reproduces the audited fixture values and distinguishes sample from robust result', () => {
     expect(model).toMatchObject({
-      usable: { length: 239 },
-      wins: { length: 47 },
-      serious: { length: 165 },
-      seriousWins: { length: 29 },
-      managerRows: { length: 133 },
-      managerWinRows: { length: 27 },
-      sampleWinner: { label: 'Corrected Safe (PR #13)' },
+      usable: { length: 355 },
+      wins: { length: 72 },
+      serious: { length: 240 },
+      seriousWins: { length: 42 },
+      managerRows: { length: 243 },
+      managerWinRows: { length: 50 },
+      sampleWinner: { label: 'Legacy Aggressive' },
       seriousSampleWinner: { label: 'Legacy Aggressive' },
-      robustLeaders: ['Corrected Safe (PR #13)', 'Corrected Safe (PR #13)', 'Corrected Safe (PR #13)'],
+      robustLeaders: ['Legacy Aggressive', 'Legacy Aggressive', 'Corrected Safe (PR #13)'],
     });
-    expect(model.sampleWinner.metrics.mae).toBeCloseTo(25.7021277, 7);
-    expect(model.sampleWinner.interval?.[0]).toBeCloseTo(14.4037234, 7);
-    expect(model.sampleWinner.interval?.[1]).toBeCloseTo(40.4707447, 7);
-    expect(model.seriousSampleWinner.metrics.mae).toBeCloseTo(38.4827586, 7);
-    expect(model.allMetrics.find((row) => row.label === 'Current-team VoRP')?.metrics.mae).toBeCloseTo(24.4476987, 7);
-    expect(model.managerMetrics.mae).toBeCloseTo(28.0300752, 7);
-    expect(model.managerWinMetrics.mae).toBeCloseTo(22.8888889, 7);
+    expect(model.sampleWinner.metrics.mae).toBeCloseTo(22.0277778, 7);
+    expect(model.sampleWinner.interval?.[0]).toBeCloseTo(14.6663194, 7);
+    expect(model.sampleWinner.interval?.[1]).toBeCloseTo(30.4590278, 7);
+    expect(model.seriousSampleWinner.metrics.mae).toBeCloseTo(33.9761905, 7);
+    expect(model.allMetrics.find((row) => row.label === 'Current-team VoRP')?.metrics.mae).toBeCloseTo(26.3464789, 7);
+    expect(model.managerMetrics.mae).toBeCloseTo(28.7901235, 7);
+    expect(model.managerWinMetrics.mae).toBeCloseTo(18.86, 7);
   });
 
   it('uses the explicit unfitted R² definition, including valid negative results', () => {
     expect(rSquared([{ actual: 1, predicted: 1 }, { actual: 2, predicted: 2 }])).toBe(1);
     expect(rSquared([{ actual: 1, predicted: 10 }, { actual: 2, predicted: 10 }])).toBeLessThan(0);
-    expect(rSquared(model.managerRows)).toBeCloseTo(-0.0692019, 7);
-    expect(rSquared(model.managerWinRows)).toBeCloseTo(0.4641016, 7);
+    expect(rSquared(model.managerRows)).toBeCloseTo(0.3668318, 7);
+    expect(rSquared(model.managerWinRows)).toBeCloseTo(0.6412804, 7);
   });
 
   it('renders byte-deterministically with required caveats and no external runtime', () => {
@@ -73,7 +73,7 @@ describe('owner-facing bidding analysis presentation', () => {
     expect(html).not.toContain('<th scope="col">R²</th>');
     expect(html).toContain('95% bootstrap MAE CI');
     expect(html).toContain('smaller, non-comparable subset');
-    expect(html).toContain('Reconstructed W2–W3 projection snapshots');
+    expect(html).toContain('Reconstructed W2–W3–W4 projection snapshots');
     expect(html).not.toMatch(/manager_[0-9]|roster_[0-9]|\b\d{17,20}\b/i);
     expect(html).not.toMatch(/<script\b|https?:\/\/[^<]*\.(?:js|css)/i);
   });

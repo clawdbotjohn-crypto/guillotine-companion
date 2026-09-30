@@ -32,14 +32,16 @@ function weekMetric(view: WeeklyMarketView, week: number): MarketMetricGroup {
 export function plainFiveBulletAnswer(analysis: WeeklyMarketAnalysis): string[] {
   const view = analysis.ownerDirected;
   const weeks = view.topThree;
-  if (weeks.length !== 2) throw new Error(`Five-bullet fixture answer expects exactly two eligible same-week snapshots; got ${weeks.length}`);
+  if (!weeks.length) throw new Error('Five-bullet answer requires at least one eligible same-week snapshot');
+  const weekLabels = weeks.map((week) => `W${week.week}`);
+  const scope = weekLabels.length === 1 ? weekLabels[0] : `${weekLabels.slice(0, -1).join(', ')} and ${weekLabels.at(-1)}`;
   const overall = view.marketMetrics.find((row) => row.week == null)!;
   return [
-    `Scope: W${weeks[0].week} and W${weeks[1].week} have same-week reconstructed snapshots. The top three are unique canonical winners after ${analysis.exclusion.marker} (${analysis.exclusion.proof}; proof matches=${analysis.exclusion.canonicalMatchCount}); the closest overall serious-median strategy is ${overall.closest}.`,
-    `W${weeks[0].week} top-three winning-price arithmetic multipliers (observed/intrinsic): ${ratioList(weeks[0].winnerMultipliers)}.`,
-    `W${weeks[1].week} top-three winning-price arithmetic multipliers (observed/intrinsic): ${ratioList(weeks[1].winnerMultipliers)}.`,
-    `W${weeks[0].week} top-three serious-market-median arithmetic multipliers: ${ratioList(weeks[0].marketMultipliers)}; closest across all W${weeks[0].week} eligible market clusters: ${weekMetric(view, weeks[0].week).closest}.`,
-    `W${weeks[1].week} top-three serious-market-median arithmetic multipliers: ${ratioList(weeks[1].marketMultipliers)}; closest across all W${weeks[1].week} eligible market clusters: ${weekMetric(view, weeks[1].week).closest}.`,
+    `Scope: ${scope} have same-week reconstructed snapshots. The top three are unique canonical winners after ${analysis.exclusion.marker} (${analysis.exclusion.proof}; proof matches=${analysis.exclusion.canonicalMatchCount}).`,
+    `Top-three winning-price arithmetic multipliers (observed/intrinsic): ${weeks.map((week) => `W${week.week}: ${ratioList(week.winnerMultipliers)}`).join('; ')}.`,
+    `Top-three serious-market-median arithmetic multipliers: ${weeks.map((week) => `W${week.week}: ${ratioList(week.marketMultipliers)}`).join('; ')}.`,
+    `Closest serious-market strategy by eligible weekly cluster: ${weeks.map((week) => `W${week.week} ${weekMetric(view, week.week).closest}`).join('; ')}.`,
+    `Across all eligible weeks, the closest overall serious-median strategy is ${overall.closest}; raw evidence is retained in the labeled with-target sensitivity view, and weekly scale remains distinct from strategy shape.`,
   ];
 }
 
@@ -136,20 +138,20 @@ export function renderWeeklyMarketMarkdown(analysis: WeeklyMarketAnalysis): stri
     )}`;
   }).join('\n\n');
   const heldOut = `### Prior-week-fitted held-out scale — canonical winners\n\n` +
-    markdownTable(['Strategy', 'Fit→test week', 'W2 median multiplier', 'W3 n', 'MAE', 'Median AE', 'Bias', 'Raw held-out R²*', 'Spearman ρ'], heldOutRows(view.heldOutScaleMetrics.winning)) +
+    markdownTable(['Strategy', 'Fit→test week', 'Prior-week median multiplier', 'Test-week n', 'MAE', 'Median AE', 'Bias', 'Raw held-out R²*', 'Spearman ρ'], heldOutRows(view.heldOutScaleMetrics.winning)) +
     `\n\n### Prior-week-fitted held-out scale — serious medians\n\n` +
-    markdownTable(['Strategy', 'Fit→test week', 'W2 median multiplier', 'W3 n', 'MAE', 'Median AE', 'Bias', 'Raw held-out R²*', 'Spearman ρ'], heldOutRows(view.heldOutScaleMetrics.seriousMedian));
+    markdownTable(['Strategy', 'Fit→test week', 'Prior-week median multiplier', 'Test-week n', 'MAE', 'Median AE', 'Bias', 'Raw held-out R²*', 'Spearman ρ'], heldOutRows(view.heldOutScaleMetrics.seriousMedian));
   return `## Five-bullet answer: weekly price multipliers\n\n${bullets}\n\n` +
 `## Weekly top-three and median-market appendix\n\n` +
-`This owner-directed view compares **Max VORP, Middle VORP, current-team VoRP, and the corrected PR #13 Safe and Weeks-as-Starter curves**. Legacy Aggressive is excluded because it is derived from legacy Safe. Only events with an exact or explicitly reconstructed same-decision-week snapshot join are eligible; W4 is absent because only a W3 fallback existed. “Serious” is strictly **bid > $5**. Ratios are **observed/intrinsic**, not intrinsic/observed. A zero intrinsic denominator is undefined, excluded from arithmetic/geometric/median aggregation, and counted in coverage. A winning or competing bid at its reconstructed pre-bid FAAB is marked as FAAB-censored because latent willingness may be higher.\n\n` +
+`This owner-directed view compares **Max VORP, Middle VORP, current-team VoRP, and the corrected PR #13 Safe and Weeks-as-Starter curves**. Legacy Aggressive is excluded because it is derived from legacy Safe. Only events with an exact or explicitly reconstructed same-decision-week snapshot join are eligible; the eligible decision weeks are ${analysis.ownerDirected.eligibleWeeks.map((week) => `W${week}`).join(', ')}. “Serious” is strictly **bid > $5**. Ratios are **observed/intrinsic**, not intrinsic/observed. A zero intrinsic denominator is undefined, excluded from arithmetic/geometric/median aggregation, and counted in coverage. A winning or competing bid at its reconstructed pre-bid FAAB is marked as FAAB-censored because latent willingness may be higher.\n\n` +
 `${topSections}\n\n` +
 `## Analysis B: median serious market versus intrinsic strategy\n\n` +
 `Each player/week cluster selects its highest canonical completed winner, then includes only legitimate failed competing claims proven against that winner in the same processing batch. Metrics use one median observation per eligible player/week, avoiding duplicate weight from contingency/drop paths or a second clearing cycle. **Raw prediction R²*** is the standard predictive score against the observed-mean baseline, but it is **not the R² from a fitted regression**: strategy dollars are held fixed on the identity line rather than refit to bids. It may be negative when fixed predictions are worse than the mean-only baseline; that does not mean negative correlation. R² and Spearman are shown only when at least two non-constant observations make them meaningful.\n\n` +
 `${marketSections}\n\n` +
 `## Weekly and season multiplier summaries\n\n${multiplierSections}\n\n` +
-`## Prior-week-fitted held-out scale check\n\nThe multiplier is fit **only** as the W2 median observed/intrinsic ratio, then applied without refitting to W3. It is never fit and scored on the same observations. Raw held-out R²* retains the same prediction-score meaning.\n\n${heldOut}\n\n` +
+`## Prior-week-fitted held-out scale check\n\nEach multiplier is fit **only** as the prior eligible week's median observed/intrinsic ratio, then applied without refitting to the next eligible week. It is never fit and scored on the same observations. Raw held-out R²* retains the same prediction-score meaning.\n\n${heldOut}\n\n` +
 `## Owner-directed exclusion sensitivity\n\n` +
 `The underlying canonical evidence is retained. The primary view excludes only the deterministic anonymized marker **${analysis.exclusion.marker}**, established by ${analysis.exclusion.proof}; no private name or identifier is stored or printed. ${sensitivityLine(analysis)}\n\n` +
 `## Shape × scale interpretation\n\n` +
-`The five primary intrinsic strategies describe **target shape**—which players should cost relatively more—while the observed/intrinsic multipliers estimate a separate **market scale** for each week. The rank and error results can motivate a future model that combines strategy shape with a pooled week/market scale. They do **not** identify an individual manager style: two reconstructed weeks and sparse manager histories are insufficient for that claim.\n`;
+`The five primary intrinsic strategies describe **target shape**—which players should cost relatively more—while the observed/intrinsic multipliers estimate a separate **market scale** for each week. The rank and error results can motivate a future model that combines strategy shape with a pooled week/market scale. They do **not** identify an individual manager style: ${analysis.ownerDirected.eligibleWeeks.length} reconstructed weeks and sparse manager histories are insufficient for that claim.\n`;
 }

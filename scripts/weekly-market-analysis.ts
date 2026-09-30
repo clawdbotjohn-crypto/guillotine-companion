@@ -381,8 +381,10 @@ function buildView(allClusters: Cluster[], excludedOwnerDirected: boolean): Week
     clusterMultiplierGroup(clusters, week, 'winning'),
     clusterMultiplierGroup(clusters, week, 'serious-median'),
   ]);
-  const fitWeek = eligibleWeeks[0];
-  const testWeek = eligibleWeeks[1];
+  const adjacentWeekPairs = eligibleWeeks.slice(1).map((testWeek, index) => ({
+    fitWeek: eligibleWeeks[index],
+    testWeek,
+  }));
   return {
     excludedOwnerDirected,
     eligibleWeeks,
@@ -390,8 +392,8 @@ function buildView(allClusters: Cluster[], excludedOwnerDirected: boolean): Week
     marketMetrics: metricGroups,
     clusterMultipliers,
     heldOutScaleMetrics: {
-      winning: fitWeek != null && testWeek != null ? heldOutScaleMetrics(clusters, fitWeek, testWeek, 'winning') : [],
-      seriousMedian: fitWeek != null && testWeek != null ? heldOutScaleMetrics(clusters, fitWeek, testWeek, 'seriousMedian') : [],
+      winning: adjacentWeekPairs.flatMap(({ fitWeek, testWeek }) => heldOutScaleMetrics(clusters, fitWeek, testWeek, 'winning')),
+      seriousMedian: adjacentWeekPairs.flatMap(({ fitWeek, testWeek }) => heldOutScaleMetrics(clusters, fitWeek, testWeek, 'seriousMedian')),
     },
     marketClusterCount: clusters.length,
     seriousMedianClusterCount: clusters.filter((cluster) => cluster.seriousMedian != null).length,

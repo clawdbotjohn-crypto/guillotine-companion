@@ -343,3 +343,11 @@ No merge, no push to `main`, no `workflow_dispatch`, and no production deploymen
 - Added a prominent first-analysis warning: values are not fitted-regression R², may be negative when fixed predictions lose to the mean baseline, and do not imply negative correlation.
 - Generator regression test now requires the explicit label/explanation and rejects ambiguous `<th>R²</th>`.
 - Verification: `npm run analyze:bidding`; `npm run analyze:bidding:presentation`; focused presentation tests 4/4; `git diff --check`.
+
+## 2026-09-30 weekly calibration handoff
+
+- W4 is now a first-class eligible week throughout the weekly analysis/report/presentation. The exactly-five-bullet owner answer is generalized; no two-week guard or hardcoded W2/W3 labels remain.
+- Adjacent held-out validation now emits W2→W3 and W3→W4 rows for all five primary strategies and both winning/serious-median lenses.
+- Refreshed artifacts: `docs/analysis/bidding-strategy-accuracy-seamex-2026.{md,html,pdf}`. The PDF has 20 visually reviewed pages with no clipping or overflow.
+- Current decision: **no product formula change**. W4 serious-market medians favor Corrected Weeks as Starter, W4 winners favor Corrected Safe, and aggregate serious/all-bid results still favor Current-team VoRP; lens instability plus reconstructed provenance keeps Middle VORP analysis-only.
+- Validation to rerun: `npm run check`, `npm test`, `npm run analyze:bidding`, and `npm run analyze:bidding:presentation`.
