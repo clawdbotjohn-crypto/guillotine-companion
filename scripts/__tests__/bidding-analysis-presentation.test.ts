@@ -2,6 +2,10 @@ import { readFile } from "node:fs/promises";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { AnalysisFixture } from "../analyze-bidding-strategies.ts";
 import {
+  computePrewaiverCapture,
+  type PrewaiverCaptureInput,
+} from "../prewaiver-capture.ts";
+import {
   buildOwnerDecisionReport,
   normalizePdfMetadata,
   renderBiddingMarkdown,
@@ -284,5 +288,45 @@ describe("owner-decision nine-question report", () => {
       "latin1",
     );
     expect(normalizePdfMetadata(first)).toEqual(normalizePdfMetadata(second));
+  });
+});
+
+
+describe("optional exact pre-waiver panel ingestion", () => {
+  it("feeds Questions 1, 2, and 8 while preserving the default report when absent", async () => {
+    const reconstructed = JSON.parse(
+      await readFile("scripts/fixtures/bidding-strategy-seamex-2026.json", "utf8"),
+    ) as AnalysisFixture;
+    const exact = JSON.parse(
+      await readFile("scripts/fixtures/bidding-owner-decision-week5.json", "utf8"),
+    ) as ExactAuditFixture;
+    const input = JSON.parse(
+      await readFile("scripts/fixtures/prewaiver-capture-input.json", "utf8"),
+    ) as PrewaiverCaptureInput;
+    const panel = computePrewaiverCapture(input, "fixture-test-salt-2026-not-private").panel!;
+    const withPanel = buildOwnerDecisionReport(reconstructed, exact, panel);
+    expect(withPanel.prewaiverPanel?.audit.actualRowCount).toBe(12);
+    expect(withPanel.questions[0].keyNumber).toContain("10 future exact opportunities ingested");
+    expect(withPanel.questions[1].keyNumber).toContain("Likely/Possible/Unlikely");
+    expect(withPanel.questions[7]).toMatchObject({
+      keyNumber: "10/10 future exact opportunities have time-aligned need ranks",
+    });
+    expect(withPanel.questions[7].directAnswer).toContain("remain unscored");
+    expect(buildOwnerDecisionReport(reconstructed, exact).prewaiverPanel).toBeUndefined();
+  });
+
+  it("rejects tampered optional panels", async () => {
+    const reconstructed = JSON.parse(
+      await readFile("scripts/fixtures/bidding-strategy-seamex-2026.json", "utf8"),
+    ) as AnalysisFixture;
+    const exact = JSON.parse(
+      await readFile("scripts/fixtures/bidding-owner-decision-week5.json", "utf8"),
+    ) as ExactAuditFixture;
+    const input = JSON.parse(
+      await readFile("scripts/fixtures/prewaiver-capture-input.json", "utf8"),
+    ) as PrewaiverCaptureInput;
+    const panel = computePrewaiverCapture(input, "fixture-test-salt-2026-not-private").panel!;
+    panel.rows[0].preWaiverFaab += 1;
+    expect(() => buildOwnerDecisionReport(reconstructed, exact, panel)).toThrow("cardinality/hash validation failed");
   });
 });

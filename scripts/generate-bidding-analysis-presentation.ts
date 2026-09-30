@@ -27,6 +27,7 @@ import {
   type OwnerDecisionReportModel,
   type QuestionSection,
 } from "./owner-decision-report.ts";
+import type { PrewaiverPanel } from "./prewaiver-capture.ts";
 
 const RECONSTRUCTED_FIXTURE_PATH =
   "scripts/fixtures/bidding-strategy-seamex-2026.json";
@@ -1038,6 +1039,7 @@ async function findChromium(): Promise<string | null> {
 
 export async function generateArtifacts(
   includePdf = true,
+  prewaiverPanelPath?: string,
 ): Promise<OwnerDecisionReportModel> {
   const reconstructed = JSON.parse(
     await readFile(RECONSTRUCTED_FIXTURE_PATH, "utf8"),
@@ -1045,7 +1047,10 @@ export async function generateArtifacts(
   const exact = JSON.parse(
     await readFile(EXACT_FIXTURE_PATH, "utf8"),
   ) as ExactAuditFixture;
-  const model = buildOwnerDecisionReport(reconstructed, exact);
+  const prewaiverPanel = prewaiverPanelPath
+    ? JSON.parse(await readFile(prewaiverPanelPath, "utf8")) as PrewaiverPanel
+    : undefined;
+  const model = buildOwnerDecisionReport(reconstructed, exact, prewaiverPanel);
   await writeFile(HTML_PATH, renderBiddingPresentation(model));
   await writeFile(MARKDOWN_PATH, renderBiddingMarkdown(model));
   console.log(`Wrote ${HTML_PATH}`);
@@ -1078,11 +1083,15 @@ export async function generateArtifacts(
   return model;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
-  generateArtifacts(process.argv.includes("--pdf")).catch((error: unknown) => {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const panelArgument = process.argv.indexOf("--prewaiver-panel");
+  const panelPath = panelArgument >= 0 ? process.argv[panelArgument + 1] : undefined;
+  if (panelArgument >= 0 && !panelPath) throw new Error("--prewaiver-panel requires a path");
+  generateArtifacts(process.argv.includes("--pdf"), panelPath).catch((error: unknown) => {
     console.error(error);
     process.exitCode = 1;
   });
+}
 
 export { buildOwnerDecisionReport, selectTopAndMiddleRows };
 export type { ExactAuditFixture, OwnerDecisionReportModel };

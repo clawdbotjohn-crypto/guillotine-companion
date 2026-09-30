@@ -8,6 +8,7 @@ import {
   computeErrorMetrics,
   type EvaluatedBid,
 } from "./bidding-strategy-analysis.ts";
+import type { PrewaiverPanel } from "./prewaiver-capture.ts";
 
 export type EvidenceBadge = "Supported" | "Directional" | "Not enough evidence";
 
@@ -178,6 +179,8 @@ export interface OwnerDecisionReportModel {
   winnerHistoryRows: WinnerHistoryRow[];
   exact: ExactAuditFixture;
   reconstructed: AnalysisFixture;
+  /** Optional prospective evidence. Omitted to preserve legacy report output. */
+  prewaiverPanel?: PrewaiverPanel;
   headlineMetrics: {
     topClaimN: number;
     middleClaimN: number;
@@ -621,9 +624,52 @@ function countNextWeekReduction(events: EnrichedEvent[]): {
   return { observed, reduced };
 }
 
+interface ProspectivePanelSummary {
+  rows: number;
+  managers: number;
+  targets: number;
+  capped: number;
+  rankedNeedRows: number;
+  likelihood: Record<DirectPredictionRow["likelihood"], number>;
+}
+
+function summarizePrewaiverPanel(panel: PrewaiverPanel): ProspectivePanelSummary {
+  if (panel.schemaVersion !== "prewaiver-opportunity-v1" || !panel.timing.exact
+    || panel.timing.state !== "pre-waiver-exact") {
+    throw new Error("Weekly report accepts exact pre-waiver opportunity panels only.");
+  }
+  if (panel.coordinate.playingWeek !== panel.coordinate.decisionWeek - 1) {
+    throw new Error("Pre-waiver panel has an invalid playing-week/decision-week mapping.");
+  }
+  const uniqueRows = new Set(panel.rows.map((row) => `${row.managerKey}|${row.targetKey}`)).size;
+  const { artifactHash, ...auditWithoutArtifactHash } = panel.audit;
+  const computedArtifactHash = stableSha256({ ...panel, audit: auditWithoutArtifactHash });
+  if (panel.rows.length !== panel.audit.expectedRowCount
+    || panel.rows.length !== panel.audit.actualRowCount
+    || uniqueRows !== panel.audit.uniqueRowCount
+    || stableSha256(panel.rows) !== panel.audit.rowsHash
+    || computedArtifactHash !== artifactHash) {
+    throw new Error("Pre-waiver panel cardinality/hash validation failed.");
+  }
+  const activeRows = panel.rows.filter((row) => row.active);
+  return {
+    rows: activeRows.length,
+    managers: new Set(activeRows.map((row) => row.managerKey)).size,
+    targets: new Set(activeRows.map((row) => row.targetKey)).size,
+    capped: activeRows.filter((row) => row.cappedByFaab).length,
+    rankedNeedRows: activeRows.filter((row) => row.needPercentile != null).length,
+    likelihood: {
+      Likely: activeRows.filter((row) => row.likelihood === "Likely").length,
+      Possible: activeRows.filter((row) => row.likelihood === "Possible").length,
+      Unlikely: activeRows.filter((row) => row.likelihood === "Unlikely").length,
+    },
+  };
+}
+
 export function buildOwnerDecisionReport(
   reconstructed: AnalysisFixture,
   exact: ExactAuditFixture,
+  prewaiverPanel?: PrewaiverPanel,
 ): OwnerDecisionReportModel {
   const topTargets = [...exact.targets]
     .sort((a, b) => b.maxVorp - a.maxVorp || a.alias.localeCompare(b.alias))
@@ -644,14 +690,17 @@ export function buildOwnerDecisionReport(
   );
   const winnerHistory = winnerHistoryRows(usable);
   const reduction = countNextWeekReduction(usable);
+  const prospective = prewaiverPanel ? summarizePrewaiverPanel(prewaiverPanel) : null;
   const questions: QuestionSection[] = [
     {
       number: 1,
       title: "Predicted-bid accuracy for top versus middle bidders/players",
       badge: "Supported",
-      keyNumber: `30 direct rows; ${topClaims.length}/${middleClaims.length} scored claims`,
+      keyNumber: prospective
+        ? `30 direct rows; ${topClaims.length}/${middleClaims.length} scored claims; ${prospective.rows} future exact opportunities ingested`
+        : `30 direct rows; ${topClaims.length}/${middleClaims.length} scored claims`,
       directAnswer: `In the exact Week 5 top-three target slice, top-five predicted bidders were not more accurate: claim-only MAE was $${mae(topClaims).toFixed(1)} versus $${mae(middleClaims).toFixed(1)} for the deterministic middle five.`,
-      evidence: `The top-three targets were frozen pre-auction by Max VORP descending (102, 69, 50; alias tie-break). Errors exist only for explicit claims; non-bids remain missing, not $0.`,
+      evidence: `The top-three targets were frozen pre-auction by Max VORP descending (102, 69, 50; alias tie-break). Errors exist only for explicit claims; non-bids remain missing, not $0.${prospective ? ` The prospective panel contributes ${prospective.rows} immutable manager-target predictions (${prospective.capped} FAAB-capped) for the next post-waiver outcome join.` : ""}`,
       implication:
         "Use the ranking as a conversation starter, not proof that the highest projected manager will set the price. Keep feasible/capped values visible before judging willingness.",
       unknowns:
@@ -662,11 +711,14 @@ export function buildOwnerDecisionReport(
       title:
         "What Likely/Possible/Unlikely predicts and whether narrower bands help",
       badge: "Directional",
-      keyNumber: "242 opportunities; any-claim rates 47.7% / 31.5% / 21.7%",
+      keyNumber: prospective
+        ? `242 scored opportunities; next exact panel ${prospective.likelihood.Likely}/${prospective.likelihood.Possible}/${prospective.likelihood.Unlikely} Likely/Possible/Unlikely`
+        : "242 opportunities; any-claim rates 47.7% / 31.5% / 21.7%",
       directAnswer:
         "Likely/Possible/Unlikely was ordered for any canonical claim, but ranking managers only by predicted dollars did not improve discrimination: the exact top 25% claimed less often than the bottom 25%.",
-      evidence:
-        "Week 5 has 65 Likely, 108 Possible, and 69 Unlikely opportunities. Top/bottom 25% and 10% are shown for every preregistered threshold outcome; they are descriptive, not selected-and-scored cutoffs.",
+      evidence: prospective
+        ? `Week 5 has 65 Likely, 108 Possible, and 69 Unlikely scored opportunities. The separately frozen prospective panel adds ${prospective.rows} unscored opportunities across ${prospective.managers} active managers and ${prospective.targets} targets; it is not treated as outcome evidence before the auction.`
+        : "Week 5 has 65 Likely, 108 Possible, and 69 Unlikely opportunities. Top/bottom 25% and 10% are shown for every preregistered threshold outcome; they are descriptive, not selected-and-scored cutoffs.",
       implication:
         "Keep the three labels for coarse participation likelihood. Treat each row as a budget opportunity: available FAAB limits capacity, while a non-claim does not identify whether budget, roster capacity, or preference caused the outcome.",
       unknowns:
@@ -746,15 +798,20 @@ export function buildOwnerDecisionReport(
       number: 8,
       title: "Positional need versus participation/amount",
       badge: "Not enough evidence",
-      keyNumber: "0 time-aligned privacy-safe need snapshots",
-      directAnswer:
-        "Positional need cannot be tested honestly from the retained evidence, including the requested Week 5 WR/QB slice.",
-      evidence:
-        "The exact fixture has predictions, FAAB, and outcomes but no auction-time roster-need percentile, injury/bye state, or prior-acquisition control.",
+      keyNumber: prospective
+        ? `${prospective.rankedNeedRows}/${prospective.rows} future exact opportunities have time-aligned need ranks`
+        : "0 time-aligned privacy-safe need snapshots",
+      directAnswer: prospective
+        ? "A prospective positional-need panel is now frozen, but participation and conditional bid-size effects remain unscored until exact post-waiver outcomes are joined."
+        : "Positional need cannot be tested honestly from the retained evidence, including the requested Week 5 WR/QB slice.",
+      evidence: prospective
+        ? `The exact prospective panel preserves ${prospective.rankedNeedRows} ranked need opportunities across ${prospective.targets} targets, including frozen lineup inputs, FAAB, injury/bye, target strategy values, and liquidity. It remains separate from observed intent.`
+        : "The exact fixture has predictions, FAAB, and outcomes but no auction-time roster-need percentile, injury/bye state, or prior-acquisition control.",
       implication:
         "Do not interpret a bid or non-bid as need. Modeled need and observed intent must stay separate.",
-      unknowns:
-        "Before each auction capture top/bottom 10% and 25% need ranks by position, roster/injury/bye, player value, FAAB, manager baseline, and prior acquisitions; then report claim rate and conditional amount for players >$10.",
+      unknowns: prospective
+        ? "Join canonical outcomes without mutating the panel, then report preregistered top/bottom 10% and 25% claim rates and conditional amounts for targets valued >$10; retain FAAB censoring and small-n warnings."
+        : "Before each auction capture top/bottom 10% and 25% need ranks by position, roster/injury/bye, player value, FAAB, manager baseline, and prior acquisitions; then report claim rate and conditional amount for players >$10.",
     },
     {
       number: 9,
@@ -784,6 +841,7 @@ export function buildOwnerDecisionReport(
     winnerHistoryRows: winnerHistory,
     exact,
     reconstructed,
+    ...(prewaiverPanel ? { prewaiverPanel } : {}),
     headlineMetrics: {
       topClaimN: topClaims.length,
       middleClaimN: middleClaims.length,

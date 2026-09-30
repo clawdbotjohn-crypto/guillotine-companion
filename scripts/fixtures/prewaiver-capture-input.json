@@ -1,0 +1,541 @@
+{
+  "schemaVersion": "prewaiver-capture-input-v1",
+  "season": 2026,
+  "decisionWeek": 5,
+  "playingWeek": 4,
+  "captureAt": "2026-09-29T18:00:00.000Z",
+  "captureWindow": {
+    "opensAt": "2026-09-29T16:00:00.000Z",
+    "closesAt": "2026-09-30T15:00:00.000Z",
+    "waiverProcessesAt": "2026-09-30T16:00:00.000Z"
+  },
+  "projectionSnapshot": {
+    "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "season": 2026,
+    "decisionWeek": 5,
+    "canonicalCutoffAt": "2026-09-29T15:30:00.000Z"
+  },
+  "league": {
+    "budget": 200,
+    "activeTeamCount": 5,
+    "weeksRemaining": 12,
+    "currentWeek": 5,
+    "rosterPositions": [
+      "QB",
+      "RB",
+      "WR",
+      "TE",
+      "FLEX",
+      "K",
+      "DEF"
+    ]
+  },
+  "managers": [
+    {
+      "sourceRosterId": "manager_fixture_01",
+      "active": true,
+      "eliminatedWeek": null,
+      "preWaiverFaab": 200,
+      "playerSourceIds": [
+        "player_fixture_m01_qb",
+        "player_fixture_m01_rb",
+        "player_fixture_m01_wr",
+        "player_fixture_m01_te",
+        "player_fixture_m01_k",
+        "player_fixture_m01_def"
+      ],
+      "profile": {
+        "managerMultiplier": 1.0,
+        "style": "standard",
+        "confidence": "medium",
+        "usableEvidenceCount": 2,
+        "baselineStrategyId": "max-vorp",
+        "baselineStrategyVersion": "max-vorp-v1"
+      }
+    },
+    {
+      "sourceRosterId": "manager_fixture_02",
+      "active": true,
+      "eliminatedWeek": null,
+      "preWaiverFaab": 40,
+      "playerSourceIds": [
+        "player_fixture_m02_qb",
+        "player_fixture_m02_rb",
+        "player_fixture_m02_wr",
+        "player_fixture_m02_te",
+        "player_fixture_m02_k",
+        "player_fixture_m02_def"
+      ],
+      "profile": {
+        "managerMultiplier": 2.5,
+        "style": "aggressive",
+        "confidence": "medium",
+        "usableEvidenceCount": 2,
+        "baselineStrategyId": "max-vorp",
+        "baselineStrategyVersion": "max-vorp-v1"
+      }
+    },
+    {
+      "sourceRosterId": "manager_fixture_03",
+      "active": true,
+      "eliminatedWeek": null,
+      "preWaiverFaab": 150,
+      "playerSourceIds": [
+        "player_fixture_m03_qb",
+        "player_fixture_m03_rb",
+        "player_fixture_m03_wr",
+        "player_fixture_m03_te",
+        "player_fixture_m03_k",
+        "player_fixture_m03_def"
+      ],
+      "profile": {
+        "managerMultiplier": 0.5,
+        "style": "conservative",
+        "confidence": "medium",
+        "usableEvidenceCount": 2,
+        "baselineStrategyId": "max-vorp",
+        "baselineStrategyVersion": "max-vorp-v1"
+      }
+    },
+    {
+      "sourceRosterId": "manager_fixture_04",
+      "active": true,
+      "eliminatedWeek": null,
+      "preWaiverFaab": 120,
+      "playerSourceIds": [
+        "player_fixture_m04_qb",
+        "player_fixture_m04_rb",
+        "player_fixture_m04_wr",
+        "player_fixture_m04_te",
+        "player_fixture_m04_k",
+        "player_fixture_m04_def"
+      ],
+      "profile": {
+        "managerMultiplier": 1.4,
+        "style": "aggressive",
+        "confidence": "medium",
+        "usableEvidenceCount": 2,
+        "baselineStrategyId": "max-vorp",
+        "baselineStrategyVersion": "max-vorp-v1"
+      }
+    },
+    {
+      "sourceRosterId": "manager_fixture_05",
+      "active": true,
+      "eliminatedWeek": null,
+      "preWaiverFaab": 90,
+      "playerSourceIds": [
+        "player_fixture_m05_qb",
+        "player_fixture_m05_rb",
+        "player_fixture_m05_wr",
+        "player_fixture_m05_te",
+        "player_fixture_m05_k",
+        "player_fixture_m05_def"
+      ],
+      "profile": {
+        "managerMultiplier": 1.8,
+        "style": "aggressive",
+        "confidence": "medium",
+        "usableEvidenceCount": 2,
+        "baselineStrategyId": "max-vorp",
+        "baselineStrategyVersion": "max-vorp-v1"
+      }
+    },
+    {
+      "sourceRosterId": "manager_fixture_06",
+      "active": false,
+      "eliminatedWeek": 4,
+      "preWaiverFaab": 110,
+      "playerSourceIds": [
+        "player_fixture_m06_qb",
+        "player_fixture_m06_rb",
+        "player_fixture_m06_wr",
+        "player_fixture_m06_te",
+        "player_fixture_m06_k",
+        "player_fixture_m06_def"
+      ],
+      "profile": {
+        "managerMultiplier": 1.2,
+        "style": "aggressive",
+        "confidence": "medium",
+        "usableEvidenceCount": 2,
+        "baselineStrategyId": "max-vorp",
+        "baselineStrategyVersion": "max-vorp-v1"
+      }
+    }
+  ],
+  "players": [
+    {
+      "sourceId": "player_fixture_m01_qb",
+      "position": "QB",
+      "weeklyPoints": 22,
+      "rosPoints": 216,
+      "sleeperRosPoints": 217,
+      "sourceValue": 216,
+      "sourceRank": 1
+    },
+    {
+      "sourceId": "player_fixture_m01_rb",
+      "position": "RB",
+      "weeklyPoints": 16,
+      "rosPoints": 175,
+      "sleeperRosPoints": 176,
+      "sourceValue": 175,
+      "sourceRank": 1
+    },
+    {
+      "sourceId": "player_fixture_m01_wr",
+      "position": "WR",
+      "weeklyPoints": 18,
+      "rosPoints": 184,
+      "sleeperRosPoints": 185,
+      "sourceValue": 184,
+      "sourceRank": 1
+    },
+    {
+      "sourceId": "player_fixture_m01_te",
+      "position": "TE",
+      "weeklyPoints": 10,
+      "rosPoints": 113,
+      "sleeperRosPoints": 114,
+      "sourceValue": 113,
+      "sourceRank": 1
+    },
+    {
+      "sourceId": "player_fixture_m01_k",
+      "position": "K",
+      "weeklyPoints": 8,
+      "rosPoints": 82,
+      "sleeperRosPoints": 83,
+      "sourceValue": 82,
+      "sourceRank": 1
+    },
+    {
+      "sourceId": "player_fixture_m01_def",
+      "position": "DEF",
+      "weeklyPoints": 7,
+      "rosPoints": 76,
+      "sleeperRosPoints": 77,
+      "sourceValue": 76,
+      "sourceRank": 1
+    },
+    {
+      "sourceId": "player_fixture_m02_qb",
+      "position": "QB",
+      "weeklyPoints": 20,
+      "rosPoints": 212,
+      "sleeperRosPoints": 214,
+      "sourceValue": 212,
+      "sourceRank": 2
+    },
+    {
+      "sourceId": "player_fixture_m02_rb",
+      "position": "RB",
+      "weeklyPoints": 15,
+      "rosPoints": 171,
+      "sleeperRosPoints": 173,
+      "sourceValue": 171,
+      "sourceRank": 2
+    },
+    {
+      "sourceId": "player_fixture_m02_wr",
+      "position": "WR",
+      "weeklyPoints": 18,
+      "rosPoints": 180,
+      "sleeperRosPoints": 182,
+      "sourceValue": 180,
+      "sourceRank": 2
+    },
+    {
+      "sourceId": "player_fixture_m02_te",
+      "position": "TE",
+      "weeklyPoints": 9,
+      "rosPoints": 109,
+      "sleeperRosPoints": 111,
+      "sourceValue": 109,
+      "sourceRank": 2
+    },
+    {
+      "sourceId": "player_fixture_m02_k",
+      "position": "K",
+      "weeklyPoints": 8,
+      "rosPoints": 78,
+      "sleeperRosPoints": 80,
+      "sourceValue": 78,
+      "sourceRank": 2
+    },
+    {
+      "sourceId": "player_fixture_m02_def",
+      "position": "DEF",
+      "weeklyPoints": 6,
+      "rosPoints": 72,
+      "sleeperRosPoints": 74,
+      "sourceValue": 72,
+      "sourceRank": 2
+    },
+    {
+      "sourceId": "player_fixture_m03_qb",
+      "position": "QB",
+      "weeklyPoints": 15,
+      "rosPoints": 208,
+      "sleeperRosPoints": 211,
+      "sourceValue": 208,
+      "sourceRank": 3
+    },
+    {
+      "sourceId": "player_fixture_m03_rb",
+      "position": "RB",
+      "weeklyPoints": 11,
+      "rosPoints": 167,
+      "sleeperRosPoints": 170,
+      "sourceValue": 167,
+      "sourceRank": 3
+    },
+    {
+      "sourceId": "player_fixture_m03_wr",
+      "position": "WR",
+      "weeklyPoints": 9,
+      "rosPoints": 176,
+      "sleeperRosPoints": 179,
+      "sourceValue": 176,
+      "sourceRank": 3
+    },
+    {
+      "sourceId": "player_fixture_m03_te",
+      "position": "TE",
+      "weeklyPoints": 7,
+      "rosPoints": 105,
+      "sleeperRosPoints": 108,
+      "sourceValue": 105,
+      "sourceRank": 3
+    },
+    {
+      "sourceId": "player_fixture_m03_k",
+      "position": "K",
+      "weeklyPoints": 5,
+      "rosPoints": 74,
+      "sleeperRosPoints": 77,
+      "sourceValue": 74,
+      "sourceRank": 3
+    },
+    {
+      "sourceId": "player_fixture_m03_def",
+      "position": "DEF",
+      "weeklyPoints": 4,
+      "rosPoints": 68,
+      "sleeperRosPoints": 71,
+      "sourceValue": 68,
+      "sourceRank": 3
+    },
+    {
+      "sourceId": "player_fixture_m04_qb",
+      "position": "QB",
+      "weeklyPoints": 26,
+      "rosPoints": 204,
+      "sleeperRosPoints": 208,
+      "sourceValue": 204,
+      "sourceRank": 4
+    },
+    {
+      "sourceId": "player_fixture_m04_rb",
+      "position": "RB",
+      "weeklyPoints": 19,
+      "rosPoints": 163,
+      "sleeperRosPoints": 167,
+      "sourceValue": 163,
+      "sourceRank": 4
+    },
+    {
+      "sourceId": "player_fixture_m04_wr",
+      "position": "WR",
+      "weeklyPoints": 21,
+      "rosPoints": 172,
+      "sleeperRosPoints": 176,
+      "sourceValue": 172,
+      "sourceRank": 4
+    },
+    {
+      "sourceId": "player_fixture_m04_te",
+      "position": "TE",
+      "weeklyPoints": 12,
+      "rosPoints": 101,
+      "sleeperRosPoints": 105,
+      "sourceValue": 101,
+      "sourceRank": 4
+    },
+    {
+      "sourceId": "player_fixture_m04_k",
+      "position": "K",
+      "weeklyPoints": 9,
+      "rosPoints": 70,
+      "sleeperRosPoints": 74,
+      "sourceValue": 70,
+      "sourceRank": 4
+    },
+    {
+      "sourceId": "player_fixture_m04_def",
+      "position": "DEF",
+      "weeklyPoints": 8,
+      "rosPoints": 64,
+      "sleeperRosPoints": 68,
+      "sourceValue": 64,
+      "sourceRank": 4
+    },
+    {
+      "sourceId": "target_fixture_qb",
+      "position": "QB",
+      "weeklyPoints": 24,
+      "rosPoints": 250,
+      "sleeperRosPoints": 250,
+      "sourceValue": 250,
+      "sourceRank": 1,
+      "injuryStatus": null,
+      "byeWeek": 9
+    },
+    {
+      "sourceId": "target_fixture_wr",
+      "position": "WR",
+      "weeklyPoints": 20,
+      "rosPoints": 225,
+      "sleeperRosPoints": 225,
+      "sourceValue": 225,
+      "sourceRank": 2,
+      "injuryStatus": "Questionable",
+      "byeWeek": 8
+    },
+    {
+      "sourceId": "free_fixture_rb",
+      "position": "RB",
+      "weeklyPoints": 14,
+      "rosPoints": 160,
+      "sleeperRosPoints": 160,
+      "sourceValue": 160,
+      "sourceRank": 8,
+      "injuryStatus": null,
+      "byeWeek": 10
+    },
+    {
+      "sourceId": "free_fixture_te",
+      "position": "TE",
+      "weeklyPoints": 8,
+      "rosPoints": 100,
+      "sleeperRosPoints": 100,
+      "sourceValue": 100,
+      "sourceRank": 7,
+      "injuryStatus": null,
+      "byeWeek": 11
+    },
+    {
+      "sourceId": "player_fixture_m05_qb",
+      "position": "QB",
+      "weeklyPoints": 18,
+      "rosPoints": 200,
+      "sleeperRosPoints": 205,
+      "sourceValue": 200,
+      "sourceRank": 5
+    },
+    {
+      "sourceId": "player_fixture_m05_rb",
+      "position": "RB",
+      "weeklyPoints": 13,
+      "rosPoints": 159,
+      "sleeperRosPoints": 164,
+      "sourceValue": 159,
+      "sourceRank": 5
+    },
+    {
+      "sourceId": "player_fixture_m05_wr",
+      "position": "WR",
+      "weeklyPoints": 12,
+      "rosPoints": 168,
+      "sleeperRosPoints": 173,
+      "sourceValue": 168,
+      "sourceRank": 5
+    },
+    {
+      "sourceId": "player_fixture_m05_te",
+      "position": "TE",
+      "weeklyPoints": 8,
+      "rosPoints": 97,
+      "sleeperRosPoints": 102,
+      "sourceValue": 97,
+      "sourceRank": 5
+    },
+    {
+      "sourceId": "player_fixture_m05_k",
+      "position": "K",
+      "weeklyPoints": 6,
+      "rosPoints": 66,
+      "sleeperRosPoints": 71,
+      "sourceValue": 66,
+      "sourceRank": 5
+    },
+    {
+      "sourceId": "player_fixture_m05_def",
+      "position": "DEF",
+      "weeklyPoints": 5,
+      "rosPoints": 60,
+      "sleeperRosPoints": 65,
+      "sourceValue": 60,
+      "sourceRank": 5
+    },
+    {
+      "sourceId": "player_fixture_m06_qb",
+      "position": "QB",
+      "weeklyPoints": 17,
+      "rosPoints": 196,
+      "sleeperRosPoints": 202,
+      "sourceValue": 196,
+      "sourceRank": 6
+    },
+    {
+      "sourceId": "player_fixture_m06_rb",
+      "position": "RB",
+      "weeklyPoints": 12,
+      "rosPoints": 155,
+      "sleeperRosPoints": 161,
+      "sourceValue": 155,
+      "sourceRank": 6
+    },
+    {
+      "sourceId": "player_fixture_m06_wr",
+      "position": "WR",
+      "weeklyPoints": 11,
+      "rosPoints": 164,
+      "sleeperRosPoints": 170,
+      "sourceValue": 164,
+      "sourceRank": 6
+    },
+    {
+      "sourceId": "player_fixture_m06_te",
+      "position": "TE",
+      "weeklyPoints": 7,
+      "rosPoints": 93,
+      "sleeperRosPoints": 99,
+      "sourceValue": 93,
+      "sourceRank": 6
+    },
+    {
+      "sourceId": "player_fixture_m06_k",
+      "position": "K",
+      "weeklyPoints": 6,
+      "rosPoints": 62,
+      "sleeperRosPoints": 68,
+      "sourceValue": 62,
+      "sourceRank": 6
+    },
+    {
+      "sourceId": "player_fixture_m06_def",
+      "position": "DEF",
+      "weeklyPoints": 4,
+      "rosPoints": 56,
+      "sleeperRosPoints": 62,
+      "sourceValue": 56,
+      "sourceRank": 6
+    }
+  ],
+  "targetSourceIds": [
+    "target_fixture_qb",
+    "target_fixture_wr"
+  ]
+}
