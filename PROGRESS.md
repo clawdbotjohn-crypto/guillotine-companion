@@ -63,6 +63,25 @@
 - [x] Use leave-week-out/walk-forward validation when sample size permits; otherwise state why it does not. Two reconstructed decision weeks are insufficient for leave-week-out fitting; manager forecasts are strictly prior-batch walk-forward, and fixed-seed cluster-bootstrap MAE intervals quantify sample uncertainty.
 - [x] Save a reproducible script and committed report under `scripts/` and `docs/analysis/`, with commands, data provenance, formulas, anonymized outputs, limitations, and a recommendation. The committed derived fixture contains stable aliases only—no credential, raw payload, league ID, player ID/name, or manager ID/name.
 - [x] Verify deterministic reruns, classifier/metrics/edge-case tests, lint/typecheck, full tests, `git diff --check`, and changed-file secret scan. Local implementation is complete; commit/push/review-only PR are intentionally delegated to the top-level orchestrator under this task's explicit no-commit/no-push/no-PR boundary.
+## ✅ P0 — Correct replacement-level zeroing for Safe / Weeks-as-Starter / Aggressive (completed 2026-09-27)
+
+**Owner direction (2026-09-27):** Safe, Weeks-as-Starter, and Aggressive now use the selected ranking source's optimized starter pool. Shared FLEX/SUPER_FLEX slots are allocated once, and the final selected player at each position is the exact $0 boundary.
+
+**Completed on `fix/non-vorp-replacement-zeroing`:**
+- [x] Preserved the approved non-VORP semantics, current `buildLeagueContext`, fixed elimination cadence, survivor progression, Safe budget/position weights/rank-one premium, and Aggressive multiplier.
+- [x] Added one generic private slot allocator. The non-VORP model is built once per board; current and modeled stages use positive finite selected-source points/week and deterministic player-ID ties.
+- [x] Kept the public Max VORP wrapper on finite `totalPoints` eligibility (including zero), its exact comparator, formulas, selector, calibration, and output. Added selected-ID/golden regression protection.
+- [x] Added focused boundary, shared-slot, edge/sparse, deterministic tie, arbitrary context, actual stage-membership, Aggressive derivation, and Sleeper/FantasyCalc/FantasyPros ownership tests.
+- [x] Added reproducible `npm run analyze:non-vorp` and `docs/analysis/non-vorp-seamex-2026.md` with source/context/stages, boundaries, cutoffs, actual available rows, and frozen BEFORE/current AFTER comparison.
+- [x] SeaMex current live AFTER: Safe **192** (QB27/RB55/WR80/TE30); Weeks and Aggressive **181** each (QB26/RB52/WR76/TE27). Boundaries in the final live capture: QB Geno Smith #28; RB Brian Robinson #56; WR Calvin Ridley #81; TE Colby Parkinson #31.
+- [x] Independently verified 173 frontend tests, 36 API tests, focused waiver/ranking tests, lint (one pre-existing unrelated warning), typecheck, production build, `git diff --check`, secret scan, report sanity, and hosted desktop/mobile Waivers strategy switching.
+- [x] Review-only PR #13 is open with green CI and exact Azure preview `https://nice-moss-07ec56310-13.centralus.7.azurestaticapps.net`; branch is committed/pushed only. Not merged; no production deploy/workflow dispatch or production/Supabase/data mutation.
+
+**Out of scope:** Custom valuations remain the separate P2 below.
+
+## 🔮 P2 — User-created custom valuations (John, 2026-09-27; NEXT FEATURE CANDIDATE, DO NOT IMPLEMENT IN THIS SESSION)
+
+- [ ] Long term, support custom user valuation boards; this may be the next feature after replacement-level corrections. Preserve the existing detailed Custom Values requirements later in this roadmap: named boards, start from an existing source or blank, direct per-player editing, explicit commit before resorting, correct post-save ordering, and persistence across sessions. Plan storage/scope/auth and how a custom board becomes a selectable valuation source before implementation.
 
 ## 🚨 PR #11 owner follow-up — eliminated label in manager popup (John, 2026-09-26)
 

@@ -13,6 +13,7 @@
     "lint": "oxlint",
     "check": "npm run typecheck && npm run lint",
     "analyze:max-vorp": "tsx scripts/analyze-max-vorp.ts",
+    "analyze:non-vorp": "tsx scripts/analyze-non-vorp.ts",
     "analyze:bidding": "tsx scripts/analyze-bidding-strategies.ts",
     "analyze:bidding:presentation": "tsx scripts/generate-bidding-analysis-presentation.ts --pdf"
   },
