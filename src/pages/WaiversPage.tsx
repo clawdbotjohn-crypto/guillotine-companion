@@ -312,14 +312,17 @@ export function WaiverPlayerCard({
                 {row.position} #{row.posRank} · {nflTeam || 'FA'}{playingWeek != null && weeklyRank != null ? ` · W${projectionWeek} #${weeklyRank}` : ''}
               </div>
               {weeklyMeta && <div className="mt-1 truncate text-[10px] text-[#8b8eac]">{weeklyMeta}</div>}
+              {owner && <div className="mt-0.5 truncate text-[9px] text-[#6b6e99]">{owner.ownerName}</div>}
             </div>
-            <div className="shrink-0 text-right" data-testid="compact-bid-summary">
-              <div data-testid="suggested-bid-row" className="flex items-baseline justify-end gap-1.5">
-                <span className="text-[9px] uppercase tracking-wider text-[#6b6e99]">{owner ? sourceMetric.label : 'Suggested bid'}</span>
-                <span className={`font-['Space_Mono'] text-lg font-bold tabular-nums ${owner ? 'text-[#8b8eac]' : 'text-[#f59e0b]'}`}>{owner ? sourceMetric.display : formatDisplayCurrency(value)}</span>
+            <div className="w-[8.75rem] shrink-0 rounded-lg bg-[#0c0f22] px-2.5 py-2 text-right" data-testid="compact-bid-summary">
+              <div data-testid="suggested-bid-row" className="flex items-baseline justify-end gap-1.5 whitespace-nowrap">
+                <span className="text-[9px] text-[#6b6e99]">{owner ? 'Current value' : 'Suggested bid'}</span>
+                <span className="inline-flex items-center justify-end gap-1 font-['Space_Mono'] text-base font-bold tabular-nums text-[#10b981]">
+                  {!owner && value > 0 && remainingFaab != null && value > remainingFaab && <FaabOverBudgetWarning />}
+                  <span>{formatDisplayCurrency(value)}</span>
+                </span>
               </div>
               {showPrediction && <div className="mt-0.5 text-[10px] text-[#a5b4fc]">Predicted bid <span className="font-['Space_Mono']">${predictedBid}</span></div>}
-              {!owner && value > 0 && remainingFaab != null && value > remainingFaab && <FaabOverBudgetWarning />}
             </div>
           </div>
         </button>

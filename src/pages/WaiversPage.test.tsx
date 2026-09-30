@@ -60,10 +60,10 @@ describe('waiver controls', () => {
     expect(onChange).toHaveBeenCalledWith(true);
   });
 
-  it('opens universal detail for rostered players and keeps manager identities private', () => {
+  it('restores rostered Current value from the Max VORP dollar pipeline while keeping the dialog source metric honest', () => {
     render(<WaiverPlayerCard
       {...cardProps}
-      strategy="weeks-starter"
+      strategy="max-vorp"
       age={25}
       injuryStatus="Questionable"
       owner={{ rosterId: 9, ownerName: 'Rain City Axes' }}
@@ -73,21 +73,45 @@ describe('waiver controls', () => {
         profile: { managerRosterId: 1, managerMultiplier: 1, style: 'standard', confidence: 'low', usableEvidenceCount: 1, baselineStrategyId: 'max-vorp', baselineStrategyVersion: 'max-vorp-v1', evidence: [] },
       }]}
       showManagerPredictions
-      sourceLabel="FantasyCalc"
-      rankingSource="fantasycalc"
+      sourceLabel="Sleeper ROS"
+      rankingSource="sleeper"
     />);
     const card = screen.getByRole('button', { name: /rostered by another team/i });
+    const summary = within(card).getByTestId('compact-bid-summary');
+    const value = within(summary).getByText('$55');
     expect(card.hasAttribute('disabled')).toBe(false);
-    expect(screen.getByText('FC value')).toBeTruthy();
-    expect(screen.queryByText('$180')).toBeNull();
+    expect(within(summary).getByText('Current value')).toBeTruthy();
+    expect(value.parentElement?.className).toContain('text-[#10b981]');
+    expect(value.parentElement?.className).not.toContain('text-[#f59e0b]');
+    expect(within(summary).queryByText('ROS pts')).toBeNull();
+    expect(within(summary).queryByText('180')).toBeNull();
+    expect(within(summary).queryByText('$180')).toBeNull();
+    const weeklyLine = within(card).getByText('W7 13.4 pts · Bye W8');
+    const ownerName = within(card).getByText('Rain City Axes');
+    expect(weeklyLine.compareDocumentPosition(ownerName) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(card).getByText('Rostered')).toBeTruthy();
+
     fireEvent.click(card);
-    expect(screen.getByRole('dialog', { name: 'Test Runner' })).toBeTruthy();
-    expect(screen.getByText('Owned / rostered')).toBeTruthy();
-    expect(screen.getAllByText('FC value')).toHaveLength(2);
-    expect(screen.getByText('FantasyCalc · RB #17')).toBeTruthy();
-    expect(screen.queryByText('$180')).toBeNull();
+    const dialog = screen.getByRole('dialog', { name: 'Test Runner' });
+    expect(within(dialog).getByText('Owned / rostered')).toBeTruthy();
+    expect(within(dialog).getByText('ROS pts')).toBeTruthy();
+    expect(within(dialog).getByText('180')).toBeTruthy();
+    expect(within(dialog).getByText('Sleeper ROS · RB #17')).toBeTruthy();
+    expect(within(dialog).queryByText('$180')).toBeNull();
     expect(screen.queryByText('Hidden Manager')).toBeNull();
-    expect(screen.queryByText('Free agent context')).toBeNull();
+    expect(within(dialog).queryByText('Free agent context')).toBeNull();
+  });
+
+  it('restores the production green value treatment and compact hierarchy for free agents', () => {
+    render(<WaiverPlayerCard {...cardProps} strategy="safe" />);
+    const card = screen.getByRole('button', { name: /Test Runner, suggested bid \$50/i });
+    const summary = within(card).getByTestId('compact-bid-summary');
+    const value = within(summary).getByText('$50');
+    expect(summary.className).toContain('w-[8.75rem]');
+    expect(summary.className).toContain('bg-[#0c0f22]');
+    expect(within(summary).getByTestId('suggested-bid-row').textContent).toBe('Suggested bid$50');
+    expect(value.parentElement?.className).toContain('text-[#10b981]');
+    expect(value.parentElement?.className).not.toContain('text-[#f59e0b]');
   });
 
   it('uses the upcoming playing week directly and treats a loaded missing projection as 0', () => {
