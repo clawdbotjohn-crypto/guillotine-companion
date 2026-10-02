@@ -14,6 +14,32 @@ function event(id: string, outcome: CanonicalBidEvent['outcome'], bid: number, b
   };
 }
 
+function managerPrediction(
+  rosterId: number,
+  managerName: string,
+  predictedBid: number,
+  likelihood: 'Likely' | 'Possible' | 'Unlikely',
+): NonNullable<PlayerDetailData['managerPredictions']>[number] {
+  return {
+    rosterId,
+    managerName,
+    predictedBid,
+    currentFaab: 100,
+    cappedByFaab: false,
+    likelihood,
+    profile: {
+      managerRosterId: rosterId,
+      managerMultiplier: 1,
+      style: 'standard',
+      confidence: 'low',
+      usableEvidenceCount: 1,
+      baselineStrategyId: 'max-vorp',
+      baselineStrategyVersion: 'max-vorp-v1',
+      evidence: [],
+    },
+  };
+}
+
 const data: PlayerDetailData = {
   playerId: 'p1', name: 'Detail Player', position: 'RB', team: 'SEA', age: 25,
   status: 'Active', sourceLabel: 'FantasyCalc', valueLabel: 'FC value', valueDisplay: '44', value: 44, positionRank: 7,
@@ -168,41 +194,49 @@ describe('PlayerDetailDialog', () => {
     expect(within(dialog).queryByText('Lineup pts')).toBeNull();
   });
 
-  it('renders $0 predicted bidding as None without manager rows or changing observed history', () => {
+  it('renders all-$0 eligible predictions as None while preserving observed $0 history', () => {
     const labels = new Map([[1, 'Winning Team'], [2, 'Competing Team']]);
-    render(<PlayerDetailDialog open onClose={vi.fn()} data={{
+    const history = [event('zero-win', 'won', 0), event('loss', 'legitimate-loss', 13)];
+    const zeroPredictions = [
+      managerPrediction(2, 'Likely Zero Manager', 0, 'Likely'),
+      managerPrediction(3, 'Possible Zero Manager', 0, 'Possible'),
+      managerPrediction(4, 'Unlikely Positive Manager', 25, 'Unlikely'),
+    ];
+    const { rerender } = render(<PlayerDetailDialog open onClose={vi.fn()} data={{
       ...data,
-      suggestedBid: 0,
+      suggestedBid: 2,
+      history,
       managerLabels: labels,
-      managerPredictions: [{
-        rosterId: 2,
-        managerName: 'Stale Prediction Manager',
-        predictedBid: 25,
-        currentFaab: 100,
-        cappedByFaab: false,
-        likelihood: 'Likely',
-        profile: {
-          managerRosterId: 2,
-          managerMultiplier: 1,
-          style: 'standard',
-          confidence: 'low',
-          usableEvidenceCount: 1,
-          baselineStrategyId: 'max-vorp',
-          baselineStrategyVersion: 'max-vorp-v1',
-          evidence: [],
-        },
-      }],
+      managerPredictions: zeroPredictions,
     }} />);
     const dialog = screen.getByRole('dialog', { name: 'Detail Player' });
+    const acquisition = within(dialog).getByRole('region', { name: 'Acquisition context' });
+    expect(within(acquisition).getByText('$2')).toBeTruthy();
+    expect(within(acquisition).getByText('None')).toBeTruthy();
     const predictionState = within(dialog).getByRole('region', { name: 'Predicted bidding' });
     expect(within(predictionState).getByText('None')).toBeTruthy();
-    expect(within(dialog).queryByText('Stale Prediction Manager')).toBeNull();
+    expect(within(dialog).queryByRole('button', { name: /Open details for/ })).toBeNull();
     expect(within(dialog).queryByTestId('expanded-manager-list')).toBeNull();
     expect(within(dialog).getByText('Winning Team')).toBeTruthy();
-    const history = within(dialog).getByText('Bidding history · 2').closest('details')!;
-    expect(within(history).getByText('$15')).toBeTruthy();
-    expect(within(history).getByText('$13')).toBeTruthy();
-    expect(within(history).queryByText('$0')).toBeNull();
+    const biddingHistory = within(dialog).getByText('Bidding history · 2').closest('details')!;
+    expect(within(biddingHistory).getByText('$0')).toBeTruthy();
+    expect(within(biddingHistory).getByText('$13')).toBeTruthy();
+
+    rerender(<PlayerDetailDialog open onClose={vi.fn()} data={{
+      ...data,
+      suggestedBid: 2,
+      history,
+      managerLabels: labels,
+      managerPredictions: [
+        ...zeroPredictions,
+        managerPrediction(5, 'Positive Eligible Manager', 7, 'Possible'),
+      ],
+    }} />);
+    expect(within(dialog).queryByRole('region', { name: 'Predicted bidding' })).toBeNull();
+    expect(within(acquisition).getByText('$7')).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: 'Open details for Positive Eligible Manager' })).toBeTruthy();
+    expect(within(dialog).getByTestId('expanded-manager-list')).toBeTruthy();
+    expect(within(biddingHistory).getByText('$0')).toBeTruthy();
   });
 
   it('uses compact profile copy and renders empty history as static content', () => {
