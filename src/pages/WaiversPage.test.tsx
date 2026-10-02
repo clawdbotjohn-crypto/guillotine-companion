@@ -88,12 +88,18 @@ describe('waiver controls', () => {
     expect(within(summary).queryByText('$180')).toBeNull();
     const weeklyLine = within(card).getByText('W7 13.4 pts · Bye W8');
     const ownerName = within(card).getByText('Rain City Axes');
-    expect(weeklyLine.compareDocumentPosition(ownerName) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(card).getByText('Rostered')).toBeTruthy();
+    const ownerColumn = within(card).getByTestId('rostered-owner');
+    expect(ownerColumn).toBe(ownerName);
+    expect(ownerColumn.parentElement).toBe(summary);
+    expect(within(summary).getByText('Current value').compareDocumentPosition(ownerName) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(weeklyLine.parentElement?.contains(ownerName)).toBe(false);
+    expect(within(card).getByRole('img', { name: 'Rostered' }).querySelector('svg')).toBeTruthy();
+    expect(within(card).queryByText('Rostered')).toBeNull();
 
     fireEvent.click(card);
     const dialog = screen.getByRole('dialog', { name: 'Test Runner' });
-    expect(within(dialog).getByText('Owned / rostered')).toBeTruthy();
+    expect(within(dialog).queryByText('Owned / rostered')).toBeNull();
+    expect(within(dialog).queryByText('Rain City Axes')).toBeNull();
     expect(within(dialog).getByText('ROS pts')).toBeTruthy();
     expect(within(dialog).getByText('180')).toBeTruthy();
     expect(within(dialog).getByText('Sleeper ROS · RB #17')).toBeTruthy();
@@ -141,7 +147,11 @@ describe('waiver controls', () => {
     const dialog = screen.getByRole('dialog', { name: 'Test Runner' });
     expect(within(dialog).getByText('$0')).toBeTruthy();
     expect(within(within(dialog).getByLabelText('Acquisition context')).getByText('$0')).toBeTruthy();
-    expect(within(dialog).getByText('Predicted bidding is unavailable for a $0 or unsupported acquisition value.')).toBeTruthy();
+    const predictionState = within(dialog).getByRole('region', { name: 'Predicted bidding' });
+    expect(within(predictionState).getByText('None')).toBeTruthy();
+    expect(within(dialog).queryByText(/Predicted bidding is unavailable/i)).toBeNull();
+    expect(within(dialog).queryByTestId('expanded-manager-list')).toBeNull();
+    expect(within(dialog).getByRole('region', { name: 'Bidding history' }).textContent).toContain('No bidding history.');
   });
 
   it('preserves compact prediction and FAAB warning without exposing manager identity', () => {
@@ -255,7 +265,8 @@ describe('waiver controls', () => {
     rerender(<WaiverPlayerCard {...cardProps} strategy="safe" owner={{ rosterId: 9, ownerName: 'Other' }} />);
     const rostered = screen.getByRole('button', { name: /rostered by another team/i });
     expect(rostered.className).toContain('min-h-20');
-    expect(rostered.querySelector('svg')).toBeNull();
+    expect(rostered.querySelector('.lucide-chevron-right')).toBeNull();
+    expect(rostered.querySelector('.lucide-user-check')).toBeTruthy();
   });
 
 });

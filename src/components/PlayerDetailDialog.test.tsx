@@ -42,11 +42,14 @@ describe('PlayerDetailDialog', () => {
     expect(within(dialog).getByRole('region', { name: 'Other bids' })).toBeTruthy();
   });
 
-  it('closes on Escape and presents owned players without acquisition context', () => {
+  it('closes on Escape and removes the entire explanatory roster section for owned players', () => {
     const onClose = vi.fn();
-    render(<PlayerDetailDialog open onClose={onClose} data={{ ...data, owned: true, ownerLabel: 'Rostered.' }} />);
-    expect(screen.getByText('Owned / rostered')).toBeTruthy();
-    expect(screen.queryByText('Free agent context')).toBeNull();
+    render(<PlayerDetailDialog open onClose={onClose} data={{ ...data, owned: true, ownerLabel: 'Rostered by Rain City Axes.' }} />);
+    expect(screen.queryByText('Owned / rostered')).toBeNull();
+    expect(screen.queryByText('Rostered by Rain City Axes.')).toBeNull();
+    expect(screen.queryByText(/Acquisition impact is not calculated/i)).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Roster status' })).toBeNull();
+    expect(screen.queryByLabelText('Acquisition context')).toBeNull();
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledOnce();
   });
@@ -113,15 +116,93 @@ describe('PlayerDetailDialog', () => {
     expect(within(dialog).getByText('$100 → $1')).toBeTruthy();
   });
 
-  it('does not expose partial Team Impact when a required dependency is unavailable', () => {
-    render(<PlayerDetailDialog open onClose={vi.fn()} data={{
+  it('collapses fully calculated no-change and truthful $0 impact to No impact', () => {
+    const noChangeImpact = {
+      status: 'available' as const,
+      overallRank: { before: 8, after: 8, outOf: 10 },
+      positionRank: { before: 6, after: 6, outOf: 10 },
+      lineupPoints: { before: 104.5, after: 104.5 },
+      position: 'RB',
+      incomingPlayerStarts: false,
+      displacedStarterIds: [],
+      assumedDropPlayerId: 'bench-rb',
+      dropReason: 'lowest-projected-non-starter' as const,
+    };
+    const { rerender } = render(<PlayerDetailDialog open onClose={vi.fn()} data={{
       ...data,
-      teamImpact: { status: 'unavailable', reason: 'This player has no next-week Sleeper projection.' },
+      teamImpact: noChangeImpact,
     }} />);
     const dialog = screen.getByRole('dialog', { name: 'Detail Player' });
-    expect(within(dialog).getByText('This player has no next-week Sleeper projection.')).toBeTruthy();
+    expect(within(dialog).getByText('No impact')).toBeTruthy();
+    expect(within(dialog).queryByText('Overall')).toBeNull();
+    expect(within(dialog).queryByText('Projection change:')).toBeNull();
+
+    rerender(<PlayerDetailDialog open onClose={vi.fn()} data={{
+      ...data,
+      suggestedBid: 0,
+      teamImpact: {
+        ...noChangeImpact,
+        overallRank: { before: 8, after: 7, outOf: 10 },
+        positionRank: { before: 6, after: 5, outOf: 10 },
+        lineupPoints: { before: 104.5, after: 110 },
+        incomingPlayerStarts: true,
+        displacedStarterIds: ['old-rb'],
+      },
+    }} />);
+    expect(within(dialog).getByText('No impact')).toBeTruthy();
+    expect(within(dialog).queryByText('Overall')).toBeNull();
+  });
+
+  it('keeps missing Team Impact evidence distinct as concise Impact unavailable', () => {
+    const reason = 'This player has no next-week Sleeper projection.';
+    render(<PlayerDetailDialog open onClose={vi.fn()} data={{
+      ...data,
+      teamImpact: { status: 'unavailable', reason },
+    }} />);
+    const dialog = screen.getByRole('dialog', { name: 'Detail Player' });
+    expect(within(dialog).getByText('Impact unavailable')).toBeTruthy();
+    expect(within(dialog).queryByText(reason)).toBeNull();
+    expect(within(dialog).getByLabelText(`Impact unavailable: ${reason}`)).toBeTruthy();
+    expect(within(dialog).queryByText('No impact')).toBeNull();
     expect(within(dialog).queryByText('Overall')).toBeNull();
     expect(within(dialog).queryByText('Lineup pts')).toBeNull();
+  });
+
+  it('renders $0 predicted bidding as None without manager rows or changing observed history', () => {
+    const labels = new Map([[1, 'Winning Team'], [2, 'Competing Team']]);
+    render(<PlayerDetailDialog open onClose={vi.fn()} data={{
+      ...data,
+      suggestedBid: 0,
+      managerLabels: labels,
+      managerPredictions: [{
+        rosterId: 2,
+        managerName: 'Stale Prediction Manager',
+        predictedBid: 25,
+        currentFaab: 100,
+        cappedByFaab: false,
+        likelihood: 'Likely',
+        profile: {
+          managerRosterId: 2,
+          managerMultiplier: 1,
+          style: 'standard',
+          confidence: 'low',
+          usableEvidenceCount: 1,
+          baselineStrategyId: 'max-vorp',
+          baselineStrategyVersion: 'max-vorp-v1',
+          evidence: [],
+        },
+      }],
+    }} />);
+    const dialog = screen.getByRole('dialog', { name: 'Detail Player' });
+    const predictionState = within(dialog).getByRole('region', { name: 'Predicted bidding' });
+    expect(within(predictionState).getByText('None')).toBeTruthy();
+    expect(within(dialog).queryByText('Stale Prediction Manager')).toBeNull();
+    expect(within(dialog).queryByTestId('expanded-manager-list')).toBeNull();
+    expect(within(dialog).getByText('Winning Team')).toBeTruthy();
+    const history = within(dialog).getByText('Bidding history · 2').closest('details')!;
+    expect(within(history).getByText('$15')).toBeTruthy();
+    expect(within(history).getByText('$13')).toBeTruthy();
+    expect(within(history).queryByText('$0')).toBeNull();
   });
 
   it('uses compact profile copy and renders empty history as static content', () => {

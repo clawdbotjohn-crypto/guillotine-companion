@@ -7,6 +7,7 @@ import type { ManagerDetailData, ManagerTeamNeed } from '../logic/managerDetails
 import { currentFaab, managerName, orderManagerPredictions, type ManagerPredictionDisplay } from '../logic/managerPredictionDisplay';
 import { faabQuartile, faabQuartileLabel, type FaabQuartileBand } from '../logic/rankingQuartiles';
 import { Button, Card, Skeleton, StatusBadge } from './ui';
+import { CURRENT_TEAM_HIGHLIGHT_CLASS } from './ui/teamHighlight';
 
 const EMPTY_DETAILS: ManagerDetailData = { upcomingByes: [], teamNeeds: [] };
 
@@ -384,6 +385,7 @@ export function TeamBidProfiles({
   users,
   initialFaab,
   activeRosterIds,
+  currentRosterId,
   showEliminatedTeams = true,
   isLoading,
   error,
@@ -396,6 +398,7 @@ export function TeamBidProfiles({
   users: SleeperUser[];
   initialFaab: number;
   activeRosterIds?: ReadonlySet<number>;
+  currentRosterId?: number | null;
   showEliminatedTeams?: boolean;
   isLoading: boolean;
   error: Error | null;
@@ -456,6 +459,7 @@ export function TeamBidProfiles({
         {visibleProfiles.map((profile) => {
           const name = managerName(profile.managerRosterId, rosters, users);
           const isEliminated = !isActiveProfile(profile);
+          const isCurrentTeam = profile.managerRosterId === currentRosterId;
           const faab = currentFaab(profile.managerRosterId, rosters, initialFaab);
           const faabBand = faabQuartile(faab, activeFaabAmounts);
           const highBid = highestBid(profile);
@@ -464,12 +468,13 @@ export function TeamBidProfiles({
               key={profile.managerRosterId}
               type="button"
               onClick={() => setSelected(profile)}
-              aria-label={`Open bid profile for ${name}`}
-              className="w-full rounded-xl border border-[#1a1e3a] bg-[#0e1025] p-3 text-left transition-colors hover:border-[#3a3f75] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6366f1]"
+              aria-label={`Open bid profile for ${name}${isCurrentTeam ? ', Your team' : ''}`}
+              className={`w-full rounded-xl border border-[#1a1e3a] bg-[#0e1025] p-3 text-left transition-colors hover:border-[#3a3f75] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6366f1] ${isCurrentTeam ? CURRENT_TEAM_HIGHLIGHT_CLASS : ''}`}
             >
               <span className="flex items-start justify-between gap-3">
                 <span className="min-w-0">
                   <span className={`block truncate text-sm font-semibold ${isEliminated ? 'text-[#4a4d77]' : 'text-[#f0f0ff]'}`}>{name}</span>
+                  {isCurrentTeam && <span className={`mt-0.5 block text-[9px] font-semibold uppercase tracking-wider ${isEliminated ? 'text-[#4a4d77]' : 'text-[#a5b4fc]'}`}>Your team</span>}
                   <span className="mt-1 block text-[10px] text-[#8b8eb8]">Highest bid: <span className="font-['Space_Mono'] tabular-nums">{highBid == null ? '—' : `$${highBid}`}</span></span>
                 </span>
                 <span className="shrink-0 text-right">

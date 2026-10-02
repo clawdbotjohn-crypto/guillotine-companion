@@ -41,6 +41,7 @@ import {
   type RosterPositionValueRank,
 } from '../logic';
 import { Card, Skeleton, StatusBadge } from '../components/ui';
+import { CURRENT_TEAM_HIGHLIGHT_CLASS } from '../components/ui/teamHighlight';
 import { TeamBidProfiles } from '../components/ManagerBiddingProfiles';
 import { buildManagerDetailData } from '../logic/managerDetails';
 import { useBiddingProfiles } from '../hooks/useBiddingProfiles';
@@ -355,6 +356,7 @@ export function TeamsPage() {
           users={users!}
           initialFaab={league?.settings?.waiver_budget ?? 1000}
           activeRosterIds={getActiveRosterIds(elim)}
+          currentRosterId={myRosterId}
           showEliminatedTeams={showEliminatedTeams}
           isLoading={biddingProfiles.isLoading}
           error={biddingProfiles.error}
@@ -436,7 +438,7 @@ export function TeamsPage() {
           const isOpen = expanded === t.rosterId;
 
           return (
-            <Card key={t.rosterId} hover={false} className={`p-3 ${isMine ? 'border-l-4 border-l-[#6366f1]' : ''}`}>
+            <Card key={t.rosterId} hover={false} className={`p-3 ${isMine ? CURRENT_TEAM_HIGHLIGHT_CLASS : ''}`}>
               <TeamRowDisclosureButton
                 expanded={isOpen}
                 controls={`team-${t.rosterId}-details`}

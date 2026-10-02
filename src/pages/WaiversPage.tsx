@@ -1,6 +1,6 @@
 // Waivers page — recommended bids per strategy, weekly context, and predicted winning bid.
 import { useMemo, useState, type ReactNode } from 'react';
-import { AlertTriangle, ShoppingCart, Info, RefreshCw } from 'lucide-react';
+import { AlertTriangle, ShoppingCart, Info, RefreshCw, UserCheck } from 'lucide-react';
 import { Button, Card, Skeleton } from '../components/ui';
 import { FaabOverBudgetWarning } from '../components/FaabOverBudgetWarning';
 import { WaiverManagerPredictions } from '../components/ManagerBiddingProfiles';
@@ -304,15 +304,14 @@ export function WaiverPlayerCard({
         >
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <div className="flex min-w-0 items-center gap-2">
-                <span className="truncate text-sm font-semibold text-[#f0f0ff]">{row.name}</span>
-                {owner && <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${selectedTeamOwner ? 'bg-[#10b981]/15 text-[#6ee7b7]' : 'bg-[#20243f] text-[#8b8eac]'}`}>Rostered</span>}
+              <div className="flex min-w-0 items-center gap-1.5">
+                <span className="min-w-0 truncate text-sm font-semibold text-[#f0f0ff]">{row.name}</span>
+                {owner && <span role="img" aria-label="Rostered" className={`shrink-0 ${selectedTeamOwner ? 'text-[#6ee7b7]' : 'text-[#8b8eac]'}`}><UserCheck size={14} strokeWidth={1.75} aria-hidden="true" /></span>}
               </div>
               <div className="mt-0.5 truncate text-[10px] text-[#6b6e99]">
                 {row.position} #{row.posRank} · {nflTeam || 'FA'}{playingWeek != null && weeklyRank != null ? ` · W${projectionWeek} #${weeklyRank}` : ''}
               </div>
               {weeklyMeta && <div className="mt-1 truncate text-[10px] text-[#8b8eac]">{weeklyMeta}</div>}
-              {owner && <div className="mt-0.5 truncate text-[9px] text-[#6b6e99]">{owner.ownerName}</div>}
             </div>
             <div className="w-[8.75rem] shrink-0 rounded-lg bg-[#0c0f22] px-2.5 py-2 text-right" data-testid="compact-bid-summary">
               <div data-testid="suggested-bid-row" className="flex items-baseline justify-end gap-1.5 whitespace-nowrap">
@@ -322,6 +321,7 @@ export function WaiverPlayerCard({
                   <span>{formatDisplayCurrency(value)}</span>
                 </span>
               </div>
+              {owner && <div data-testid="rostered-owner" className="mt-0.5 truncate text-[9px] text-[#8b8eac]">{owner.ownerName}</div>}
               {showPrediction && <div className="mt-0.5 text-[10px] text-[#a5b4fc]">Predicted bid <span className="font-['Space_Mono']">${predictedBid}</span></div>}
             </div>
           </div>
