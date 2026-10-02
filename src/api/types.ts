@@ -26,6 +26,9 @@ export interface Roster {
   owner_id: string;
   players: string[] | null;
   starters: string[] | null;
+  /** Sleeper may expose these separately; defensively include them in full-roster value totals. */
+  reserve?: string[] | null;
+  taxi?: string[] | null;
   settings: {
     wins: number;
     losses: number;

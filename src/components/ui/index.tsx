@@ -1,4 +1,6 @@
 import type { ReactNode, ButtonHTMLAttributes } from 'react';
+import { Info } from 'lucide-react';
+import { ContextDisclosure } from '../ContextDisclosure';
 
 // Card component — Neon League style
 interface CardProps {
@@ -92,13 +94,26 @@ interface StatCardProps {
   value: string | number;
   subtext?: string;
   accentColor?: string;
+  infoLabel?: string;
+  infoContent?: ReactNode;
+  constrainInfoToViewport?: boolean;
 }
 
-export function StatCard({ label, value, subtext, accentColor = '#6366f1' }: StatCardProps) {
+export function StatCard({ label, value, subtext, accentColor = '#6366f1', infoLabel, infoContent, constrainInfoToViewport = false }: StatCardProps) {
   return (
     <Card hover={false} className="p-4">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#6b6e99] font-['Exo_2'] mb-1">
-        {label}
+      <div className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-[#6b6e99] font-['Exo_2']">
+        <span>{label}</span>
+        {infoLabel && infoContent && (
+          <ContextDisclosure
+            label={infoLabel}
+            trigger={<Info size={13} aria-hidden="true" />}
+            className="normal-case tracking-normal"
+            constrainToViewport={constrainInfoToViewport}
+          >
+            {infoContent}
+          </ContextDisclosure>
+        )}
       </div>
       <div className="text-2xl font-bold font-['Space_Mono'] tabular-nums" style={{ color: accentColor }}>
         {value}
@@ -155,7 +170,7 @@ interface StatusBadgeProps {
 const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
   safe: { bg: 'rgba(16,185,129,0.15)', text: '#10b981', label: 'Safe' },
   warning: { bg: 'rgba(245,158,11,0.15)', text: '#f59e0b', label: 'Warning' },
-  'at-risk': { bg: 'rgba(244,63,94,0.15)', text: '#f43f5e', label: 'At Risk' },
+  'at-risk': { bg: 'rgba(244,63,94,0.15)', text: '#f43f5e', label: 'Danger' },
   eliminated: { bg: 'rgba(244,63,94,0.2)', text: '#f43f5e', label: 'Eliminated' },
   champion: { bg: 'rgba(245,158,11,0.2)', text: '#f59e0b', label: 'Champion' },
   'runner-up': { bg: 'rgba(156,163,175,0.15)', text: '#9ca3af', label: 'Runner-Up' },
@@ -165,6 +180,7 @@ export function StatusBadge({ status, className = '' }: StatusBadgeProps) {
   const s = STATUS_STYLES[status] || STATUS_STYLES.warning;
   return (
     <span
+      aria-label={`Status: ${s.label}`}
       className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${className}`}
       style={{ background: s.bg, color: s.text }}
     >

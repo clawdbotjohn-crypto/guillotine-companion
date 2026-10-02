@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { computeEliminations, getActiveRosterIds, getCompletedLeagueWeek, isGuillotineLeague } from '../elimination';
+import { computeEliminations, getActiveRosterIds, getCompletedLeagueWeek, getUpcomingPlayingWeek, isGuillotineLeague } from '../elimination';
 import type { Matchup, Roster, SleeperUser } from '../../api/types';
 
 // Mock the players store
@@ -182,6 +182,21 @@ describe('current-week elimination guard', () => {
       { season: '2026', week: 3 },
     )).toBe(18);
     expect(getCompletedLeagueWeek(undefined, { season: '2026', week: 3 })).toBeNull();
+  });
+
+  it('maps three completed league scoring weeks to upcoming playing Week 4 even if NFL state is ahead', () => {
+    expect(getUpcomingPlayingWeek(
+      { season: '2026', settings: { last_scored_leg: 3 } },
+      { season: '2026', week: 5 },
+    )).toBe(4);
+    expect(getUpcomingPlayingWeek(
+      { season: '2025', settings: { last_scored_leg: 3 } },
+      { season: '2026', week: 5 },
+    )).toBeNull();
+    expect(getUpcomingPlayingWeek(
+      { season: '2026', settings: { last_scored_leg: 18 } },
+      { season: '2026', week: 18 },
+    )).toBeNull();
   });
 
   it('keeps a 32-team/two-chops-per-week league at 28 active before the third week is final', () => {

@@ -89,7 +89,7 @@ describe('shared projected status in FAAB rows', () => {
     expect(screen.getByText('Proj 1/2')).toBeTruthy();
     expect(screen.getByText('Proj 2/2')).toBeTruthy();
     expect(screen.getByText('Safe')).toBeTruthy();
-    expect(screen.getByText('At Risk')).toBeTruthy();
+    expect(screen.getByText('Danger')).toBeTruthy();
     expect(screen.queryByText('Eliminated')).toBeNull();
     expect(screen.getAllByText('$60').length).toBeGreaterThan(0);
     expect(screen.getAllByText('$80').length).toBeGreaterThan(0);

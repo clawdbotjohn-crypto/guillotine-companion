@@ -1,6 +1,7 @@
 export {
   computeEliminations,
   getCompletedLeagueWeek,
+  getUpcomingPlayingWeek,
   getActiveRosterIds,
   extractBids,
   isGuillotineLeague,
@@ -38,6 +39,8 @@ export {
 export {
   formatCurrentRank,
   formatProjectedCurrentRank,
+  riskForActiveRank,
+  getCurrentElimsPerWeek,
   parseLineupSlots,
   projectBestLineup,
   projectAllTeams,
@@ -55,6 +58,14 @@ export {
   type HistoricalRank,
   type AllRosterHistoricalRank,
 } from './analytics';
+
+export {
+  buildFreeAgentTeamImpact,
+  type FreeAgentTeamImpact,
+  type AvailableFreeAgentTeamImpact,
+  type UnavailableFreeAgentTeamImpact,
+  type TeamImpactMetric,
+} from './teamImpact';
 
 export {
   rankQuartile,
@@ -100,3 +111,17 @@ export {
 } from './biddingProfiles';
 
 export { BIDDING_BASELINE, DEFAULT_WAIVER_STRATEGY, WAIVER_STRATEGY_REGISTRY, resolveBiddingBaseline, resolveStrategyBid, type StrategyKey } from './waiverStrategies';
+
+export {
+  buildMaxVorpPlayerValues,
+  buildModeledPositionRanks,
+  collectRosterPlayerIds,
+  summarizeRosterValue,
+  rankActiveRosterValues,
+  buildSelectedRosterValueDisplay,
+  rankActiveRosterPositionValues,
+  type RosterValueSummary,
+  type RankedRosterValue,
+  type SelectedRosterValueDisplay,
+  type RosterPositionValueRank,
+} from './playerValues';

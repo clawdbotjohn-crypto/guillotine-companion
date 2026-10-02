@@ -14,16 +14,46 @@ import {
   type HistoricalBaselineEvidence,
 } from '../logic';
 
+export function isBiddingProfileModelReady({
+  hasLeague,
+  hasRosters,
+  hasPlayers,
+  hasTransactions,
+  hasSelectedBidEvents,
+  hasSnapshotData,
+  isFetching,
+  hasError,
+}: {
+  hasLeague: boolean;
+  hasRosters: boolean;
+  hasPlayers: boolean;
+  hasTransactions: boolean;
+  hasSelectedBidEvents: boolean;
+  hasSnapshotData: boolean;
+  isFetching: boolean;
+  hasError: boolean;
+}) {
+  return hasLeague
+    && hasRosters
+    && hasPlayers
+    && hasTransactions
+    && !isFetching
+    && !hasError
+    && (!hasSelectedBidEvents || hasSnapshotData);
+}
+
 export function useBiddingProfiles({
   leagueId,
   league,
   rosters,
   players,
+  dependenciesFetching = false,
 }: {
   leagueId: string | null;
   league: League | undefined;
   rosters: Roster[] | undefined;
   players: ReadonlyMap<string, { position: string }> | undefined;
+  dependenciesFetching?: boolean;
 }) {
   const transactionsQuery = useAllTransactions(leagueId, 18);
   const canonicalBidEvents = useMemo(() => {
@@ -89,13 +119,31 @@ export function useBiddingProfiles({
     historicalEvidence,
   ), [rosters, selectedBidEvents, historicalEvidence]);
 
+  const error = (transactionsQuery.error instanceof Error ? transactionsQuery.error : null)
+    ?? snapshotQuery.error;
+  const isFetching = dependenciesFetching
+    || transactionsQuery.isFetching
+    || (selectedBidEvents.length > 0 && snapshotQuery.isFetching);
+  const isLoading = transactionsQuery.isLoading
+    || (selectedBidEvents.length > 0 && snapshotQuery.isLoading)
+    || isFetching;
+  const isReady = isBiddingProfileModelReady({
+    hasLeague: !!league,
+    hasRosters: !!rosters,
+    hasPlayers: !!players,
+    hasTransactions: transactionsQuery.data != null,
+    hasSelectedBidEvents: selectedBidEvents.length > 0,
+    hasSnapshotData: snapshotQuery.data != null,
+    isFetching,
+    hasError: !!error,
+  });
+
   return {
     profiles,
     hasHistory: selectedBidEvents.length > 0,
-    isLoading: transactionsQuery.isLoading
-      || (selectedBidEvents.length > 0 && snapshotQuery.isLoading),
-    error: (transactionsQuery.error instanceof Error ? transactionsQuery.error : null)
-      ?? snapshotQuery.error,
+    isLoading,
+    isReady,
+    error,
     partialErrorCount: snapshotQuery.data?.errors.size ?? 0,
     retry: () => {
       void transactionsQuery.refetch();

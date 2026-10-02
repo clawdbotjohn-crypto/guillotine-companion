@@ -103,6 +103,21 @@ export function getCompletedLeagueWeek(
   return Math.max(0, nflState.week - 1);
 }
 
+/**
+ * The next league/NFL scoring week that has not been completed yet. League standings are the
+ * authority because Sleeper's global NFL state can advance independently of a league's scored
+ * legs. Historical seasons and completed regular seasons have no upcoming playing week.
+ */
+export function getUpcomingPlayingWeek(
+  league: Pick<League, 'season' | 'settings'> | undefined,
+  nflState: Pick<NflState, 'season' | 'week'> | undefined,
+): number | null {
+  if (!league || !nflState || league.season !== nflState.season) return null;
+  const completedWeek = getCompletedLeagueWeek(league, nflState);
+  if (completedWeek == null || completedWeek >= 18) return null;
+  return Math.max(1, completedWeek + 1);
+}
+
 /** One canonical survivor set for Hub, Teams, Waivers, projections, and buyer tiers. */
 export function getActiveRosterIds(result: EliminationResult): Set<number> {
   return new Set(

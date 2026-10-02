@@ -6,6 +6,7 @@ import { styleForMultiplier } from '../logic';
 import { BIDDING_BASELINE, resolveBiddingBaseline } from '../logic/waiverStrategies';
 import { ManagerDetailsModal, ManagerPredictionRow, TeamBidProfiles, WaiverManagerPredictions } from './ManagerBiddingProfiles';
 import { buildManagerPredictions, buyerLikelihood, type ManagerPredictionDisplay } from '../logic/managerPredictionDisplay';
+import { CURRENT_TEAM_HIGHLIGHT_CLASS } from './ui/teamHighlight';
 
 const rosters = [
   { roster_id: 1, owner_id: 'one', players: [], starters: [], settings: { wins: 1, losses: 0, fpts: 100, waiver_budget_used: 900 } },
@@ -112,12 +113,14 @@ describe('manager bid presentation', () => {
     const dialog = screen.getByRole('dialog', { name: 'Aggressive Alice' });
     const backdrop = screen.getByTestId('manager-modal-backdrop');
     expect(backdrop.parentElement).toBe(document.body);
-    expect(backdrop.className).toContain('items-center');
+    expect(backdrop.className).toContain('items-start');
+    expect(backdrop.className).toContain('sm:items-center');
     expect(backdrop.className).toContain('safe-area-inset-top');
     expect(backdrop.className).toContain('safe-area-inset-bottom');
     expect(backdrop.className).toContain('4.75rem');
     expect(dialog.className).toContain('100dvh');
     expect(dialog.className).toContain('5.5rem');
+    expect(dialog.className).toContain('overflow-hidden');
     const close = screen.getByRole('button', { name: /close manager details/i });
     expect(document.activeElement).toBe(close);
     expect(document.body.style.overflow).toBe('hidden');
@@ -195,6 +198,29 @@ describe('manager bid presentation', () => {
     fireEvent.click(alice);
     expect(screen.getByRole('dialog', { name: 'Aggressive Alice' })).toBeTruthy();
     expect(screen.queryByText(/canonical|Learning/i)).toBeNull();
+  });
+
+  it('reuses the selected-team highlight and accessible identity in Bid Profiles while preserving eliminated styling', () => {
+    render(<TeamBidProfiles
+      profiles={[profile(1, 1.5), profile(3, null)]}
+      rosters={rosters}
+      users={users}
+      initialFaab={1000}
+      activeRosterIds={new Set([1])}
+      currentRosterId={3}
+      showEliminatedTeams
+      isLoading={false}
+      error={null}
+      onRetry={vi.fn()}
+      getPlayerName={() => 'History Player'}
+    />);
+    const currentTeam = screen.getByRole('button', { name: 'Open bid profile for Zero Zoe, Your team' });
+    for (const className of CURRENT_TEAM_HIGHLIGHT_CLASS.split(' ')) {
+      expect(currentTeam.className).toContain(className);
+    }
+    expect(currentTeam.className).not.toContain('#10b981');
+    expect(within(currentTeam).getByText('Your team')).toBeTruthy();
+    expect(within(currentTeam).getByText('Zero Zoe').className).toContain('text-[#4a4d77]');
   });
 
   it('renders compact Bid Predictions rows without a style badge and opens the shared modal', () => {

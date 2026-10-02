@@ -1,10 +1,10 @@
 // Teams page — rethought per John feedback (2026-09-22).
 // - Rank teams by PROJECTED best-lineup points for the coming week
-// - Show risk (safe / warning / at-risk) from projection
+// - Show risk (safe / warning / danger) from projection
 // - Per team: historical points rank + position-group scoring breakdown (FLEX its own category)
 // Toggle between Projected and Historical ordering.
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore, usePlayers } from '../store';
 import { getPlayerPosition } from '../store/players';
@@ -19,21 +19,29 @@ import {
 } from '../api';
 import {
   buildWeeklyScoredPlayers,
+  buildMaxVorpPlayerValues,
   computeEliminations,
   getActiveRosterIds,
   getCompletedLeagueWeek,
+  getCurrentElimsPerWeek,
   getProjectionScoring,
-  getRestOfSeasonStartWeek,
+  getUpcomingPlayingWeek,
   projectAllTeams,
   computePositionGroupRanks,
   computeProjectedLineupGroupRanks,
   computeHistoricalRanks,
   orderTeamProjections,
+  rankActiveRosterPositionValues,
+  rankActiveRosterValues,
+  riskForActiveRank,
   type HistoricalRank,
   type PosGroupRank,
   type TeamProjection,
+  type RankedRosterValue,
+  type RosterPositionValueRank,
 } from '../logic';
 import { Card, Skeleton, StatusBadge } from '../components/ui';
+import { CURRENT_TEAM_HIGHLIGHT_CLASS } from '../components/ui/teamHighlight';
 import { TeamBidProfiles } from '../components/ManagerBiddingProfiles';
 import { buildManagerDetailData } from '../logic/managerDetails';
 import { useBiddingProfiles } from '../hooks/useBiddingProfiles';
@@ -42,9 +50,13 @@ import { SeasonPicker } from '../components/SeasonPicker';
 import { useSwitchSeason } from '../hooks/useSwitchSeason';
 import { ChevronRight, ShieldCheck, ShieldAlert, Shield, TriangleAlert } from 'lucide-react';
 import { filterTeamsByEliminatedVisibility } from '../logic/teamVisibility';
-import { getTeamPositionGroups, type TeamOrder } from '../logic/teamPositionGroups';
+import { buildLeagueValuePositionBuckets, getTeamPositionGroups, type TeamOrder } from '../logic/teamPositionGroups';
+import { usePlayerValues } from '../hooks/usePlayerValues';
+import { formatWholeDollars } from '../logic/displayCurrency';
+import { buildLeagueContext, buildMaxVorpCalibration } from '../logic/waivers';
+import { orderTeamsByValue } from '../logic/teamValueOrder';
 
-const POS_ORDER = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'SUPER_FLEX', 'K', 'DEF'];
+const POS_ORDER = ['QB', 'RB', 'FB', 'WR', 'TE', 'K', 'DEF', 'C', 'DL', 'DE', 'DT', 'NT', 'LB', 'ILB', 'OLB', 'DB', 'CB', 'S', 'SS', 'FS'];
 
 function rankColor(rank: number, outOf: number): string {
   if (outOf <= 1) return '#a5b4fc';
@@ -116,6 +128,61 @@ export function TeamStandingDetails({
   );
 }
 
+export function TeamValueStandingDetails({
+  team,
+  value,
+  elimsPerWeek,
+}: {
+  team: TeamProjection;
+  value: RankedRosterValue | undefined;
+  elimsPerWeek: number;
+}) {
+  if (team.eliminated) return <StatusBadge status="eliminated" />;
+  if (!value || value.total == null || value.rank == null) {
+    return <span className="text-[10px] text-[#6b6e99]">Max VORP value unavailable</span>;
+  }
+  const risk = riskForActiveRank(value.rank, value.outOf, elimsPerWeek);
+  return (
+    <>
+      <span className="font-['Space_Mono'] text-[10px] text-[#a5b4fc] tabular-nums" data-testid="current-team-standing">
+        value #{value.rank}/{value.outOf} ·{' '}
+        <span data-testid="team-value-total" style={{ color: rankColor(value.rank, value.outOf) }}>
+          {formatWholeDollars(value.total)}
+        </span>
+      </span>
+      <StatusBadge status={risk} />
+    </>
+  );
+}
+
+export function TeamRowDisclosureButton({
+  expanded,
+  controls,
+  label,
+  onToggle,
+  children,
+}: {
+  expanded: boolean;
+  controls: string;
+  label: string;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      aria-expanded={expanded}
+      aria-controls={controls}
+      onClick={onToggle}
+      className="flex w-full cursor-pointer items-center justify-between bg-transparent p-0 text-left outline-none focus-visible:ring-2 focus-visible:ring-[#6366f1]"
+    >
+      {children}
+      <ChevronRight aria-hidden="true" className={`h-4 w-4 shrink-0 text-[#4a4d77] transition-transform ${expanded ? 'rotate-90' : ''}`} />
+    </button>
+  );
+}
+
 export function TeamsPage() {
   const navigate = useNavigate();
   const {
@@ -131,12 +198,16 @@ export function TeamsPage() {
   const { data: rosters } = useRosters(leagueId);
   const { data: players, isLoading: playersLoading } = usePlayers();
   const nflStateQuery = useNflState();
+  const playerValuesModel = usePlayerValues({
+    league,
+    nflState: nflStateQuery.data,
+    players,
+    source: 'sleeper',
+  });
   const completedWeek = getCompletedLeagueWeek(league, nflStateQuery.data);
   const { data: matchups, isLoading: matchupsLoading } = useAllMatchups(leagueId, completedWeek);
   const { data: leagueHistory, isLoading: historyLoading } = useLeagueHistory(rootLeagueId);
-  const projectionWeek = league && nflStateQuery.data && league.season === nflStateQuery.data.season
-    ? getRestOfSeasonStartWeek(nflStateQuery.data)
-    : null;
+  const projectionWeek = getUpcomingPlayingWeek(league, nflStateQuery.data);
   const weeklyProjectionQuery = useWeeklyProjections(
     league?.season ?? null,
     projectionWeek,
@@ -174,8 +245,33 @@ export function TeamsPage() {
       league,
     );
     const histRanks = computeHistoricalRanks(elim);
-    return { elim, projections, weeklyScoredPlayers, historicalPosRanks, projectedPosRanks, histRanks };
-  }, [matchups, rosters, users, league, weeklyProjectionQuery.data]);
+    const maxVorpContext = buildLeagueContext(league!, elim, projectionWeek ?? undefined);
+    const maxVorpCalibration = playerValuesModel.sleeperValues
+      ? buildMaxVorpCalibration(
+          playerValuesModel.sleeperValues,
+          maxVorpContext.startersPerPos,
+          maxVorpContext.teamsRemaining,
+          maxVorpContext.budget,
+        )
+      : null;
+    const maxVorpValues = playerValuesModel.sleeperValues
+      ? buildMaxVorpPlayerValues(playerValuesModel.sleeperValues, maxVorpCalibration)
+      : null;
+    const valueRanks = maxVorpValues
+      ? rankActiveRosterValues(rosters, activeRosterIds, maxVorpValues)
+      : new Map<number, RankedRosterValue>();
+    const valuePositionBuckets = buildLeagueValuePositionBuckets(league?.roster_positions);
+    const positionValueRanks = maxVorpValues && playerValuesModel.sleeperValues
+      ? rankActiveRosterPositionValues(
+          rosters,
+          activeRosterIds,
+          maxVorpValues,
+          playerValuesModel.sleeperValues,
+          valuePositionBuckets,
+        )
+      : new Map<number, RosterPositionValueRank[]>();
+    return { elim, projections, weeklyScoredPlayers, historicalPosRanks, projectedPosRanks, histRanks, valueRanks, positionValueRanks };
+  }, [matchups, rosters, users, league, weeklyProjectionQuery.data, projectionWeek, playerValuesModel.sleeperValues]);
 
   if (!leagueId) {
     return (
@@ -195,7 +291,8 @@ export function TeamsPage() {
     );
   }
 
-  const { elim, projections, weeklyScoredPlayers, historicalPosRanks, projectedPosRanks, histRanks } = model;
+  const { elim, projections, weeklyScoredPlayers, historicalPosRanks, projectedPosRanks, histRanks, valueRanks, positionValueRanks } = model;
+  const elimsPerWeek = getCurrentElimsPerWeek(elim);
   const hasScores = elim.weeks.length > 0;
   const scoredPlayers = weeklyScoredPlayers ?? new Map();
   const playerValues = new Map<string, number>(
@@ -223,7 +320,9 @@ export function TeamsPage() {
     projectedPositionRanks: projectedPosRanks.byRosterId,
   });
 
-  const rows = orderTeamProjections(projections, histRanks, orderBy);
+  const rows = orderBy === 'value'
+    ? orderTeamsByValue(projections, valueRanks)
+    : orderTeamProjections(projections, histRanks, orderBy);
   const eliminatedCount = projections.filter((team) => team.eliminated).length;
   const visibleRows = filterTeamsByEliminatedVisibility(rows, showEliminatedTeams);
 
@@ -257,6 +356,7 @@ export function TeamsPage() {
           users={users!}
           initialFaab={league?.settings?.waiver_budget ?? 1000}
           activeRosterIds={getActiveRosterIds(elim)}
+          currentRosterId={myRosterId}
           showEliminatedTeams={showEliminatedTeams}
           isLoading={biddingProfiles.isLoading}
           error={biddingProfiles.error}
@@ -267,8 +367,8 @@ export function TeamsPage() {
       ) : (<>
       {/* Order toggle */}
       {hasScores && (
-        <div className="flex gap-1 bg-[#0a0d1a] rounded-lg p-1 mb-2 w-fit">
-          {(['projected', 'historical'] as const).map((o) => (
+        <div className="grid w-full grid-cols-3 gap-1 rounded-lg bg-[#0a0d1a] p-1 mb-2">
+          {(['projected', 'historical', 'value'] as const).map((o) => (
             <button
               key={o}
               onClick={() => setOrderBy(o)}
@@ -278,7 +378,7 @@ export function TeamsPage() {
                   : 'text-[#4a4d77] hover:text-[#6b6e99]'
                 }`}
             >
-              {o === 'projected' ? 'Projected' : 'Historical'}
+              {o === 'projected' ? 'Projected' : o === 'historical' ? 'Historical' : 'Value'}
             </button>
           ))}
         </div>
@@ -294,6 +394,16 @@ export function TeamsPage() {
         </p>
       )}
 
+      {hasScores && orderBy === 'value' && (
+        <p className="text-[10px] text-[#4a4d77] mb-4">
+          {playerValuesModel.isLoading
+            ? 'Loading Max VORP Team Value…'
+            : valueRanks.size > 0
+              ? 'Max VORP · Sleeper rest-of-season projections · active-team ranks'
+              : playerValuesModel.unavailableReason ?? 'Max VORP Team Value unavailable.'}
+        </p>
+      )}
+
       {!hasScores && (
         <p className="text-[#6b6e99] text-sm mb-4">
           Projections appear once the season has weekly scores. Showing roster list.
@@ -303,48 +413,71 @@ export function TeamsPage() {
       <div className="space-y-2">
         {visibleRows.map((t) => {
           const hist = histRanks.get(t.rosterId);
-          const groups = getTeamPositionGroups(
-            t.rosterId,
-            orderBy,
-            projectedPosRanks.byRosterId,
-            historicalPosRanks,
-          )
-            .filter((g) => g.outOf > 0)
+          const groups = orderBy === 'value'
+            ? []
+            : getTeamPositionGroups(
+                t.rosterId,
+                orderBy,
+                projectedPosRanks.byRosterId,
+                historicalPosRanks,
+              )
+                .filter((g) => g.outOf > 0)
+                .sort((a, b) => POS_ORDER.indexOf(a.position) - POS_ORDER.indexOf(b.position));
+          const valueGroups = (positionValueRanks.get(t.rosterId) ?? [])
+            .filter((group) => group.outOf > 0)
             .sort((a, b) => POS_ORDER.indexOf(a.position) - POS_ORDER.indexOf(b.position));
+          const teamValue = valueRanks.get(t.rosterId);
           const isMine = t.rosterId === myRosterId;
-          const modeRisk = orderBy === 'projected' ? t.risk : hist?.risk ?? 'warning';
+          const modeRisk = orderBy === 'historical'
+            ? hist?.risk ?? 'warning'
+            : orderBy === 'value'
+              ? teamValue?.rank != null
+                ? riskForActiveRank(teamValue.rank, teamValue.outOf, elimsPerWeek)
+                : 'unavailable'
+              : t.risk;
           const isOpen = expanded === t.rosterId;
 
           return (
-            <Card key={t.rosterId} hover={false} className={`p-3 ${isMine ? 'border-l-4 border-l-[#6366f1]' : ''}`}>
-              <div className="flex items-center justify-between cursor-pointer"
-                onClick={() => setExpanded(isOpen ? null : t.rosterId)}>
-                <div className="flex items-center gap-3 min-w-0">
+            <Card key={t.rosterId} hover={false} className={`p-3 ${isMine ? CURRENT_TEAM_HIGHLIGHT_CLASS : ''}`}>
+              <TeamRowDisclosureButton
+                expanded={isOpen}
+                controls={`team-${t.rosterId}-details`}
+                label={`${isOpen ? 'Collapse' : 'Expand'} ${t.displayName} details`}
+                onToggle={() => setExpanded(isOpen ? null : t.rosterId)}
+              >
+                <div className="flex min-w-0 items-center gap-3">
                   <RiskIcon risk={t.eliminated ? 'eliminated' : modeRisk} />
                   <div className="min-w-0">
-                    <div className={`text-sm font-medium truncate ${t.eliminated ? 'text-[#4a4d77]' : 'text-[#f0f0ff]'}`}>
-                      {t.displayName}{isMine && <span className="text-[#6366f1] text-[10px] ml-1">YOU</span>}
+                    <div className={`truncate text-sm font-medium ${t.eliminated ? 'text-[#4a4d77]' : 'text-[#f0f0ff]'}`}>
+                      {t.displayName}{isMine && <span className="ml-1 text-[10px] text-[#6366f1]">YOU</span>}
                     </div>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      {hasScores && (
-                        <TeamStandingDetails team={t} historical={hist} orderBy={orderBy} />
+                    <div className="mt-0.5 flex items-center gap-2">
+                      {hasScores && (orderBy === 'value'
+                        ? <TeamValueStandingDetails team={t} value={teamValue} elimsPerWeek={elimsPerWeek} />
+                        : <TeamStandingDetails team={t} historical={hist} orderBy={orderBy} />
                       )}
                     </div>
                   </div>
                 </div>
-                <ChevronRight className={`w-4 h-4 text-[#4a4d77] transition-transform ${isOpen ? 'rotate-90' : ''}`} />
-              </div>
+              </TeamRowDisclosureButton>
 
               {/* Position-group breakdown */}
               {isOpen && (
-                <div className="mt-3 pt-3 border-t border-[#1a1e3a]">
-                  <PositionGroupBreakdown
-                    groups={groups}
-                    eliminated={t.eliminated}
-                    unavailableMessage={orderBy === 'projected'
-                      ? 'Projected lineup-group rankings unavailable.'
-                      : 'No starter scoring data yet.'}
-                  />
+                <div id={`team-${t.rosterId}-details`} className="mt-3 border-t border-[#1a1e3a] pt-3">
+                  {orderBy === 'value' ? (
+                    <PositionValueBreakdown
+                      groups={valueGroups}
+                      eliminated={t.eliminated}
+                    />
+                  ) : (
+                    <PositionGroupBreakdown
+                      groups={groups}
+                      eliminated={t.eliminated}
+                      unavailableMessage={orderBy === 'projected'
+                        ? 'Projected lineup-group rankings unavailable.'
+                        : 'No starter scoring data yet.'}
+                    />
+                  )}
                   <button
                     onClick={() => navigate(`/teams/${t.rosterId}`)}
                     className="mt-3 text-[11px] text-[#6366f1] underline underline-offset-4 hover:text-[#8b5cf6]"
@@ -390,7 +523,40 @@ export function PositionGroupBreakdown({
   );
 }
 
-function RiskIcon({ risk }: { risk: 'safe' | 'warning' | 'at-risk' | 'eliminated' }) {
+export function PositionValueBreakdown({
+  groups,
+  eliminated,
+}: {
+  groups: RosterPositionValueRank[];
+  eliminated: boolean;
+}) {
+  if (eliminated) return <p className="text-[10px] text-[#4a4d77]">Eliminated — no current positional standing.</p>;
+  if (groups.length === 0) return <p className="text-[10px] text-[#4a4d77]">Max VORP position values unavailable.</p>;
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      {groups.map((group) => {
+        const color = group.rank == null ? '#a5b4fc' : rankColor(group.rank, group.outOf);
+        return (
+          <div key={group.position} className="rounded-lg border border-[#1a1e3a] bg-[#0e1025] p-2 text-center">
+            <div className="text-[9px] uppercase tracking-wider text-[#6b6e99]">{group.position}</div>
+            <div
+              className="font-['Space_Mono'] text-sm font-bold tabular-nums"
+              data-testid={`position-value-${group.position}`}
+              style={{ color }}
+            >
+              {formatWholeDollars(group.total)}
+            </div>
+            {group.rank != null && (
+              <div className="font-['Space_Mono'] text-[8px] text-[#4a4d77]">#{group.rank}/{group.outOf}</div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function RiskIcon({ risk }: { risk: 'safe' | 'warning' | 'at-risk' | 'eliminated' | 'unavailable' }) {
   if (risk === 'safe') return <ShieldCheck size={18} className="text-[#10b981] shrink-0" />;
   if (risk === 'at-risk') return <ShieldAlert size={18} className="text-[#f43f5e] shrink-0" />;
   if (risk === 'warning') return <TriangleAlert size={18} className="text-[#f59e0b] shrink-0" />;

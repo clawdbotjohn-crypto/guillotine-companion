@@ -5,10 +5,14 @@ import { orderTeamProjections, type HistoricalRank, type TeamProjection } from '
 import { filterTeamsByEliminatedVisibility } from '../logic/teamVisibility';
 import { getTeamPositionGroups } from '../logic/teamPositionGroups';
 import { useAppStore } from '../store';
+import { orderTeamsByValue } from '../logic/teamValueOrder';
 import {
   EliminatedTeamsVisibilityToggle,
   PositionGroupBreakdown,
+  PositionValueBreakdown,
+  TeamRowDisclosureButton,
   TeamStandingDetails,
+  TeamValueStandingDetails,
 } from './TeamsPage';
 
 describe('PositionGroupBreakdown', () => {
@@ -227,7 +231,7 @@ describe('Teams current standings', () => {
 
     expect(screen.getByText('proj #1/28 · 150.0 pts')).toBeTruthy();
     expect(screen.getByText('Safe')).toBeTruthy();
-    expect(screen.queryByText('At Risk')).toBeNull();
+    expect(screen.queryByText('Danger')).toBeNull();
 
     rerender(
       <TeamStandingDetails
@@ -238,7 +242,7 @@ describe('Teams current standings', () => {
     );
 
     expect(screen.getByText('hist #28/28 · 20.0 pts')).toBeTruthy();
-    expect(screen.getByText('At Risk')).toBeTruthy();
+    expect(screen.getByText('Danger')).toBeTruthy();
     expect(screen.queryByText('Safe')).toBeNull();
   });
 
@@ -305,5 +309,111 @@ describe('Teams current standings', () => {
     expect(screen.getByText('Eliminated')).toBeTruthy();
     expect(screen.queryByTestId('current-team-standing')).toBeNull();
     expect(screen.queryByText(/#29\/32/)).toBeNull();
+  });
+});
+
+
+describe('Teams Value mode', () => {
+  it('shows summed Max VORP dollars with an active-only rank', () => {
+    render(
+      <TeamValueStandingDetails
+        team={projectedTeam}
+        value={{ rosterId: 29, total: 94, matched: 8, missing: 1, playerCount: 9, rank: 26, outOf: 26 }}
+        elimsPerWeek={2}
+      />,
+    );
+    expect(screen.getByTestId('current-team-standing').textContent).toBe('value #26/26 · $94');
+  });
+
+  it('colors team totals by their active-team value quartile', () => {
+    const summaries = [1, 2, 3, 4].map((rank) => ({
+      rosterId: rank,
+      total: 100 - rank,
+      matched: 1,
+      missing: 0,
+      playerCount: 1,
+      rank,
+      outOf: 4,
+    }));
+    render(<>{summaries.map((value) => (
+      <TeamValueStandingDetails
+        key={value.rosterId}
+        team={{ ...projectedTeam, rosterId: value.rosterId }}
+        value={value}
+        elimsPerWeek={1}
+      />
+    ))}</>);
+
+    expect(screen.getAllByTestId('team-value-total').map((element) => element.style.color)).toEqual([
+      'rgb(16, 185, 129)',
+      'rgb(165, 180, 252)',
+      'rgb(245, 158, 11)',
+      'rgb(244, 63, 94)',
+    ]);
+  });
+
+  it('derives the Value badge from the value rank instead of projected risk', () => {
+    render(
+      <TeamValueStandingDetails
+        team={{ ...projectedTeam, risk: 'safe', projRank: 1 }}
+        value={{ rosterId: 29, total: 10, matched: 1, missing: 0, playerCount: 1, rank: 6, outOf: 6 }}
+        elimsPerWeek={1}
+      />,
+    );
+
+    expect(screen.getByText('Danger')).toBeTruthy();
+    expect(screen.getByLabelText('Status: Danger')).toBeTruthy();
+    expect(screen.queryByText('Safe')).toBeNull();
+  });
+
+  it('keeps eliminated teams last and excludes their huge value from ordering', () => {
+    const second = { ...projectedTeam, rosterId: 30 };
+    const rankings = new Map([
+      [29, { rosterId: 29, total: 10, matched: 1, missing: 0, playerCount: 1, rank: 2, outOf: 2 }],
+      [30, { rosterId: 30, total: 20, matched: 1, missing: 0, playerCount: 1, rank: 1, outOf: 2 }],
+    ]);
+    expect(orderTeamsByValue([eliminatedTeam, projectedTeam, second], rankings).map((team) => team.rosterId)).toEqual([30, 29, 3]);
+  });
+
+  it('colors ranked position dollars from each position rank', () => {
+    render(<PositionValueBreakdown eliminated={false} groups={[
+      { position: 'RB', total: 42, rank: 1, outOf: 4 },
+      { position: 'WR', total: 24, rank: 3, outOf: 4 },
+    ]} />);
+    expect(screen.getByText('#1/4')).toBeTruthy();
+    expect(screen.getByText('#3/4')).toBeTruthy();
+    expect(screen.getByTestId('position-value-RB').style.color).toBe('rgb(16, 185, 129)');
+    expect(screen.getByTestId('position-value-WR').style.color).toBe('rgb(245, 158, 11)');
+  });
+
+  it('keeps K and DEF dollars neutral and renders no rank text', () => {
+    render(<PositionValueBreakdown eliminated={false} groups={[
+      { position: 'K', total: 7, rank: null, outOf: 4 },
+      { position: 'DEF', total: 3, rank: null, outOf: 4 },
+    ]} />);
+    expect(screen.getByText('$7')).toBeTruthy();
+    expect(screen.getByText('$3')).toBeTruthy();
+    expect(screen.getByTestId('position-value-K').style.color).toBe('rgb(165, 180, 252)');
+    expect(screen.getByTestId('position-value-DEF').style.color).toBe('rgb(165, 180, 252)');
+    expect(screen.queryByText(/^#/)).toBeNull();
+  });
+
+  it('uses a keyboard-accessible row disclosure without changing its visual content', () => {
+    let toggled = false;
+    render(
+      <TeamRowDisclosureButton
+        expanded={false}
+        controls="team-7-details"
+        label="Expand Houston details"
+        onToggle={() => { toggled = true; }}
+      >
+        <span>Houston</span>
+      </TeamRowDisclosureButton>,
+    );
+    const trigger = screen.getByRole('button', { name: 'Expand Houston details' });
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(trigger.getAttribute('aria-controls')).toBe('team-7-details');
+    fireEvent.click(trigger);
+    expect(toggled).toBe(true);
   });
 });

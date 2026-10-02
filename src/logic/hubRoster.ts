@@ -4,6 +4,7 @@ import { getTeamByeWeek } from './projections';
 import type { TeamProjection } from './analytics';
 import type { WeeklyScoredPlayer } from './projections';
 import { isUpcomingByeWeek } from './byeProximity';
+import { collectRosterPlayerIds } from './playerValues';
 
 export type AcquisitionKind = 'draft' | 'waiver' | 'free_agent' | 'trade' | 'ambiguous' | 'unknown';
 
@@ -177,8 +178,7 @@ export function buildHubRosterRows({
   );
   const hasOptimizedLineup = optimizedStarters.length > 0;
 
-  return (roster.players ?? [])
-    .filter((playerId) => playerId && playerId !== '0')
+  return collectRosterPlayerIds(roster)
     .map((playerId): HubRosterRow & { order: number } => {
       const player = players?.get(playerId);
       const weekly = weeklyProjections?.get(playerId);

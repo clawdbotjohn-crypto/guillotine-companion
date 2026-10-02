@@ -1,4 +1,4 @@
-// Analytics engine: projected best-lineup, position-group ranks, safe/at-risk.
+// Analytics engine: projected best-lineup, position-group ranks, safe/danger.
 
 import type { Matchup, Roster, League } from '../api/types';
 import { getPlayerPosition } from '../store/players';
@@ -10,6 +10,22 @@ export function formatCurrentRank(rank: number | undefined, activeTeamCount: num
 }
 
 export type TeamRisk = 'safe' | 'warning' | 'at-risk';
+
+/** Derive the shared Safe/Warning/Danger band from an active-only rank. */
+export function riskForActiveRank(
+  rank: number,
+  outOf: number,
+  elimsPerWeek: number,
+): TeamRisk {
+  const flaggedWidth = Math.min(outOf, Math.max(4, Math.ceil(outOf / 3)));
+  const dangerWidth = Math.min(flaggedWidth, Math.max(0, elimsPerWeek));
+  const fromBottom = outOf - rank;
+  return fromBottom < dangerWidth
+    ? 'at-risk'
+    : fromBottom < flaggedWidth
+      ? 'warning'
+      : 'safe';
+}
 
 export interface ActiveStanding {
   rosterId: number;
@@ -27,7 +43,7 @@ interface StandingCandidate {
 /**
  * Rank one current-team metric among survivors and derive guillotine risk from
  * that same order. The bottom max(4, ceil(active / 3)) teams are flagged, capped
- * to the active field: the bottom elimination count is at risk and the rest are
+ * to the active field: the bottom elimination count is in Danger and the rest are
  * warnings. Eliminated teams never receive a current standing. Equal values use
  * roster ID so API/input ordering cannot change the result.
  */
@@ -39,25 +55,18 @@ export function rankActiveTeams(
     .filter((candidate) => !candidate.eliminated)
     .sort((a, b) => b.value - a.value || a.rosterId - b.rosterId);
   const outOf = active.length;
-  const flaggedWidth = Math.min(outOf, Math.max(4, Math.ceil(outOf / 3)));
-  const atRiskWidth = Math.min(flaggedWidth, Math.max(0, elimsPerWeek));
   const standings = new Map<number, ActiveStanding>();
 
   active.forEach((candidate, index) => {
     const rank = index + 1;
-    const fromBottom = outOf - rank;
-    const risk: TeamRisk = fromBottom < atRiskWidth
-      ? 'at-risk'
-      : fromBottom < flaggedWidth
-        ? 'warning'
-        : 'safe';
+    const risk = riskForActiveRank(rank, outOf, elimsPerWeek);
     standings.set(candidate.rosterId, { rosterId: candidate.rosterId, rank, outOf, risk });
   });
 
   return standings;
 }
 
-function currentElimsPerWeek(elim: EliminationResult): number {
+export function getCurrentElimsPerWeek(elim: EliminationResult): number {
   const lastWeek = elim.weeks[elim.weeks.length - 1];
   return Math.max(1, lastWeek?.eliminated.length || 1);
 }
@@ -225,7 +234,7 @@ export function projectAllTeams(
         value: row.projPoints ?? 0,
         eliminated: row.eliminated,
       })),
-      currentElimsPerWeek(elim),
+      getCurrentElimsPerWeek(elim),
     );
     for (const row of rows) {
       const standing = standings.get(row.rosterId);
@@ -465,7 +474,7 @@ export function computeHistoricalRanks(elim: EliminationResult): Map<number, His
       value: totalPoints,
       eliminated: false,
     })),
-    currentElimsPerWeek(elim),
+    getCurrentElimsPerWeek(elim),
   );
   const historical = new Map<number, HistoricalRank>();
   for (const [rosterId, totalPoints] of totals) {

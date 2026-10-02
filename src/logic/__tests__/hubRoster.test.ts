@@ -213,6 +213,21 @@ describe('Hub roster ordering and weekly context', () => {
     expect(rows[1]).toMatchObject({ playerId: 'bench', isStarter: false, projection: null, byeWeek: null });
     expect(buildUpcomingByeWarnings(rows, 5)).toEqual([]);
   });
+
+  it('includes unique reserve and taxi IDs in the full roster rows', () => {
+    const roster: Roster = {
+      roster_id: 7,
+      owner_id: 'owner',
+      players: ['active', 'reserve'],
+      starters: ['active'],
+      reserve: ['reserve', 'ir-only'],
+      taxi: ['taxi-only', 'active'],
+      settings: { wins: 0, losses: 0, fpts: 0, waiver_budget_used: 0 },
+    };
+    const players = new Map(['active', 'reserve', 'ir-only', 'taxi-only'].map((id) => [id, player(id, id, 'RB', 'KC')]));
+    const rows = buildHubRosterRows({ roster, teamProjection: undefined, weeklyProjections: null, players, season: '2026', transactions: undefined, draftPicks: undefined });
+    expect(rows.map((row) => row.playerId).sort()).toEqual(['active', 'ir-only', 'reserve', 'taxi-only']);
+  });
 });
 
 describe('Hub upcoming bye warnings', () => {
