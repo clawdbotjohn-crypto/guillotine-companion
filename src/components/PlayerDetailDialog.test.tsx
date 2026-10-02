@@ -122,8 +122,9 @@ describe('PlayerDetailDialog', () => {
       getPlayerName,
     }} />);
     const dialog = screen.getByRole('dialog', { name: 'Detail Player' });
-    expect(within(dialog).getByText('Team impact')).toBeTruthy();
-    expect(within(dialog).getByText('24/26 → 18/26')).toBeTruthy();
+    const teamImpact = within(dialog).getByRole('region', { name: 'Team Impact' });
+    expect(within(teamImpact).queryByText('None')).toBeNull();
+    expect(within(teamImpact).getByText('24/26 → 18/26')).toBeTruthy();
     expect(within(dialog).getByText('18/26 → 3/26')).toBeTruthy();
     expect(within(dialog).getByText('64.0 → 77.0')).toBeTruthy();
     expect(within(dialog).getByText(/Detail Player enters; Old Starter moves out/)).toBeTruthy();
@@ -142,7 +143,7 @@ describe('PlayerDetailDialog', () => {
     expect(within(dialog).getByText('$100 → $1')).toBeTruthy();
   });
 
-  it('collapses fully calculated no-change and truthful $0 impact to No impact', () => {
+  it('renders calculated no-change and truthful $0 Team Impact as the same simple None state as empty Predicted bidding', () => {
     const noChangeImpact = {
       status: 'available' as const,
       overallRank: { before: 8, after: 8, outOf: 10 },
@@ -159,9 +160,17 @@ describe('PlayerDetailDialog', () => {
       teamImpact: noChangeImpact,
     }} />);
     const dialog = screen.getByRole('dialog', { name: 'Detail Player' });
-    expect(within(dialog).getByText('No impact')).toBeTruthy();
-    expect(within(dialog).queryByText('Overall')).toBeNull();
-    expect(within(dialog).queryByText('Projection change:')).toBeNull();
+    const teamImpact = within(dialog).getByRole('region', { name: 'Team Impact' });
+    const predictedBidding = within(dialog).getByRole('region', { name: 'Predicted bidding' });
+    const impactNone = within(teamImpact).getByText('None');
+    const predictedNone = within(predictedBidding).getByText('None');
+    expect(impactNone.className).toBe(predictedNone.className);
+    expect(impactNone.className).toBe('mt-1 text-xs text-[#9ca3c7]');
+    expect(impactNone.className).not.toContain('bg-');
+    expect(impactNone.className).not.toContain('rounded');
+    expect(impactNone.className).not.toContain('p-3');
+    expect(within(teamImpact).queryByText('Overall')).toBeNull();
+    expect(within(teamImpact).queryByText('Projection change:')).toBeNull();
 
     rerender(<PlayerDetailDialog open onClose={vi.fn()} data={{
       ...data,
@@ -175,8 +184,8 @@ describe('PlayerDetailDialog', () => {
         displacedStarterIds: ['old-rb'],
       },
     }} />);
-    expect(within(dialog).getByText('No impact')).toBeTruthy();
-    expect(within(dialog).queryByText('Overall')).toBeNull();
+    expect(within(teamImpact).getByText('None')).toBeTruthy();
+    expect(within(teamImpact).queryByText('Overall')).toBeNull();
   });
 
   it('keeps missing Team Impact evidence distinct as concise Impact unavailable', () => {
@@ -186,12 +195,13 @@ describe('PlayerDetailDialog', () => {
       teamImpact: { status: 'unavailable', reason },
     }} />);
     const dialog = screen.getByRole('dialog', { name: 'Detail Player' });
-    expect(within(dialog).getByText('Impact unavailable')).toBeTruthy();
-    expect(within(dialog).queryByText(reason)).toBeNull();
-    expect(within(dialog).getByLabelText(`Impact unavailable: ${reason}`)).toBeTruthy();
-    expect(within(dialog).queryByText('No impact')).toBeNull();
-    expect(within(dialog).queryByText('Overall')).toBeNull();
-    expect(within(dialog).queryByText('Lineup pts')).toBeNull();
+    const teamImpact = within(dialog).getByRole('region', { name: 'Team Impact' });
+    expect(within(teamImpact).getByText('Impact unavailable')).toBeTruthy();
+    expect(within(teamImpact).queryByText(reason)).toBeNull();
+    expect(within(teamImpact).getByLabelText(`Impact unavailable: ${reason}`)).toBeTruthy();
+    expect(within(teamImpact).queryByText('None')).toBeNull();
+    expect(within(teamImpact).queryByText('Overall')).toBeNull();
+    expect(within(teamImpact).queryByText('Lineup pts')).toBeNull();
   });
 
   it('renders all-$0 eligible predictions as None while preserving observed $0 history', () => {

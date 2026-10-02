@@ -150,11 +150,11 @@ export function PlayerDetailDialog({ open, onClose, data }: { open: boolean; onC
 
           {!data.owned && impact && (
             <section className="mt-4 rounded-lg border border-[#20264d] p-3" aria-labelledby={`${titleId}-team-impact`}>
-              <h3 id={`${titleId}-team-impact`} className="text-xs font-semibold uppercase tracking-wider text-[#f0f0ff]">Team impact</h3>
+              <h3 id={`${titleId}-team-impact`} className="text-xs font-semibold uppercase tracking-wider text-[#f0f0ff]">Team Impact</h3>
               {impact.status === 'unavailable' ? (
                 <p aria-label={`Impact unavailable: ${impact.reason}`} className="mt-2 rounded-lg bg-[#121735] p-3 text-xs text-[#9ca3c7]">Impact unavailable</p>
               ) : hasNoTeamImpact ? (
-                <p className="mt-2 rounded-lg bg-[#121735] p-3 text-xs text-[#9ca3c7]">No impact</p>
+                <p className="mt-1 text-xs text-[#9ca3c7]">None</p>
               ) : (
                 <>
                   <p className="mt-1 text-[10px] text-[#6b6e99]">Optimized next-week lineup · active teams only</p>
