@@ -9,6 +9,7 @@ const EXACT_CAPTURE_WINDOW_MS = 15 * 60 * 1000;
 // canonicalization and transactional ingestion are not competing with the cutoff.
 const EXACT_FETCH_DEADLINE_OFFSET_MS = 13 * 60 * 1000;
 const PROVENANCE = new Set(['exact', 'reconstructed']);
+const SCHEDULER_SECRET_HEADER = 'x-projection-snapshot-secret';
 const POINT_FIELDS = [
   ['pts_std', 'pts_std'],
   ['pts_half_ppr', 'pts_half_ppr'],
@@ -37,7 +38,7 @@ function jsonResponse(status, body, extraHeaders = {}) {
       'Cache-Control': 'no-store',
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+      'Access-Control-Allow-Headers': 'X-Projection-Snapshot-Secret, Content-Type',
       ...extraHeaders,
     },
     body: JSON.stringify(body),
@@ -178,10 +179,9 @@ function parseGetQuery(query = {}) {
   };
 }
 
-function isAuthorized(authorization, expectedSecret) {
+function isAuthorized(supplied, expectedSecret) {
   if (typeof expectedSecret !== 'string' || expectedSecret.length < 32) return false;
-  if (typeof authorization !== 'string' || !authorization.startsWith('Bearer ')) return false;
-  const supplied = authorization.slice(7);
+  if (typeof supplied !== 'string' || supplied.length === 0) return false;
   const suppliedDigest = crypto.createHash('sha256').update(supplied).digest();
   const expectedDigest = crypto.createHash('sha256').update(expectedSecret).digest();
   return crypto.timingSafeEqual(suppliedDigest, expectedDigest);
@@ -279,7 +279,7 @@ function createProjectionSnapshotService({
   return {
     async health(req) {
       try {
-        if (!isAuthorized(getHeader(req.headers, 'authorization'), schedulerSecret)) throw new HttpError(401, 'unauthorized');
+        if (!isAuthorized(getHeader(req.headers, SCHEDULER_SECRET_HEADER), schedulerSecret)) throw new HttpError(401, 'unauthorized');
         validateCalendarConfiguration(firstDecisionWeekLocalDate);
         const response = jsonResponse(204, {});
         response.body = '';
@@ -290,8 +290,8 @@ function createProjectionSnapshotService({
     },
 
     async post(req) {
-      if (!isAuthorized(getHeader(req.headers, 'authorization'), schedulerSecret)) {
-        return jsonResponse(401, { code: 'UNAUTHORIZED', error: 'Unauthorized' }, { 'WWW-Authenticate': 'Bearer' });
+      if (!isAuthorized(getHeader(req.headers, SCHEDULER_SECRET_HEADER), schedulerSecret)) {
+        return jsonResponse(401, { code: 'UNAUTHORIZED', error: 'Unauthorized' });
       }
       try {
         const input = parsePostBody(req.body);

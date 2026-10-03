@@ -64,7 +64,7 @@ jobs:
           echo "::notice title=Projection snapshot skipped::$SKIP_REASON; no API or upstream capture was attempted."
           printf '### Projection snapshot skipped\n\n- Reason: `%s`\n- No POST, Sleeper fetch, or database write was attempted.\n' "$SKIP_REASON" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Validate workflow configuration and API authorization
+      - name: Validate workflow configuration and scheduler authentication
         id: health
         if: steps.coordinates.outputs.capture == 'true'
         env:
@@ -85,7 +85,7 @@ jobs:
           if ! health_status=$(curl --silent --show-error --output "$health_body" --write-out '%{http_code}' \
             --connect-timeout 5 --max-time 20 \
             --request HEAD \
-            --header "Authorization: Bearer $SCHEDULER_SECRET" \
+            --header "X-Projection-Snapshot-Secret: $SCHEDULER_SECRET" \
             "$API_URL"); then
             echo "::error title=Snapshot API error::Health request could not reach the configured endpoint."
             exit 1
@@ -93,7 +93,7 @@ jobs:
 
           case "$health_status" in
             204)
-              echo "::notice title=Snapshot scheduler health::Endpoint configuration and scheduler authorization passed."
+              echo "::notice title=Snapshot scheduler health::Endpoint configuration and scheduler authentication passed."
               ;;
             401|403|404)
               echo "::error title=Endpoint/auth mismatch::Health check returned HTTP $health_status. Verify the endpoint and synchronize the workflow/runtime scheduler secret."
@@ -142,7 +142,7 @@ jobs:
           if ! response_status=$(curl --silent --show-error --output "$response_body" --write-out '%{http_code}' \
             --connect-timeout 5 --max-time 150 \
             --request POST \
-            --header "Authorization: Bearer $SCHEDULER_SECRET" \
+            --header "X-Projection-Snapshot-Secret: $SCHEDULER_SECRET" \
             --header 'Content-Type: application/json' \
             --data "$request_body" \
             "$API_URL"); then

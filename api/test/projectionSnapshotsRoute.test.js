@@ -6,9 +6,16 @@ const { createHandler } = require('../projection-snapshots');
 
 function context() { return { log: { error() {} }, res: null }; }
 
-test('Azure function binding explicitly allows HEAD scheduler health checks', () => {
+test('Azure function binding and CORS explicitly allow dedicated-header scheduler health checks', async () => {
   const binding = JSON.parse(fs.readFileSync(path.join(__dirname, '../projection-snapshots/function.json'), 'utf8'));
   assert.deepEqual(binding.bindings[0].methods, ['get', 'head', 'post', 'options']);
+
+  const handler = createHandler({ env: {} });
+  const ctx = context();
+  await handler(ctx, { method: 'OPTIONS', headers: {} });
+  assert.equal(ctx.res.status, 204);
+  assert.equal(ctx.res.headers['Access-Control-Allow-Headers'], 'X-Projection-Snapshot-Secret, Content-Type');
+  assert.doesNotMatch(ctx.res.headers['Access-Control-Allow-Headers'], /Authorization/i);
 });
 
 test('GET initializes without scheduler secret when read-side Supabase config is available', async () => {
@@ -34,13 +41,13 @@ test('HEAD checks scheduler auth and calendar configuration without repository i
   });
 
   const healthy = context();
-  await handler(healthy, { method: 'HEAD', headers: { authorization: `Bearer ${authValue}` } });
+  await handler(healthy, { method: 'HEAD', headers: { 'x-projection-snapshot-secret': authValue } });
   assert.equal(healthy.res.status, 204);
   assert.equal(healthy.res.body, '');
   assert.equal(initialized, false);
 
   const unauthorized = context();
-  await handler(unauthorized, { method: 'HEAD', headers: { authorization: 'Bearer wrong' } });
+  await handler(unauthorized, { method: 'HEAD', headers: { 'x-projection-snapshot-secret': 'wrong' } });
   assert.equal(unauthorized.res.status, 401);
   assert.equal(initialized, false);
 });
@@ -83,7 +90,7 @@ test('POST route returns stable CALENDAR_MISMATCH code without upstream or stora
   await handler(ctx, {
     method: 'POST',
     query: {},
-    headers: { authorization: `Bearer ${authValue}` },
+    headers: { 'x-projection-snapshot-secret': authValue },
     body: {
       season: 2026,
       decisionWeek: 4,

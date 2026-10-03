@@ -113,6 +113,8 @@ test('workflow health canary is side-effect-free and reports actionable failure 
   assert.match(workflow, /Snapshot API error/);
   assert.match(workflow, /Projection snapshot skipped/);
   assert.match(workflow, /No POST, Sleeper fetch, or database write was attempted/);
+  assert.equal((workflow.match(/X-Projection-Snapshot-Secret: \$SCHEDULER_SECRET/g) || []).length, 2);
+  assert.doesNotMatch(workflow, /Authorization: Bearer/);
   assert.ok(workflow.indexOf('--request HEAD') < workflow.indexOf('--request POST'));
 });
 

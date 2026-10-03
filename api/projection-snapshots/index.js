@@ -8,7 +8,7 @@ function createHandler({ env = process.env, repositoryFactory = () => createSupa
         status: 204,
         headers: {
           'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+          'Access-Control-Allow-Headers': 'X-Projection-Snapshot-Secret, Content-Type',
         },
       };
       return;

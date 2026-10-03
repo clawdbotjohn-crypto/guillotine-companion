@@ -14,7 +14,7 @@ const body = {
 function sleeperFetch(payload = { z: { pts_ppr: 3 }, a: { pts_std: 1, pts_half_ppr: 2 } }) {
   return async () => ({ ok: true, json: async () => payload });
 }
-function request(overrides = {}) { return { headers: { authorization: `Bearer ${SECRET}` }, body, query: {}, ...overrides }; }
+function request(overrides = {}) { return { headers: { 'x-projection-snapshot-secret': SECRET }, body, query: {}, ...overrides }; }
 function parse(response) { return JSON.parse(response.body); }
 function sequencedClock(...timestamps) {
   let index = 0;
@@ -52,21 +52,23 @@ test('calendar coordinate validation covers reconstructed and exact W1-W4 coordi
   }, firstDate), /decision-week calendar/);
 });
 
-test('constant-time bearer comparison rejects malformed and incorrect credentials', () => {
+test('constant-time scheduler-secret comparison rejects missing and incorrect credentials', () => {
   assert.equal(isAuthorized(undefined, SECRET), false);
-  assert.equal(isAuthorized('Basic value', SECRET), false);
-  assert.equal(isAuthorized('Bearer short', SECRET), false);
-  assert.equal(isAuthorized(`Bearer ${SECRET}`, SECRET), true);
+  assert.equal(isAuthorized('', SECRET), false);
+  assert.equal(isAuthorized('wrong', SECRET), false);
+  assert.equal(isAuthorized(SECRET, SECRET), true);
 });
 
-test('POST rejects missing auth before fetching or writing', async () => {
+test('POST accepts only the dedicated scheduler header before fetching or writing', async () => {
   let touched = false;
   const service = createProjectionSnapshotService({
     schedulerSecret: SECRET, fetchImpl: async () => { touched = true; }, repository: { ingest: async () => { touched = true; } },
   });
-  const response = await service.post(request({ headers: {} }));
-  assert.equal(response.status, 401);
-  assert.equal(parse(response).code, 'UNAUTHORIZED');
+  for (const headers of [{}, { authorization: `Bearer ${SECRET}` }, { 'x-projection-snapshot-secret': 'wrong' }]) {
+    const response = await service.post(request({ headers }));
+    assert.equal(response.status, 401);
+    assert.equal(parse(response).code, 'UNAUTHORIZED');
+  }
   assert.equal(touched, false);
 });
 
