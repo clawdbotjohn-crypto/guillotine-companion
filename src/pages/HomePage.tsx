@@ -3,12 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import { BarChart3, Shield, Users, ShoppingCart, ChevronRight } from 'lucide-react';
 import { Button, Card } from '../components/ui';
 import { useAppStore } from '../store';
-import { useSleeperUser } from '../api';
+import { useLeague, useSleeperUser } from '../api';
+import { classifyGuillotineLeague } from '../logic';
 
 export function HomePage() {
   const [input, setInput] = useState('');
   const [showLeagueId, setShowLeagueId] = useState(false);
   const [leagueIdInput, setLeagueIdInput] = useState('');
+  const [lookupLeagueId, setLookupLeagueId] = useState<string | null>(null);
+  const [leagueIdError, setLeagueIdError] = useState<string | null>(null);
   const navigate = useNavigate();
   const { setUser, setLeague, leagueId, leagueName, teamName, username } = useAppStore();
 
@@ -21,6 +24,7 @@ export function HomePage() {
   // Username lookup
   const [searchUsername, setSearchUsername] = useState<string | null>(null);
   const { data: sleeperUser, isLoading, isError } = useSleeperUser(searchUsername);
+  const directLeagueQuery = useLeague(lookupLeagueId);
 
   const handleUsernameSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,10 +36,32 @@ export function HomePage() {
   const handleLeagueIdSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (leagueIdInput.trim()) {
-      setLeague(leagueIdInput.trim(), '', '');
-      navigate('/leagues');
+      setLeagueIdError(null);
+      setLookupLeagueId(leagueIdInput.trim());
     }
   };
+
+  useEffect(() => {
+    if (!lookupLeagueId || !directLeagueQuery.data) return;
+    const identity = classifyGuillotineLeague(directLeagueQuery.data);
+    if (identity !== 'guillotine') {
+      setLeagueIdError(identity === 'unknown'
+        ? 'Sleeper did not return a recognized NFL guillotine format for that league.'
+        : 'That league is not a Sleeper NFL guillotine league.');
+      setLookupLeagueId(null);
+      return;
+    }
+    const league = directLeagueQuery.data;
+    setLeague(league.league_id, league.name, league.season);
+    navigate('/team-select');
+  }, [directLeagueQuery.data, lookupLeagueId, navigate, setLeague]);
+
+  useEffect(() => {
+    if (lookupLeagueId && directLeagueQuery.isError) {
+      setLeagueIdError('League not found or unavailable on Sleeper.');
+      setLookupLeagueId(null);
+    }
+  }, [directLeagueQuery.isError, lookupLeagueId]);
 
   // Once we have a user, navigate to league picker
   if (sleeperUser && !isLoading) {
@@ -131,9 +157,12 @@ export function HomePage() {
                     text-[#f0f0ff] text-sm font-['Space_Mono'] placeholder-[#4a4d77]
                     outline-none focus:border-[#6366f1]"
                 />
-                <Button size="sm" type="submit">Go</Button>
+                <Button size="sm" type="submit" disabled={directLeagueQuery.isLoading || !leagueIdInput.trim()}>
+                  {directLeagueQuery.isLoading ? 'Checking…' : 'Go'}
+                </Button>
               </form>
             )}
+            {leagueIdError && <p role="alert" className="mt-2 text-sm text-[#f43f5e]">{leagueIdError}</p>}
           </div>
         </div>
 

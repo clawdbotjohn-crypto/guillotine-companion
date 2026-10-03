@@ -1,9 +1,10 @@
 import { NavLink } from 'react-router-dom';
-import { Crosshair, ShoppingCart, Trophy, Users } from 'lucide-react';
+import { Crosshair, History, ShoppingCart, Trophy, Users } from 'lucide-react';
 
 const tabs = [
   { to: '/hub', label: 'Hub', icon: Crosshair },
   { to: '/waivers', label: 'Waivers', icon: ShoppingCart },
+  { to: '/history', label: 'History', icon: History },
   { to: '/league', label: 'League', icon: Trophy },
   { to: '/teams', label: 'Teams', icon: Users },
 ] as const;

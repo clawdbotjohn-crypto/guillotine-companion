@@ -3,6 +3,8 @@
 export interface League {
   league_id: string;
   name: string;
+  /** Sleeper's native sport discriminator (for this app the supported value is `nfl`). */
+  sport: string;
   total_rosters: number;
   settings: Record<string, number>;
   scoring_settings: Record<string, number>;
@@ -106,6 +108,8 @@ export interface PlayerInfo {
 export interface UserLeague {
   league_id: string;
   name: string;
+  /** Sleeper's native sport discriminator. */
+  sport: string;
   total_rosters: number;
   settings: Record<string, number>;
   season: string;

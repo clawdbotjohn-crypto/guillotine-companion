@@ -12,6 +12,7 @@ const LeaguePage = lazy(() => import('./pages/LeaguePage').then(m => ({ default:
 const TeamsPage = lazy(() => import('./pages/TeamsPage').then(m => ({ default: m.TeamsPage })));
 const TeamProfilePage = lazy(() => import('./pages/TeamProfilePage').then(m => ({ default: m.TeamProfilePage })));
 const WaiversPage = lazy(() => import('./pages/WaiversPage').then(m => ({ default: m.WaiversPage })));
+const BiddingHistoryPage = lazy(() => import('./pages/BiddingHistoryPage').then(m => ({ default: m.BiddingHistoryPage })));
 
 function LoadingFallback() {
   return (
@@ -34,7 +35,7 @@ function AppLayout() {
   const location = useLocation();
 
   // Show bottom nav only on main app pages (not onboarding)
-  const showNav = ['/hub', '/waivers', '/league', '/teams'].some((p) =>
+  const showNav = ['/hub', '/waivers', '/history', '/league', '/teams'].some((p) =>
     location.pathname.startsWith(p),
   );
 
@@ -48,6 +49,7 @@ function AppLayout() {
           <Route path="/team-select" element={<TeamSelectPage />} />
           <Route path="/hub" element={<HubPage />} />
           <Route path="/waivers" element={<WaiversPage />} />
+          <Route path="/history" element={<BiddingHistoryPage />} />
           <Route path="/league" element={<LeaguePage />} />
           <Route path="/teams" element={<TeamsPage />} />
           <Route path="/teams/:rosterId" element={<TeamProfilePage />} />

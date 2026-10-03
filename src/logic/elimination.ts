@@ -273,15 +273,23 @@ export function extractBids(weekTransactions: Map<number, Transaction[]>): BidIn
   return bids.sort((a, b) => a.week - b.week || b.amount - a.amount);
 }
 
-/**
- * Check if a league is a guillotine format.
- * Guillotine leagues: no playoffs, teams get eliminated each week.
- */
-export function isGuillotineLeague(league: { settings: Record<string, number>; roster_positions?: string[] }): boolean {
-  // Guillotine leagues typically have:
-  // - playoff_weeks = 0 (no playoffs)
-  // - type = 0 (redraft) — but we don't filter by this per spec
-  // Best heuristic: no playoff teams
-  const playoffTeams = league.settings?.playoff_teams ?? 0;
-  return playoffTeams === 0;
+/** Sleeper-native league format identity. Status, season, draft state, and schedule are separate concerns. */
+export type GuillotineLeagueIdentity = 'guillotine' | 'other' | 'unknown';
+
+export function classifyGuillotineLeague(
+  league: { sport?: unknown; settings?: Record<string, unknown> | null },
+): GuillotineLeagueIdentity {
+  if (league.sport !== 'nfl') return typeof league.sport === 'string' ? 'other' : 'unknown';
+
+  const type = league.settings?.type;
+  if (type === 3) return 'guillotine';
+  if (type === 0 || type === 1 || type === 2) return 'other';
+  return 'unknown';
+}
+
+/** Unknown/malformed native identity fails closed instead of being accepted as guillotine. */
+export function isGuillotineLeague(
+  league: { sport?: unknown; settings?: Record<string, unknown> | null },
+): boolean {
+  return classifyGuillotineLeague(league) === 'guillotine';
 }

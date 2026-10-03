@@ -76,7 +76,7 @@ describe('external waiver ranking sources', () => {
 
   it('maps league reception scoring to the exact FantasyPros ECR page variant', () => {
     const league: League = {
-      league_id: '1', name: 'Test', total_rosters: 14, settings: {}, season: '2026',
+      league_id: '1', name: 'Test', sport: 'nfl', total_rosters: 14, settings: {}, season: '2026',
       season_type: 'regular', status: 'in_season', draft_id: 'd', previous_league_id: null,
       roster_positions: ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'SUPER_FLEX', 'BN'],
       scoring_settings: { rec: 0.5, pass_td: 6, pass_int: -3 },

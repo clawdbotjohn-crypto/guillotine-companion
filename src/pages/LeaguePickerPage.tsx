@@ -6,7 +6,8 @@ import { Card, Skeleton } from '../components/ui';
 import { useAppStore } from '../store';
 import { useUserLeagues } from '../api';
 import { getLeagueRosters, getLeagueUsers } from '../api/client';
-import { isGuillotineLeague } from '../logic';
+import { classifyGuillotineLeague } from '../logic';
+import { groupLeagueChoices } from '../logic/leagueIdentity';
 
 export function LeaguePickerPage() {
   const navigate = useNavigate();
@@ -15,8 +16,9 @@ export function LeaguePickerPage() {
 
   const { data: leagues, isLoading, isError } = useUserLeagues(userId, currentSeason);
 
-  // Filter to guillotine leagues only
-  const guillotineLeagues = leagues?.filter((l) => isGuillotineLeague(l)) || [];
+  // Sleeper's native type is the format authority. Unknown values stay visible but quarantined.
+  const leagueChoices = groupLeagueChoices(leagues);
+  const guillotineLeagues = leagueChoices.guillotine;
 
   const [selectingId, setSelectingId] = useState<string | null>(null);
   const { setTeam } = useAppStore();
@@ -100,8 +102,8 @@ export function LeaguePickerPage() {
             <Trophy className="w-8 h-8 text-[#4a4d77] mx-auto mb-3" />
             <p className="text-[#6b6e99] text-sm mb-1">No guillotine leagues found</p>
             <p className="text-[#4a4d77] text-xs">
-              Only leagues with no playoffs (guillotine format) are shown.
-              Try a different username or paste a league ID directly.
+              No NFL leagues identified by Sleeper as type 3 were found.
+              Unknown formats are listed below but cannot be opened safely.
             </p>
             <button
               onClick={() => navigate('/')}
@@ -141,6 +143,35 @@ export function LeaguePickerPage() {
               )}
             </Card>
           ))}
+
+          {(leagueChoices.unknown.length > 0 || leagueChoices.other.length > 0) && (
+            <section className="pt-5" aria-labelledby="other-leagues-heading">
+              <h2 id="other-leagues-heading" className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#6b6e99]">
+                Other Sleeper leagues
+              </h2>
+              <div className="space-y-2">
+                {[...leagueChoices.unknown, ...leagueChoices.other].map((league) => {
+                  const unknown = classifyGuillotineLeague(league) === 'unknown';
+                  return (
+                    <Card key={league.league_id} hover={false} className="flex items-center justify-between gap-3 p-4 opacity-75">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-[#c7c9e8]">{league.name}</div>
+                        <div className="mt-1 text-xs text-[#6b6e99]">{league.total_rosters} teams · {league.season}</div>
+                      </div>
+                      <span className={`shrink-0 rounded-full border px-2 py-1 text-[9px] font-bold uppercase tracking-wider ${unknown ? 'border-[#f59e0b]/40 bg-[#f59e0b]/10 text-[#fbbf24]' : 'border-[#4a4d77] bg-[#161a3a] text-[#8b8fb5]'}`}>
+                        {unknown ? 'Format unknown' : 'Not guillotine'}
+                      </span>
+                    </Card>
+                  );
+                })}
+              </div>
+              {leagueChoices.unknown.length > 0 && (
+                <p className="mt-2 text-[10px] leading-relaxed text-[#6b6e99]">
+                  Missing or unrecognized Sleeper sport/type values are not accepted as guillotine leagues.
+                </p>
+              )}
+            </section>
+          )}
         </div>
       </div>
     </div>

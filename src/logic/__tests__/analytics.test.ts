@@ -20,6 +20,7 @@ vi.mock('../../store/players', () => ({
 const league: League = {
   league_id: 'realistic-guillotine',
   name: 'Four-team Guillotine',
+  sport: 'nfl',
   total_rosters: 4,
   settings: { playoff_teams: 0 },
   scoring_settings: {},

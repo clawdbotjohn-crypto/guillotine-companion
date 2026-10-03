@@ -4,7 +4,9 @@ export {
   getUpcomingPlayingWeek,
   getActiveRosterIds,
   extractBids,
+  classifyGuillotineLeague,
   isGuillotineLeague,
+  type GuillotineLeagueIdentity,
   type WeekResult,
   type TeamScore,
   type TeamInfo,
@@ -109,6 +111,15 @@ export {
   type ManagerBiddingProfile,
   type ManagerBidPrediction,
 } from './biddingProfiles';
+
+export { groupLeagueChoices } from './leagueIdentity';
+
+export {
+  buildCompletedAuctions,
+  summarizeBiddingHistory,
+  type CompletedAuction,
+  type BiddingHistorySummary,
+} from './biddingHistory';
 
 export { BIDDING_BASELINE, DEFAULT_WAIVER_STRATEGY, WAIVER_STRATEGY_REGISTRY, resolveBiddingBaseline, resolveStrategyBid, type StrategyKey } from './waiverStrategies';
 

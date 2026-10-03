@@ -249,7 +249,7 @@ describe('snapshot projection evidence', () => {
       })),
     };
     const result = calculateHistoricalBaseline(event({ playerId: 'p1' }), maxVorpSnapshot, {
-      league_id: 'league', name: 'League', total_rosters: 12,
+      league_id: 'league', name: 'League', sport: 'nfl', total_rosters: 12,
       settings: { waiver_budget: 1_000 }, scoring_settings: { rec: 1 }, season: '2026',
       season_type: 'regular', status: 'in_season', draft_id: 'draft', previous_league_id: null,
       roster_positions: ['WR'],
@@ -280,6 +280,7 @@ describe('snapshot projection evidence', () => {
     const result = calculateHistoricalBaseline(event({ playerId: 'p1' }), fallback, {
       league_id: 'league',
       name: 'League',
+      sport: 'nfl',
       total_rosters: 12,
       settings: { waiver_budget: 1_000 },
       scoring_settings: { rec: 1 },

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { computeEliminations, getActiveRosterIds, getCompletedLeagueWeek, getUpcomingPlayingWeek, isGuillotineLeague } from '../elimination';
+import { classifyGuillotineLeague, computeEliminations, getActiveRosterIds, getCompletedLeagueWeek, getUpcomingPlayingWeek, isGuillotineLeague } from '../elimination';
 import type { Matchup, Roster, SleeperUser } from '../../api/types';
 
 // Mock the players store
@@ -227,16 +227,34 @@ describe('current-week elimination guard', () => {
   });
 });
 
-describe('isGuillotineLeague', () => {
-  it('returns true when playoff_teams is 0', () => {
-    expect(isGuillotineLeague({ settings: { playoff_teams: 0 } })).toBe(true);
+describe('Sleeper-native guillotine identity', () => {
+  it('accepts only NFL leagues with the native integer type 3', () => {
+    // Known native league payload retained as test-only evidence; never render this ID in UI.
+    const knownNativeLeague = {
+      league_id: '1312112493526536192',
+      sport: 'nfl',
+      settings: { type: 3, playoff_teams: 6 },
+    };
+    expect(classifyGuillotineLeague(knownNativeLeague)).toBe('guillotine');
+    expect(isGuillotineLeague(knownNativeLeague)).toBe(true);
   });
 
-  it('returns false when playoff_teams > 0', () => {
-    expect(isGuillotineLeague({ settings: { playoff_teams: 6 } })).toBe(false);
+  it.each([0, 1, 2])('excludes recognized non-guillotine type %s regardless of playoff settings', (type) => {
+    expect(classifyGuillotineLeague({ sport: 'nfl', settings: { type, playoff_teams: 0 } })).toBe('other');
   });
 
-  it('returns true when settings has no playoff_teams', () => {
-    expect(isGuillotineLeague({ settings: {} })).toBe(true);
+  it.each([
+    { sport: 'nfl', settings: {} },
+    { sport: 'nfl', settings: { type: '3' } },
+    { sport: 'nfl', settings: { type: 3.5 } },
+    { sport: 'nfl', settings: { type: 4 } },
+    { settings: { type: 3 } },
+  ])('quarantines missing, malformed, or novel native identity %#', (league) => {
+    expect(classifyGuillotineLeague(league)).toBe('unknown');
+    expect(isGuillotineLeague(league)).toBe(false);
+  });
+
+  it('keeps sport separate and excludes a recognized non-NFL sport', () => {
+    expect(classifyGuillotineLeague({ sport: 'nba', settings: { type: 3 } })).toBe('other');
   });
 });

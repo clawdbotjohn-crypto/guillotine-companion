@@ -89,6 +89,7 @@ describe('buildLeagueContext', () => {
     const league: League = {
       league_id: 'league-30',
       name: 'Thirty Team Guillotine',
+      sport: 'nfl',
       total_rosters: 30,
       settings: { waiver_budget: 500 },
       scoring_settings: { rec: 1 },

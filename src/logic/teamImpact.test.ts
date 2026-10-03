@@ -7,6 +7,7 @@ import { buildFreeAgentTeamImpact } from './teamImpact';
 const league: League = {
   league_id: 'league',
   name: 'League',
+  sport: 'nfl',
   total_rosters: 4,
   settings: {},
   scoring_settings: { rec: 1 },
