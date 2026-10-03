@@ -44,6 +44,30 @@ function createSupabaseProjectionRepository({ env = process.env, fetchImpl = fet
       };
     },
 
+    async findCompletedMetadata({ source, season, decisionWeek, canonicalCutoffAt, provenance }) {
+      const params = new URLSearchParams({
+        select: 'id,row_count,content_hash,status,provenance',
+        source: `eq.${source}`,
+        season: `eq.${season}`,
+        decision_week: `eq.${decisionWeek}`,
+        canonical_cutoff_at: `eq.${canonicalCutoffAt}`,
+        provenance: `eq.${provenance}`,
+        status: 'eq.completed',
+        limit: '1',
+      });
+      const response = await request(`projection_snapshot_runs?${params}`);
+      const runs = await response.json();
+      if (!Array.isArray(runs)) throw new Error('Snapshot database returned invalid metadata');
+      if (runs.length === 0) return null;
+      return {
+        snapshotId: runs[0].id,
+        rowCount: runs[0].row_count,
+        contentHash: runs[0].content_hash,
+        status: runs[0].status,
+        provenance: runs[0].provenance,
+      };
+    },
+
     async findLatest({ season, decisionWeek }) {
       const params = new URLSearchParams({
         select: 'id,source,season,decision_week,canonical_cutoff_at,capture_started_at,fetched_at,endpoint_template,row_count,content_hash,status,provenance',

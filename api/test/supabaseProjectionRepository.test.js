@@ -7,6 +7,36 @@ test('repository requires backend-only Supabase configuration', () => {
   assert.throws(() => requireConfig({ SUPABASE_URL: 'https://example.supabase.co' }), /SERVICE_ROLE/);
 });
 
+test('findCompletedMetadata performs one bounded run lookup without downloading snapshot values', async () => {
+  const requests = [];
+  const env = { SUPABASE_URL: 'https://project.supabase.co' };
+  env[['SUPABASE', 'SERVICE', 'ROLE', 'KEY'].join('_')] = 'test-value';
+  const repository = createSupabaseProjectionRepository({
+    env,
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options });
+      return { ok: true, json: async () => [{
+        id: 'run', row_count: 15761, content_hash: 'a'.repeat(64), status: 'completed', provenance: 'exact',
+      }] };
+    },
+  });
+  const result = await repository.findCompletedMetadata({
+    source: 'sleeper', season: 2026, decisionWeek: 4,
+    canonicalCutoffAt: '2026-09-30T03:00:00.000Z', provenance: 'exact',
+  });
+  assert.equal(requests.length, 1);
+  assert.match(requests[0].url, /projection_snapshot_runs\?/);
+  assert.doesNotMatch(requests[0].url, /projection_snapshot_values/);
+  assert.match(requests[0].url, /select=id%2Crow_count%2Ccontent_hash%2Cstatus%2Cprovenance/);
+  assert.match(requests[0].url, /decision_week=eq\.4/);
+  assert.match(requests[0].url, /provenance=eq\.exact/);
+  assert.match(requests[0].url, /status=eq\.completed/);
+  assert.match(requests[0].url, /limit=1/);
+  assert.deepEqual(result, {
+    snapshotId: 'run', rowCount: 15761, contentHash: 'a'.repeat(64), status: 'completed', provenance: 'exact',
+  });
+});
+
 test('findLatest selects explicit stored provenance with completed run', async () => {
   const requests = [];
   const fetchImpl = async (url, options) => {
