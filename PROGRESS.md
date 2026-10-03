@@ -374,3 +374,23 @@ Architecture: `docs/BIDDING-PROFILES-PLAN.md`
 - No per-league weekly roster/ownership/needs snapshots in V1.
 - Existing historical weeks are labeled reconstructed; only prospectively captured snapshots are exact.
 - Formula constants are versioned and tested in code.
+
+## 2026-09-30 weekly calibration refresh — W4 eligible
+
+- Preserved the refreshed de-identified fixture and integrated the newly available **W4 same-week reconstructed snapshot** (1,151 projections; fixture content hash `9463b40e…`). Eligible analysis now spans W2–W4 instead of silently assuming two weeks.
+- Generalized the exactly-five-bullet owner answer and all report/presentation scope labels for any eligible week count; the current answer now includes W4 top-three winners `$300/$187/$128`, serious-market medians `$171/$100/$61`, arithmetic observed/intrinsic multipliers, and closest-strategy results.
+- Generalized prior-only scale validation from one W2→W3 pair to **every adjacent eligible pair**; W3→W4 is now included without refitting on the test week (for Middle VORP serious medians: W3 scale `1.185`, W4 `n=5`, MAE `$31.35`).
+- W4 diagnostics: Corrected Weeks as Starter is closest on serious-market medians (MAE `$16.30`), Corrected Safe is closest on canonical winners, and Max VORP is closest on all bids. Across W2–W4, Current-team VoRP remains closest on serious medians/all bids while Corrected Safe remains closest on winners.
+- Manager-aware calibration improved with more data but remains descriptive: all usable bids `n=243`, MAE `$28.79`, R² `0.367`, Spearman `0.649`; winner-only `n=50`, MAE `$18.86`, R² `0.641`, Spearman `0.787`.
+- Added a generated behavioral-question and privacy-safe owner-team audit appendix covering all required Likely/Possible, history, top-bidder, claim-volume, positional-need, right-tail, minimum-proxy, Aggressive, 1.5×Max, contingency, spend, and remaining-FAAB questions. Unsupported manager-style/need/longitudinal claims are explicitly prospective rather than fabricated.
+- Restricted the exactly-five-bullet answer and owner multiplier/accuracy tables to the four required methods (Max VORP, Current-team VoRP, Corrected Safe, Corrected Weeks as Starter); Middle VORP remains only in its separately labeled candidate appendix.
+- Regenerated markdown, HTML, and PDF artifacts and visually reviewed all 21 rendered PDF pages (no overlap/clipping/table overflow observed). Full candidate-PR added-line and target-artifact privacy scans found no private player, team, manager, roster, or league identifiers; the raw league ID in the inherited handoff was redacted.
+- **Product decision: NO FORMULA CHANGE.** Keep Middle VORP analysis-only and retain the existing product bidding formulas. One additional reconstructed week changes leaders by lens and is not enough to promote a new default; continue exact pre-waiver collection and weekly held-out calibration.
+
+## 2026-09-30 final five-bullet QA closure
+
+- Reworked the generated answer to exactly five direct bullets: latest eligible and pooled season-to-date top-three winning/serious-market a/g/m multipliers with coverage; latest and cumulative four-method raw identity fit; current/prior/cumulative leadership; material week-over-week trend; and an explicit no-formula-change recommendation/provenance caveat.
+- The calculation discovers latest/previous eligible weeks and pools raw top-three rows; no W4 or two-week constants were added. Aggressive and Middle VORP remain outside the five bullets; Middle stays in the separate analysis-only appendix.
+- Generated provenance now names read-only Supabase tables `projection_snapshot_runs`/`projection_snapshot_values` and the Sleeper league, player-catalog, and weekly-transaction GET endpoint shapes without printing IDs or credentials.
+- Focused report/presentation tests: 10 passed. `npm run check`: passed (one pre-existing unrelated React set-state lint warning). `git diff --check` and privacy scans passed. HTML DOM/render sanity passed; generated report structure retained 21 PDF pages.
+- Markdown, HTML, and PDF are byte-identical across immediate repeat generation. Chromium timestamp and tagged-node IDs are normalized without changing PDF byte widths/xref offsets. Final SHA-256: MD `6bbaac9cb2ec646f4c3b7cd67ebc4780e5c57f13d4a2f828b0f57214dbb5b13b`; HTML `500768be1b240e16335fa45ef6b9f0dc02f44baae592e7abd9756d4c747ddefb`; PDF `30e816f8dd4dcc451c705fdcf065ca6200b4450c788507d1c7fa605874e878c4`. No merge, deploy, main push, workflow dispatch, or external-data mutation.

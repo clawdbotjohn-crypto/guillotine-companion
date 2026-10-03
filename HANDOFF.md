@@ -161,7 +161,7 @@ Relevant history checked:
 ### Reproducible fixture identity
 
 - Generated: `2026-09-28T01:49:35.020Z` (`2026-09-27 18:49:35 PDT`).
-- League: **SeaMex Guillotine 🪓**, Sleeper league `1312112493526536192`, season 2026.
+- League: **private 32-team guillotine fixture**, private league identifier redacted, season 2026.
 - Selected display source: **Sleeper ROS** (the app's default selected source), live Sleeper projection endpoint.
 - Scoring: PPR. Initial FAAB: `$500`.
 - Lineup: `QB, RB, RB, WR, WR, TE, FLEX` plus K/DEF/bench; no SUPER_FLEX.
@@ -594,3 +594,26 @@ Real-bid model accuracy/outlier analysis, non-VORP replacement-level changes, pl
 ## Safety confirmation
 
 No merge, no push to `main`, no `workflow_dispatch`, and no production deployment were performed.
+## 2026-09-27 owner clarity update — prediction R² labeling
+- Owner flagged standalone `R²` labels as misleading because the report scores fixed strategy predictions against the identity line rather than presenting an in-sample fitted-regression goodness-of-fit statistic.
+- Relabeled median-market tables to `Raw prediction R²*`, scatter plots/tables to `Prediction R²*`, and the formula card to `Prediction R² (unfitted)`.
+- Added a prominent first-analysis warning: values are not fitted-regression R², may be negative when fixed predictions lose to the mean baseline, and do not imply negative correlation.
+- Generator regression test now requires the explicit label/explanation and rejects ambiguous `<th>R²</th>`.
+- Verification: `npm run analyze:bidding`; `npm run analyze:bidding:presentation`; focused presentation tests 4/4; `git diff --check`.
+
+## 2026-09-30 weekly calibration handoff
+
+- W4 is now a first-class eligible week throughout the weekly analysis/report/presentation. The exactly-five-bullet owner answer is generalized; no two-week guard or hardcoded W2/W3 labels remain.
+- Adjacent held-out validation now emits W2→W3 and W3→W4 rows for the four owner-summary methods plus separately labeled Middle VORP analysis, across winning/serious-median lenses.
+- Added a generated behavioral-question and privacy-safe owner-team audit appendix; unsupported longitudinal/need/manager-style questions are explicitly prospective. Owner bullets and multiplier tables now contain only the four required methods.
+- Refreshed artifacts: `docs/analysis/bidding-strategy-accuracy-seamex-2026.{md,html,pdf}`. The PDF has 21 visually reviewed pages with no clipping or overflow.
+- Current decision: **no product formula change**. W4 serious-market medians favor Corrected Weeks as Starter, W4 winners favor Corrected Safe, and aggregate serious/all-bid results still favor Current-team VoRP; lens instability plus reconstructed provenance keeps Middle VORP analysis-only.
+- Validation to rerun: `npm run check`, `npm test`, `npm run analyze:bidding`, and `npm run analyze:bidding:presentation`.
+
+## 2026-09-30 final five-bullet QA closure
+
+- Reworked the generated answer to exactly five direct bullets: latest eligible and pooled season-to-date top-three winning/serious-market a/g/m multipliers with coverage; latest and cumulative four-method raw identity fit; current/prior/cumulative leadership; material week-over-week trend; and an explicit no-formula-change recommendation/provenance caveat.
+- The calculation discovers latest/previous eligible weeks and pools raw top-three rows; no W4 or two-week constants were added. Aggressive and Middle VORP remain outside the five bullets; Middle stays in the separate analysis-only appendix.
+- Generated provenance now names read-only Supabase tables `projection_snapshot_runs`/`projection_snapshot_values` and the Sleeper league, player-catalog, and weekly-transaction GET endpoint shapes without printing IDs or credentials.
+- Focused report/presentation tests: 10 passed. `npm run check`: passed (one pre-existing unrelated React set-state lint warning). `git diff --check` and privacy scans passed. HTML DOM/render sanity passed; generated report structure retained 21 PDF pages.
+- Markdown, HTML, and PDF are byte-identical across immediate repeat generation. Chromium timestamp and tagged-node IDs are normalized without changing PDF byte widths/xref offsets. Final SHA-256: MD `6bbaac9cb2ec646f4c3b7cd67ebc4780e5c57f13d4a2f828b0f57214dbb5b13b`; HTML `500768be1b240e16335fa45ef6b9f0dc02f44baae592e7abd9756d4c747ddefb`; PDF `30e816f8dd4dcc451c705fdcf065ca6200b4450c788507d1c7fa605874e878c4`. No merge, deploy, main push, workflow dispatch, or external-data mutation.
