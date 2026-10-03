@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Trophy, ChevronRight, ArrowLeft, Loader2 } from 'lucide-react';
+import { Trophy, ArrowLeft } from 'lucide-react';
 import dayjs from 'dayjs';
 import { Card, Skeleton } from '../components/ui';
 import { useAppStore } from '../store';
@@ -8,6 +8,7 @@ import { useUserLeagues } from '../api';
 import { getLeagueRosters, getLeagueUsers } from '../api/client';
 import { classifyGuillotineLeague } from '../logic';
 import { groupLeagueChoices } from '../logic/leagueIdentity';
+import { LeagueChoiceButton } from '../components/LeagueChoiceButton';
 
 export function LeaguePickerPage() {
   const navigate = useNavigate();
@@ -59,10 +60,12 @@ export function LeaguePickerPage() {
         {/* Header */}
         <div className="flex items-center gap-3 mb-8">
           <button
+            type="button"
+            aria-label="Back to home"
             onClick={() => { reset(); navigate('/'); }}
-            className="text-[#4a4d77] hover:text-[#a5b4fc] transition-colors"
+            className="rounded text-[#4a4d77] transition-colors hover:text-[#a5b4fc] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6366f1]"
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="w-5 h-5" aria-hidden="true" />
           </button>
           <div>
             <h1 className="font-['Orbitron'] text-lg font-bold uppercase tracking-wider text-[#f0f0ff]">
@@ -117,31 +120,12 @@ export function LeaguePickerPage() {
         {/* League list */}
         <div className="space-y-3">
           {guillotineLeagues.map((league) => (
-            <Card
+            <LeagueChoiceButton
               key={league.league_id}
-              onClick={() => handleSelect(league)}
-              className="p-5 flex items-center justify-between group"
-            >
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#6366f1] to-[#8b5cf6]
-                  flex items-center justify-center shadow-[0_2px_10px_rgba(99,102,241,0.3)]">
-                  <Trophy className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <div className="text-[#f0f0ff] font-semibold text-sm">{league.name}</div>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs text-[#6b6e99]">{league.total_rosters} teams</span>
-                    <span className="text-[#2a2e55]">·</span>
-                    <span className="text-xs font-['Space_Mono'] text-[#4a4d77]">{league.season}</span>
-                  </div>
-                </div>
-              </div>
-              {selectingId === league.league_id ? (
-                <Loader2 className="w-4 h-4 text-[#6366f1] animate-spin" />
-              ) : (
-                <ChevronRight className="w-4 h-4 text-[#4a4d77] group-hover:text-[#6366f1] transition-colors" />
-              )}
-            </Card>
+              league={league}
+              selecting={selectingId === league.league_id}
+              onSelect={(selectedLeague) => void handleSelect(selectedLeague)}
+            />
           ))}
 
           {(leagueChoices.unknown.length > 0 || leagueChoices.other.length > 0) && (

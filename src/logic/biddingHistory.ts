@@ -9,8 +9,19 @@ export interface CompletedAuction {
   legitimateLosses: CanonicalBidEvent[];
   runnerUp: CanonicalBidEvent | null;
   /** Public history has no canonical losing-bid evidence; this never implies a $0 participant. */
-  hasIncompleteParticipationEvidence: boolean;
+  hasNoCanonicalLosingBidEvidence: boolean;
   hasAmbiguousWinnerEvidence: boolean;
+}
+
+export interface RetryableHistoryQuery {
+  isError: boolean;
+  refetch: () => unknown;
+}
+
+export function retryFailedHistoryQueries(queries: readonly RetryableHistoryQuery[]): void {
+  for (const query of queries) {
+    if (query.isError) void query.refetch();
+  }
 }
 
 export interface BiddingHistorySummary {
@@ -18,6 +29,23 @@ export interface BiddingHistorySummary {
   medianWinningBid: number | null;
   totalFaabSpent: number;
   topWinningPrices: number[];
+}
+
+/**
+ * Waiver decision weeks supported by the fetched transaction range and the league's completed
+ * boundary. Week 1 remains selectable before games are scored; no week beyond the fetched
+ * transaction horizon is implied complete.
+ */
+export function buildEligibleBiddingWeeks(
+  lastCompletedWeek: number | null,
+  maxFetchedWeek = 18,
+): number[] {
+  if (!Number.isInteger(maxFetchedWeek) || maxFetchedWeek < 1) return [];
+  const completed = lastCompletedWeek != null && Number.isInteger(lastCompletedWeek)
+    ? Math.max(0, lastCompletedWeek)
+    : 0;
+  const latestDecisionWeek = Math.min(maxFetchedWeek, Math.max(1, completed + 1));
+  return Array.from({ length: latestDecisionWeek }, (_, index) => latestDecisionWeek - index);
 }
 
 /**
@@ -50,7 +78,7 @@ export function buildCompletedAuctions(events: readonly CanonicalBidEvent[]): Co
       winner,
       legitimateLosses,
       runnerUp: legitimateLosses[0] ?? null,
-      hasIncompleteParticipationEvidence: legitimateLosses.length === 0,
+      hasNoCanonicalLosingBidEvidence: legitimateLosses.length === 0,
       hasAmbiguousWinnerEvidence: winners.length > 1,
     }];
   }).sort((a, b) =>

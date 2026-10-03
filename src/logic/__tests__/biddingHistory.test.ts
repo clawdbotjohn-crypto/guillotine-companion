@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { biddingProfileTransactionFixture } from '../__fixtures__/biddingProfileTransactions';
 import { classifyCanonicalBidEvents, type CanonicalBidEvent } from '../biddingProfiles';
-import { buildCompletedAuctions, summarizeBiddingHistory } from '../biddingHistory';
+import { buildCompletedAuctions, buildEligibleBiddingWeeks, retryFailedHistoryQueries, summarizeBiddingHistory } from '../biddingHistory';
 
 function bid(overrides: Partial<CanonicalBidEvent> = {}): CanonicalBidEvent {
   return {
@@ -23,6 +23,27 @@ function bid(overrides: Partial<CanonicalBidEvent> = {}): CanonicalBidEvent {
 }
 
 describe('league-wide bidding history', () => {
+  it('retries every failed required source and leaves healthy sources alone', () => {
+    const leagueRetry = vi.fn();
+    const playersRetry = vi.fn();
+    const healthyRetry = vi.fn();
+    retryFailedHistoryQueries([
+      { isError: true, refetch: leagueRetry },
+      { isError: false, refetch: healthyRetry },
+      { isError: true, refetch: playersRetry },
+    ]);
+    expect(leagueRetry).toHaveBeenCalledOnce();
+    expect(playersRetry).toHaveBeenCalledOnce();
+    expect(healthyRetry).not.toHaveBeenCalled();
+  });
+
+  it('builds selectable decision weeks independently from auction rows and caps fetched coverage', () => {
+    expect(buildEligibleBiddingWeeks(4, 18)).toEqual([5, 4, 3, 2, 1]);
+    expect(buildEligibleBiddingWeeks(18, 18)).toHaveLength(18);
+    expect(buildEligibleBiddingWeeks(18, 18)[0]).toBe(18);
+    expect(buildEligibleBiddingWeeks(null, 18)).toEqual([1]);
+  });
+
   it('groups canonical wins with legitimate losses and identifies the runner-up', () => {
     const auctions = buildCompletedAuctions([
       bid(),
@@ -33,7 +54,7 @@ describe('league-wide bidding history', () => {
     expect(auctions).toHaveLength(1);
     expect(auctions[0]).toMatchObject({
       playerId: 'player-a',
-      hasIncompleteParticipationEvidence: false,
+      hasNoCanonicalLosingBidEvidence: false,
       runnerUp: { transactionId: 'loss-high', actualBid: 90 },
     });
     expect(auctions[0].legitimateLosses.map((event) => event.transactionId)).toEqual(['loss-high', 'loss-low']);
@@ -43,7 +64,7 @@ describe('league-wide bidding history', () => {
     const [auction] = buildCompletedAuctions([bid({ actualBid: 0 })]);
     expect(auction.winner.actualBid).toBe(0);
     expect(auction.runnerUp).toBeNull();
-    expect(auction.hasIncompleteParticipationEvidence).toBe(true);
+    expect(auction.hasNoCanonicalLosingBidEvidence).toBe(true);
   });
 
   it('never resurrects duplicate alternatives, roster-full failures, or unmatched failures excluded by the canonical parser', () => {

@@ -1,7 +1,13 @@
+/* @vitest-environment jsdom */
 import { readFileSync } from 'node:fs';
+import { render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import type { UserLeague } from '../api/types';
 import { groupLeagueChoices } from '../logic/leagueIdentity';
+import { useAppStore } from '../store';
+import { LeaguePickerPage } from './LeaguePickerPage';
 
 function league(overrides: Partial<UserLeague> = {}): UserLeague {
   return {
@@ -21,6 +27,17 @@ function league(overrides: Partial<UserLeague> = {}): UserLeague {
 }
 
 describe('league picker native format grouping', () => {
+  it('provides an accessible name for the icon-only back control', () => {
+    useAppStore.setState({ userId: null, username: '' });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter><LeaguePickerPage /></MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(screen.getByRole('button', { name: 'Back to home' })).toBeTruthy();
+  });
+
   it('keeps native guillotine, recognized other, and unknown formats separate', () => {
     const grouped = groupLeagueChoices([
       league({ league_id: 'native', settings: { type: 3 } }),

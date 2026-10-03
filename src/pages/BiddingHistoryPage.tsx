@@ -5,9 +5,11 @@ import { useAppStore, usePlayers } from '../store';
 import { getPlayer, getPlayerName, getPlayerPosition, type PlayerRecord } from '../store/players';
 import {
   buildCompletedAuctions,
+  buildEligibleBiddingWeeks,
   classifyCanonicalBidEvents,
   computeEliminations,
   getCompletedLeagueWeek,
+  retryFailedHistoryQueries,
   summarizeBiddingHistory,
   type CanonicalBidEvent,
   type CompletedAuction,
@@ -22,7 +24,9 @@ interface BiddingHistoryViewProps {
   managerLabels: ReadonlyMap<number, string>;
   eliminatedRosterIds: ReadonlySet<number>;
   players?: ReadonlyMap<string, PlayerRecord>;
+  eligibleWeeks: number[];
   eliminationStatusUnavailable?: boolean;
+  onRetryEliminationStatus?: () => void;
 }
 
 type WeekSelection = number | 'all' | null;
@@ -35,12 +39,11 @@ export function BiddingHistoryView({
   managerLabels,
   eliminatedRosterIds,
   players,
+  eligibleWeeks,
   eliminationStatusUnavailable = false,
+  onRetryEliminationStatus,
 }: BiddingHistoryViewProps) {
-  const weeks = useMemo(
-    () => [...new Set(auctions.map((auction) => auction.decisionWeek))].sort((a, b) => b - a),
-    [auctions],
-  );
+  const weeks = eligibleWeeks;
   const [selectedWeek, setSelectedWeek] = useState<WeekSelection>(null);
   const [selectedAuction, setSelectedAuction] = useState<CompletedAuction | null>(null);
   const effectiveWeek = selectedWeek ?? weeks[0] ?? 'all';
@@ -72,21 +75,6 @@ export function BiddingHistoryView({
       history: events.filter((event) => event.playerId === selectedAuction.playerId),
     };
   }, [events, managerLabels, players, selectedAuction]);
-
-  if (auctions.length === 0) {
-    return (
-      <Card hover={false} className="p-8 text-center">
-        <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-full bg-[#161a3a]">
-          <History className="h-6 w-6 text-[#6366f1]" aria-hidden="true" />
-        </div>
-        <h2 className="text-base font-semibold text-[#f0f0ff]">No completed auctions yet</h2>
-        <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-[#8b8fb5]">
-          Completed waiver wins will appear here. Failed roster moves, unmatched failures, trades,
-          and other non-bids are intentionally excluded.
-        </p>
-      </Card>
-    );
-  }
 
   return (
     <>
@@ -134,16 +122,34 @@ export function BiddingHistoryView({
         <p>
           Amounts are completed winning prices and canonically proven losing bids only—not predicted
           bids, Max VORP, acquisition proxies, or assumed participation. Missing participation is never $0.
+          Scope is bounded to fetched Sleeper transaction weeks 1–18 and does not claim complete losing-bid history.
         </p>
       </div>
       {eliminationStatusUnavailable && (
-        <p role="status" className="-mt-2 mb-5 text-[10px] text-[#fbbf24]">
-          Current elimination status is unavailable; manager names and bid evidence are unaffected.
-        </p>
+        <div role="status" className="-mt-2 mb-5 flex items-center justify-between gap-3 text-[10px] text-[#fbbf24]">
+          <span>Current elimination status is unavailable; manager names and bid evidence are unaffected.</span>
+          {onRetryEliminationStatus && (
+            <button type="button" onClick={onRetryEliminationStatus} className="min-h-9 shrink-0 rounded-lg border border-[#f59e0b]/50 px-3 font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f59e0b]">
+              Retry status
+            </button>
+          )}
+        </div>
       )}
 
       {visibleAuctions.length === 0 ? (
-        <Card hover={false} className="p-6 text-center text-sm text-[#8b8fb5]">No completed auctions for this week.</Card>
+        <Card hover={false} className="p-8 text-center">
+          <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-full bg-[#161a3a]">
+            <History className="h-6 w-6 text-[#6366f1]" aria-hidden="true" />
+          </div>
+          <h2 className="text-base font-semibold text-[#f0f0ff]">
+            {auctions.length === 0 ? 'No completed auctions yet' : `No completed auctions for Week ${effectiveWeek}`}
+          </h2>
+          <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-[#8b8fb5]">
+            {auctions.length === 0
+              ? 'Completed waiver wins will appear here. Failed roster moves, unmatched failures, trades, and other non-bids are intentionally excluded.'
+              : 'This eligible waiver week has no completed auction evidence in the fetched Sleeper transaction history.'}
+          </p>
+        </Card>
       ) : (
         <section aria-label="Completed auctions" className="space-y-3">
           <div className="mb-1 flex items-center gap-2">
@@ -245,6 +251,14 @@ export function BiddingHistoryPage() {
   const playersQuery = usePlayers();
   const nflStateQuery = useNflState();
   const completedWeek = getCompletedLeagueWeek(leagueQuery.data, nflStateQuery.data);
+  const nativeLastScoredLeg = Number(leagueQuery.data?.settings.last_scored_leg);
+  const eligibilityBoundary = completedWeek ?? (
+    Number.isInteger(nativeLastScoredLeg) && nativeLastScoredLeg >= 0 ? nativeLastScoredLeg : null
+  );
+  const eligibleWeeks = useMemo(
+    () => buildEligibleBiddingWeeks(eligibilityBoundary, 18),
+    [eligibilityBoundary],
+  );
   const matchupsQuery = useAllMatchups(leagueId, completedWeek);
   // Keep the shared query key/range identical to Hub, Waivers, and League.
   const transactionsQuery = useAllTransactions(leagueId, 18);
@@ -271,9 +285,34 @@ export function BiddingHistoryPage() {
   }
 
   const isLoading = leagueQuery.isLoading || usersQuery.isLoading || rostersQuery.isLoading
-    || playersQuery.isLoading || transactionsQuery.isLoading || nflStateQuery.isLoading
-    || (completedWeek > 0 && matchupsQuery.isLoading);
-  const error = leagueQuery.error || usersQuery.error || rostersQuery.error || playersQuery.error || transactionsQuery.error;
+    || playersQuery.isLoading || transactionsQuery.isLoading;
+  const failedRequiredSources = [
+    leagueQuery.isError ? 'league' : null,
+    usersQuery.isError ? 'manager directory' : null,
+    rostersQuery.isError ? 'rosters' : null,
+    playersQuery.isError ? 'player directory' : null,
+    transactionsQuery.isError ? 'transactions' : null,
+  ].filter((source): source is string => source != null);
+  const hasRequiredError = failedRequiredSources.length > 0;
+  const hasCompletedMatchupBoundary = completedWeek !== null && completedWeek > 0;
+  const matchupsAbsent = hasCompletedMatchupBoundary
+    && !matchupsQuery.isLoading
+    && !matchupsQuery.isError
+    && (!matchupsQuery.data || matchupsQuery.data.size === 0);
+  const eliminationStatusUnavailable = nflStateQuery.isLoading || nflStateQuery.isError
+    || (hasCompletedMatchupBoundary && (matchupsQuery.isLoading || matchupsQuery.isError || matchupsAbsent));
+
+  const retryRequiredData = () => retryFailedHistoryQueries([
+    leagueQuery,
+    usersQuery,
+    rostersQuery,
+    playersQuery,
+    transactionsQuery,
+  ]);
+  const retryEliminationStatus = () => {
+    if (nflStateQuery.isError || !nflStateQuery.data) void nflStateQuery.refetch();
+    if (matchupsQuery.isError || matchupsAbsent) void matchupsQuery.refetch();
+  };
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-6 pb-24 sm:px-6">
@@ -285,12 +324,14 @@ export function BiddingHistoryPage() {
 
       {isLoading ? (
         <div aria-label="Loading bidding history" className="space-y-4"><Skeleton lines={2} /><div className="grid grid-cols-2 gap-2"><Card hover={false} className="h-24 animate-pulse">&nbsp;</Card><Card hover={false} className="h-24 animate-pulse">&nbsp;</Card></div><Skeleton lines={5} /></div>
-      ) : error ? (
+      ) : hasRequiredError ? (
         <Card hover={false} className="p-7 text-center">
           <AlertTriangle className="mx-auto h-7 w-7 text-[#f43f5e]" aria-hidden="true" />
           <h2 className="mt-3 font-semibold text-[#f0f0ff]">Bidding history unavailable</h2>
-          <p className="mt-1 text-sm text-[#8b8fb5]">Sleeper transaction history could not be loaded. No bid values were inferred.</p>
-          <button type="button" onClick={() => void transactionsQuery.refetch()} className="mx-auto mt-4 flex min-h-11 items-center gap-2 rounded-lg border border-[#6366f1] px-4 text-xs font-semibold text-[#a5b4fc]"><RefreshCw className="h-4 w-4" />Retry</button>
+          <p className="mt-1 text-sm text-[#8b8fb5]">
+            Required Sleeper data could not be loaded: {failedRequiredSources.join(', ')}. No bid values were inferred.
+          </p>
+          <button type="button" onClick={retryRequiredData} className="mx-auto mt-4 flex min-h-11 items-center gap-2 rounded-lg border border-[#6366f1] px-4 text-xs font-semibold text-[#a5b4fc] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6366f1]"><RefreshCw className="h-4 w-4" />Retry failed data</button>
         </Card>
       ) : (
         <BiddingHistoryView
@@ -299,7 +340,9 @@ export function BiddingHistoryPage() {
           managerLabels={managerLabels}
           eliminatedRosterIds={eliminatedRosterIds}
           players={playersQuery.data}
-          eliminationStatusUnavailable={matchupsQuery.isError}
+          eligibleWeeks={eligibleWeeks}
+          eliminationStatusUnavailable={eliminationStatusUnavailable}
+          onRetryEliminationStatus={(nflStateQuery.isError || matchupsQuery.isError || matchupsAbsent) ? retryEliminationStatus : undefined}
         />
       )}
     </main>

@@ -116,6 +116,8 @@ export { groupLeagueChoices } from './leagueIdentity';
 
 export {
   buildCompletedAuctions,
+  buildEligibleBiddingWeeks,
+  retryFailedHistoryQueries,
   summarizeBiddingHistory,
   type CompletedAuction,
   type BiddingHistorySummary,

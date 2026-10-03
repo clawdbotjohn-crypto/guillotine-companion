@@ -1,6 +1,6 @@
 /* @vitest-environment jsdom */
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildCompletedAuctions, type CanonicalBidEvent } from '../logic';
 import type { PlayerRecord } from '../store/players';
 import { BiddingHistoryView } from './BiddingHistoryPage';
@@ -41,16 +41,20 @@ const props = {
   managerLabels: new Map([[1, 'Winning Manager'], [2, 'Former Manager']]),
   eliminatedRosterIds: new Set([1, 2]),
   players,
+  eligibleWeeks: [3, 2, 1],
 };
 
 afterEach(() => cleanup());
 
 describe('BiddingHistoryView', () => {
   it('defaults to the latest week and shows honest summary and canonical runner-up evidence', () => {
-    render(<BiddingHistoryView {...props} eliminationStatusUnavailable />);
+    const retryStatus = vi.fn();
+    render(<BiddingHistoryView {...props} eliminationStatusUnavailable onRetryEliminationStatus={retryStatus} />);
 
     expect(screen.getByRole('button', { name: 'Week 3', pressed: true })).toBeTruthy();
     expect(screen.getByText(/Current elimination status is unavailable/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry status' }));
+    expect(retryStatus).toHaveBeenCalledOnce();
     expect(screen.getByText('Alpha Runner')).toBeTruthy();
     expect(screen.queryByText('Zero Claim')).toBeNull();
     expect(screen.getByText('Runner-up evidence')).toBeTruthy();
@@ -80,9 +84,19 @@ describe('BiddingHistoryView', () => {
     expect(within(dialog).queryByText('Predicted')).toBeNull();
   });
 
-  it('shows an honest empty state without synthesizing bids', () => {
-    render(<BiddingHistoryView {...props} auctions={[]} events={[]} />);
+  it('keeps zero-auction league weeks selectable while showing an honest empty state', () => {
+    render(<BiddingHistoryView {...props} auctions={[]} events={[]} eligibleWeeks={[4, 3, 2, 1]} />);
+    expect(screen.getByRole('button', { name: 'Week 4', pressed: true })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Week 2' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'No completed auctions yet' })).toBeTruthy();
     expect(screen.getByText(/Failed roster moves, unmatched failures, trades/i)).toBeTruthy();
+  });
+
+  it('allows an eligible gap week and does not imply an auction occurred', () => {
+    render(<BiddingHistoryView {...props} eligibleWeeks={[4, 3, 2, 1]} />);
+    expect(screen.getByRole('button', { name: 'Week 4', pressed: true })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'No completed auctions for Week 4' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Week 3' }));
+    expect(screen.getByText('Alpha Runner')).toBeTruthy();
   });
 });

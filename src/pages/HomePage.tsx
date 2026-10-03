@@ -114,7 +114,9 @@ export function HomePage() {
 
           {/* Username Input */}
           <form onSubmit={handleUsernameSubmit} className="space-y-4">
+            <label htmlFor="sleeper-username" className="sr-only">Sleeper username</label>
             <input
+              id="sleeper-username"
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -148,7 +150,9 @@ export function HomePage() {
               </button>
             ) : (
               <form onSubmit={handleLeagueIdSubmit} className="flex gap-2">
+                <label htmlFor="sleeper-league-id" className="sr-only">Sleeper league ID</label>
                 <input
+                  id="sleeper-league-id"
                   type="text"
                   value={leagueIdInput}
                   onChange={(e) => setLeagueIdInput(e.target.value)}
