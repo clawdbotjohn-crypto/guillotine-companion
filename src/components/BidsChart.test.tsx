@@ -1,0 +1,133 @@
+/* @vitest-environment jsdom */
+import { cloneElement, type ReactElement, type ReactNode } from 'react';
+import { render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import type { BidInfo, TeamInfo } from '../logic/elimination';
+import { buildBidChartData } from './bidChartData';
+import { BidsChart } from './BidsChart';
+
+vi.mock('recharts', () => ({
+  ResponsiveContainer: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  ScatterChart: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  CartesianGrid: () => null,
+  XAxis: ({ ticks }: { ticks: number[] }) => <div data-testid="x-axis" data-ticks={ticks.join(',')} />,
+  YAxis: () => null,
+  ZAxis: () => null,
+  ReferenceLine: () => <div data-testid="zero-reference-line" />,
+  Tooltip: () => null,
+  Scatter: ({ data, shape }: {
+    data: Array<Record<string, unknown>>;
+    shape: ReactElement<Record<string, unknown>>;
+  }) => (
+    <svg>
+      {data.map((point, index) => cloneElement(shape, {
+        key: index,
+        cx: 10 + index,
+        cy: 20 + index,
+        payload: point,
+      }))}
+    </svg>
+  ),
+}));
+
+const teams = new Map<number, TeamInfo>([
+  [1, {
+    rosterId: 1,
+    userId: 'user-1',
+    displayName: 'Rain City Axes With A Deliberately Long Team Name',
+    eliminatedWeek: null,
+    isChampion: false,
+    isRunnerUp: false,
+  }],
+]);
+
+function bid(overrides: Partial<BidInfo> = {}): BidInfo {
+  return {
+    week: 1,
+    rosterId: 1,
+    playerId: 'player-1',
+    playerName: 'A Player With A Deliberately Long Full Name',
+    position: 'WR',
+    amount: 25,
+    status: 'complete',
+    ...overrides,
+  };
+}
+
+describe('BidsChart', () => {
+  it('shows every supplied week, preserves a genuine $0 win, and exposes full accessible labels', () => {
+    render(
+      <BidsChart
+        bids={[
+          bid({ amount: 0 }),
+          bid({ week: 3, playerId: 'player-2', playerName: 'Short Name', position: 'RB', amount: 125 }),
+        ]}
+        weeks={[1, 2, 3]}
+        teams={teams}
+      />,
+    );
+
+    expect(screen.getByTestId('x-axis').getAttribute('data-ticks')).toBe('1,2,3');
+    expect(screen.getByLabelText(/Week 2: 0 observed wins/)).toBeTruthy();
+    expect(screen.getByLabelText(/A Player With A Deliberately Long Full Name.*winning bid \$0/)).toBeTruthy();
+    expect(screen.getByText('Outlined dots are genuine $0 wins.', { exact: false })).toBeTruthy();
+    expect(screen.getByTestId('zero-reference-line')).toBeTruthy();
+    expect(screen.getByText('W2').parentElement?.textContent).toContain('0');
+  });
+
+  it('applies the position selection without applying a selected-week concept', () => {
+    const bids = [
+      bid({ week: 1, playerId: 'wr', playerName: 'Wide Receiver', position: 'WR' }),
+      bid({ week: 2, playerId: 'qb', playerName: 'Quarterback', position: 'QB' }),
+    ];
+    const { rerender } = render(
+      <BidsChart bids={bids} weeks={[1, 2]} teams={teams} />,
+    );
+
+    expect(screen.getByLabelText(/Quarterback.*Week 2/)).toBeTruthy();
+
+    rerender(
+      <BidsChart bids={bids} weeks={[1, 2]} teams={teams} positions={['WR']} />,
+    );
+
+    expect(screen.queryByLabelText(/Quarterback.*Week 2/)).toBeNull();
+    expect(screen.getByLabelText(/Wide Receiver.*Week 1/)).toBeTruthy();
+    expect(screen.getByLabelText(/Week 2: 0 observed wins/)).toBeTruthy();
+  });
+
+  it('spreads dense same-week observations inside that week without dropping bids', () => {
+    const denseBids = Array.from({ length: 40 }, (_, index) => bid({
+      playerId: `player-${index}`,
+      playerName: `Player ${index}`,
+      amount: index,
+    }));
+    const { points, summary } = buildBidChartData(denseBids, [1, 2], teams);
+
+    expect(points).toHaveLength(40);
+    expect(new Set(points.map((point) => point.plotWeek)).size).toBe(40);
+    expect(points.every((point) => point.plotWeek >= 0.72 && point.plotWeek <= 1.28)).toBe(true);
+    expect(summary).toEqual([{ week: 1, count: 40 }, { week: 2, count: 0 }]);
+  });
+
+  it('summarizes partial weeks without fabricating bid points', () => {
+    const observed = bid({ week: 2, amount: 0 });
+    const { points, summary } = buildBidChartData([observed], [1, 2, 3], teams);
+
+    expect(points).toHaveLength(1);
+    expect(points[0].amount).toBe(0);
+    expect(summary).toEqual([
+      { week: 1, count: 0 },
+      { week: 2, count: 1 },
+      { week: 3, count: 0 },
+    ]);
+  });
+
+  it('renders an explicit empty state while retaining zero-count week summaries', () => {
+    render(<BidsChart bids={[]} weeks={[1, 2]} teams={teams} positions={['TE']} />);
+
+    expect(screen.getByText('No completed winning waiver bids found for TE.')).toBeTruthy();
+    expect(screen.getByText('W1').parentElement?.textContent).toContain('0');
+    expect(screen.getByText('W2').parentElement?.textContent).toContain('0');
+    expect(screen.queryByTestId('zero-reference-line')).toBeNull();
+  });
+});

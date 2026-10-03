@@ -228,15 +228,56 @@ describe('current-week elimination guard', () => {
 });
 
 describe('isGuillotineLeague', () => {
-  it('returns true when playoff_teams is 0', () => {
-    expect(isGuillotineLeague({ settings: { playoff_teams: 0 } })).toBe(true);
+  const nativeLeague = {
+    league_id: '1312112493526536192',
+    sport: 'nfl',
+    settings: { type: 3 },
+  };
+
+  it('recognizes native NFL Guillotine type 3, including the known league id', () => {
+    expect(isGuillotineLeague(nativeLeague)).toBe(true);
   });
 
-  it('returns false when playoff_teams > 0', () => {
-    expect(isGuillotineLeague({ settings: { playoff_teams: 6 } })).toBe(false);
+  it.each([0, 1, 2])('rejects recognized non-Guillotine native type %s', (type) => {
+    expect(isGuillotineLeague({ sport: 'nfl', settings: { type } })).toBe(false);
   });
 
-  it('returns true when settings has no playoff_teams', () => {
-    expect(isGuillotineLeague({ settings: {} })).toBe(true);
+  it.each([
+    ['missing settings', undefined],
+    ['missing type', {}],
+    ['null type', { type: null }],
+    ['string type', { type: '3' }],
+    ['fractional type', { type: 3.5 }],
+    ['novel type', { type: 4 }],
+  ])('fails closed for %s', (_description, settings) => {
+    expect(isGuillotineLeague({ sport: 'nfl', settings })).toBe(false);
+  });
+
+  it('requires NFL sport', () => {
+    expect(isGuillotineLeague({ settings: { type: 3 } })).toBe(false);
+    expect(isGuillotineLeague({ sport: 'nba', settings: { type: 3 } })).toBe(false);
+  });
+
+  it('ignores explicit or missing playoff_teams for identity', () => {
+    expect(isGuillotineLeague({
+      ...nativeLeague,
+      settings: { type: 3, playoff_teams: 8 },
+    })).toBe(true);
+    expect(isGuillotineLeague(nativeLeague)).toBe(true);
+  });
+
+  it.each([18, 32])('does not conflate an %s-team/slot fixture shape with identity', (fixtureSize) => {
+    const roster_positions = Array.from({ length: fixtureSize }, (_, index) => `SLOT_${index}`);
+    expect(isGuillotineLeague({
+      ...nativeLeague,
+      total_rosters: fixtureSize,
+      roster_positions,
+    })).toBe(true);
+    expect(isGuillotineLeague({
+      sport: 'nfl',
+      settings: { type: 0 },
+      total_rosters: fixtureSize,
+      roster_positions,
+    })).toBe(false);
   });
 });
