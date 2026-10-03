@@ -278,6 +278,7 @@ export function isGuillotineLeague(league: {
   league_id?: unknown;
   sport?: unknown;
   settings?: Record<string, unknown> | null;
+  total_rosters?: unknown;
   roster_positions?: readonly string[];
 }): boolean {
   const leagueType = league.settings?.type;

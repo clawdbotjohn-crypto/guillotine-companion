@@ -266,12 +266,17 @@ describe('isGuillotineLeague', () => {
     expect(isGuillotineLeague(nativeLeague)).toBe(true);
   });
 
-  it.each([18, 32])('does not conflate an %s-slot roster shape with identity', (slotCount) => {
-    const roster_positions = Array.from({ length: slotCount }, (_, index) => `SLOT_${index}`);
-    expect(isGuillotineLeague({ ...nativeLeague, roster_positions })).toBe(true);
+  it.each([18, 32])('does not conflate an %s-team/slot fixture shape with identity', (fixtureSize) => {
+    const roster_positions = Array.from({ length: fixtureSize }, (_, index) => `SLOT_${index}`);
+    expect(isGuillotineLeague({
+      ...nativeLeague,
+      total_rosters: fixtureSize,
+      roster_positions,
+    })).toBe(true);
     expect(isGuillotineLeague({
       sport: 'nfl',
       settings: { type: 0 },
+      total_rosters: fixtureSize,
       roster_positions,
     })).toBe(false);
   });
