@@ -122,8 +122,9 @@ describe('PlayerDetailDialog', () => {
       getPlayerName,
     }} />);
     const dialog = screen.getByRole('dialog', { name: 'Detail Player' });
-    expect(within(dialog).getByText('Team impact')).toBeTruthy();
-    expect(within(dialog).getByText('24/26 → 18/26')).toBeTruthy();
+    const teamImpact = within(dialog).getByRole('region', { name: 'Team Impact' });
+    expect(within(teamImpact).queryByText('None')).toBeNull();
+    expect(within(teamImpact).getByText('24/26 → 18/26')).toBeTruthy();
     expect(within(dialog).getByText('18/26 → 3/26')).toBeTruthy();
     expect(within(dialog).getByText('64.0 → 77.0')).toBeTruthy();
     expect(within(dialog).getByText(/Detail Player enters; Old Starter moves out/)).toBeTruthy();
@@ -142,7 +143,7 @@ describe('PlayerDetailDialog', () => {
     expect(within(dialog).getByText('$100 → $1')).toBeTruthy();
   });
 
-  it('collapses fully calculated no-change and truthful $0 impact to No impact', () => {
+  it('renders calculated no-change and truthful $0 Team Impact as the same simple None state as empty Predicted bidding', () => {
     const noChangeImpact = {
       status: 'available' as const,
       overallRank: { before: 8, after: 8, outOf: 10 },
@@ -159,9 +160,17 @@ describe('PlayerDetailDialog', () => {
       teamImpact: noChangeImpact,
     }} />);
     const dialog = screen.getByRole('dialog', { name: 'Detail Player' });
-    expect(within(dialog).getByText('No impact')).toBeTruthy();
-    expect(within(dialog).queryByText('Overall')).toBeNull();
-    expect(within(dialog).queryByText('Projection change:')).toBeNull();
+    const teamImpact = within(dialog).getByRole('region', { name: 'Team Impact' });
+    const predictedBidding = within(dialog).getByRole('region', { name: 'Predicted bidding' });
+    const impactNone = within(teamImpact).getByText('None');
+    const predictedNone = within(predictedBidding).getByText('None');
+    expect(impactNone.className).toBe(predictedNone.className);
+    expect(impactNone.className).toBe('mt-1 text-xs text-[#9ca3c7]');
+    expect(impactNone.className).not.toContain('bg-');
+    expect(impactNone.className).not.toContain('rounded');
+    expect(impactNone.className).not.toMatch(/(?:^|\s)p(?:[trblxy]?)-/);
+    expect(within(teamImpact).queryByText('Overall')).toBeNull();
+    expect(within(teamImpact).queryByText('Projection change:')).toBeNull();
 
     rerender(<PlayerDetailDialog open onClose={vi.fn()} data={{
       ...data,
@@ -175,68 +184,91 @@ describe('PlayerDetailDialog', () => {
         displacedStarterIds: ['old-rb'],
       },
     }} />);
-    expect(within(dialog).getByText('No impact')).toBeTruthy();
-    expect(within(dialog).queryByText('Overall')).toBeNull();
+    expect(within(teamImpact).getByText('None')).toBeTruthy();
+    expect(within(teamImpact).queryByText('Overall')).toBeNull();
   });
 
-  it('keeps missing Team Impact evidence distinct as concise Impact unavailable', () => {
+  it('shows unavailable Team Impact as flat None while preserving an accessible reason', () => {
     const reason = 'This player has no next-week Sleeper projection.';
     render(<PlayerDetailDialog open onClose={vi.fn()} data={{
       ...data,
       teamImpact: { status: 'unavailable', reason },
     }} />);
     const dialog = screen.getByRole('dialog', { name: 'Detail Player' });
-    expect(within(dialog).getByText('Impact unavailable')).toBeTruthy();
-    expect(within(dialog).queryByText(reason)).toBeNull();
-    expect(within(dialog).getByLabelText(`Impact unavailable: ${reason}`)).toBeTruthy();
-    expect(within(dialog).queryByText('No impact')).toBeNull();
-    expect(within(dialog).queryByText('Overall')).toBeNull();
-    expect(within(dialog).queryByText('Lineup pts')).toBeNull();
+    const teamImpact = within(dialog).getByRole('region', { name: 'Team Impact' });
+    const predictedBidding = within(dialog).getByRole('region', { name: 'Predicted bidding' });
+    const unavailable = within(teamImpact).getByText('None');
+    const predictedNone = within(predictedBidding).getByText('None');
+    expect(unavailable.className).toBe(predictedNone.className);
+    expect(unavailable.className).toBe('mt-1 text-xs text-[#9ca3c7]');
+    expect(unavailable.className).not.toContain('bg-');
+    expect(unavailable.className).not.toContain('rounded');
+    expect(unavailable.className).not.toMatch(/(?:^|\s)p(?:[trblxy]?)-/);
+    expect(within(teamImpact).queryByText(reason)).toBeNull();
+    expect(within(teamImpact).getByLabelText(`Impact unavailable: ${reason}`)).toBe(unavailable);
+    expect(within(teamImpact).queryByText('Impact unavailable')).toBeNull();
+    expect(within(teamImpact).queryByText('Overall')).toBeNull();
+    expect(within(teamImpact).queryByText('Lineup pts')).toBeNull();
   });
 
-  it('renders all-$0 eligible predictions as None while preserving observed $0 history', () => {
-    const labels = new Map([[1, 'Winning Team'], [2, 'Competing Team']]);
-    const history = [event('zero-win', 'won', 0), event('loss', 'legitimate-loss', 13)];
-    const zeroPredictions = [
-      managerPrediction(2, 'Likely Zero Manager', 0, 'Likely'),
-      managerPrediction(3, 'Possible Zero Manager', 0, 'Possible'),
-      managerPrediction(4, 'Unlikely Positive Manager', 25, 'Unlikely'),
-    ];
-    const { rerender } = render(<PlayerDetailDialog open onClose={vi.fn()} data={{
+  it('shows $0 in the compact Predicted summary when no eligible positive bid exists', () => {
+    render(<PlayerDetailDialog open onClose={vi.fn()} data={{
       ...data,
       suggestedBid: 2,
-      history,
-      managerLabels: labels,
-      managerPredictions: zeroPredictions,
+      managerPredictions: [
+        managerPrediction(2, 'Likely Zero Manager', 0, 'Likely'),
+        managerPrediction(3, 'Possible Zero Manager', 0, 'Possible'),
+        managerPrediction(4, 'Unlikely Positive Manager', 25, 'Unlikely'),
+      ],
     }} />);
     const dialog = screen.getByRole('dialog', { name: 'Detail Player' });
     const acquisition = within(dialog).getByRole('region', { name: 'Acquisition context' });
     expect(within(acquisition).getByText('$2')).toBeTruthy();
-    expect(within(acquisition).getByText('None')).toBeTruthy();
+    expect(within(acquisition).getByText('$0')).toBeTruthy();
+    expect(within(acquisition).queryByText('None')).toBeNull();
+  });
+
+  it('preserves a positive dollar value in the compact Predicted summary', () => {
+    render(<PlayerDetailDialog open onClose={vi.fn()} data={{
+      ...data,
+      suggestedBid: 2,
+      managerPredictions: [
+        managerPrediction(2, 'Likely Zero Manager', 0, 'Likely'),
+        managerPrediction(5, 'Positive Eligible Manager', 7, 'Possible'),
+      ],
+    }} />);
+    const dialog = screen.getByRole('dialog', { name: 'Detail Player' });
+    const acquisition = within(dialog).getByRole('region', { name: 'Acquisition context' });
+    expect(within(acquisition).getByText('$7')).toBeTruthy();
+    expect(within(acquisition).queryByText('$0')).toBeNull();
+    expect(within(dialog).queryByRole('region', { name: 'Predicted bidding' })).toBeNull();
+    expect(within(dialog).getByRole('button', { name: 'Open details for Positive Eligible Manager' })).toBeTruthy();
+  });
+
+  it('keeps the lower all-$0 Predicted bidding state semantic None and preserves observed $0 history', () => {
+    const labels = new Map([[1, 'Winning Team'], [2, 'Competing Team']]);
+    const history = [event('zero-win', 'won', 0), event('loss', 'legitimate-loss', 13)];
+    render(<PlayerDetailDialog open onClose={vi.fn()} data={{
+      ...data,
+      suggestedBid: 2,
+      history,
+      managerLabels: labels,
+      managerPredictions: [
+        managerPrediction(2, 'Likely Zero Manager', 0, 'Likely'),
+        managerPrediction(3, 'Possible Zero Manager', 0, 'Possible'),
+        managerPrediction(4, 'Unlikely Positive Manager', 25, 'Unlikely'),
+      ],
+    }} />);
+    const dialog = screen.getByRole('dialog', { name: 'Detail Player' });
     const predictionState = within(dialog).getByRole('region', { name: 'Predicted bidding' });
     expect(within(predictionState).getByText('None')).toBeTruthy();
+    expect(within(predictionState).queryByText('$0')).toBeNull();
     expect(within(dialog).queryByRole('button', { name: /Open details for/ })).toBeNull();
     expect(within(dialog).queryByTestId('expanded-manager-list')).toBeNull();
     expect(within(dialog).getByText('Winning Team')).toBeTruthy();
     const biddingHistory = within(dialog).getByText('Bidding history · 2').closest('details')!;
     expect(within(biddingHistory).getByText('$0')).toBeTruthy();
     expect(within(biddingHistory).getByText('$13')).toBeTruthy();
-
-    rerender(<PlayerDetailDialog open onClose={vi.fn()} data={{
-      ...data,
-      suggestedBid: 2,
-      history,
-      managerLabels: labels,
-      managerPredictions: [
-        ...zeroPredictions,
-        managerPrediction(5, 'Positive Eligible Manager', 7, 'Possible'),
-      ],
-    }} />);
-    expect(within(dialog).queryByRole('region', { name: 'Predicted bidding' })).toBeNull();
-    expect(within(acquisition).getByText('$7')).toBeTruthy();
-    expect(within(dialog).getByRole('button', { name: 'Open details for Positive Eligible Manager' })).toBeTruthy();
-    expect(within(dialog).getByTestId('expanded-manager-list')).toBeTruthy();
-    expect(within(biddingHistory).getByText('$0')).toBeTruthy();
   });
 
   it('uses compact profile copy and renders empty history as static content', () => {

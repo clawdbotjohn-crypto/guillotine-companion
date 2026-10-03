@@ -145,16 +145,16 @@ export function PlayerDetailDialog({ open, onClose, data }: { open: boolean; onC
           </section>
 
           {!data.owned && <section className="rounded-lg border border-[#20264d] p-3" aria-label="Acquisition context">
-            <div className="grid grid-cols-2 gap-2"><div><div className="text-[10px] uppercase tracking-wider text-[#6b6e99]">Suggested</div><strong className="mt-1 block font-['Space_Mono'] text-lg text-[#f59e0b]">{formatDisplayCurrency(data.suggestedBid, 'Unavailable')}</strong></div><div><div className="text-[10px] uppercase tracking-wider text-[#6b6e99]">Predicted</div><strong className="mt-1 block font-['Space_Mono'] text-lg text-[#a5b4fc]">{formatDisplayCurrency(predictedBid, 'None')}</strong></div></div>
+            <div className="grid grid-cols-2 gap-2"><div><div className="text-[10px] uppercase tracking-wider text-[#6b6e99]">Suggested</div><strong className="mt-1 block font-['Space_Mono'] text-lg text-[#f59e0b]">{formatDisplayCurrency(data.suggestedBid, 'Unavailable')}</strong></div><div><div className="text-[10px] uppercase tracking-wider text-[#6b6e99]">Predicted</div><strong className="mt-1 block font-['Space_Mono'] text-lg text-[#a5b4fc]">{formatDisplayCurrency(predictedBid, '$0')}</strong></div></div>
           </section>}
 
           {!data.owned && impact && (
             <section className="mt-4 rounded-lg border border-[#20264d] p-3" aria-labelledby={`${titleId}-team-impact`}>
-              <h3 id={`${titleId}-team-impact`} className="text-xs font-semibold uppercase tracking-wider text-[#f0f0ff]">Team impact</h3>
+              <h3 id={`${titleId}-team-impact`} className="text-xs font-semibold uppercase tracking-wider text-[#f0f0ff]">Team Impact</h3>
               {impact.status === 'unavailable' ? (
-                <p aria-label={`Impact unavailable: ${impact.reason}`} className="mt-2 rounded-lg bg-[#121735] p-3 text-xs text-[#9ca3c7]">Impact unavailable</p>
+                <p aria-label={`Impact unavailable: ${impact.reason}`} className="mt-1 text-xs text-[#9ca3c7]">None</p>
               ) : hasNoTeamImpact ? (
-                <p className="mt-2 rounded-lg bg-[#121735] p-3 text-xs text-[#9ca3c7]">No impact</p>
+                <p className="mt-1 text-xs text-[#9ca3c7]">None</p>
               ) : (
                 <>
                   <p className="mt-1 text-[10px] text-[#6b6e99]">Optimized next-week lineup · active teams only</p>
