@@ -152,7 +152,7 @@ export function PlayerDetailDialog({ open, onClose, data }: { open: boolean; onC
             <section className="mt-4 rounded-lg border border-[#20264d] p-3" aria-labelledby={`${titleId}-team-impact`}>
               <h3 id={`${titleId}-team-impact`} className="text-xs font-semibold uppercase tracking-wider text-[#f0f0ff]">Team Impact</h3>
               {impact.status === 'unavailable' ? (
-                <p aria-label={`Impact unavailable: ${impact.reason}`} className="mt-1 text-xs text-[#9ca3c7]">Impact unavailable</p>
+                <p aria-label={`Impact unavailable: ${impact.reason}`} className="mt-1 text-xs text-[#9ca3c7]">None</p>
               ) : hasNoTeamImpact ? (
                 <p className="mt-1 text-xs text-[#9ca3c7]">None</p>
               ) : (
