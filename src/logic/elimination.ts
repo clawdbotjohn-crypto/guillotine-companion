@@ -273,15 +273,16 @@ export function extractBids(weekTransactions: Map<number, Transaction[]>): BidIn
   return bids.sort((a, b) => a.week - b.week || b.amount - a.amount);
 }
 
-/**
- * Check if a league is a guillotine format.
- * Guillotine leagues: no playoffs, teams get eliminated each week.
- */
-export function isGuillotineLeague(league: { settings: Record<string, number>; roster_positions?: string[] }): boolean {
-  // Guillotine leagues typically have:
-  // - playoff_weeks = 0 (no playoffs)
-  // - type = 0 (redraft) — but we don't filter by this per spec
-  // Best heuristic: no playoff teams
-  const playoffTeams = league.settings?.playoff_teams ?? 0;
-  return playoffTeams === 0;
+/** Native Sleeper format identity only; season eligibility and elimination math live elsewhere. */
+export function isGuillotineLeague(league: {
+  league_id?: unknown;
+  sport?: unknown;
+  settings?: Record<string, unknown> | null;
+  roster_positions?: readonly string[];
+}): boolean {
+  const leagueType = league.settings?.type;
+  return league.sport === 'nfl'
+    && typeof leagueType === 'number'
+    && Number.isInteger(leagueType)
+    && leagueType === 3;
 }
