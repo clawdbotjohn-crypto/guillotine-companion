@@ -188,7 +188,7 @@ describe('PlayerDetailDialog', () => {
     expect(within(teamImpact).queryByText('Overall')).toBeNull();
   });
 
-  it('shows unavailable Team Impact as flat None while preserving an accessible reason', () => {
+  it('keeps unavailable Team Impact truthful and flat with an accessible reason', () => {
     const reason = 'This player has no next-week Sleeper projection.';
     render(<PlayerDetailDialog open onClose={vi.fn()} data={{
       ...data,
@@ -197,7 +197,7 @@ describe('PlayerDetailDialog', () => {
     const dialog = screen.getByRole('dialog', { name: 'Detail Player' });
     const teamImpact = within(dialog).getByRole('region', { name: 'Team Impact' });
     const predictedBidding = within(dialog).getByRole('region', { name: 'Predicted bidding' });
-    const unavailable = within(teamImpact).getByText('None');
+    const unavailable = within(teamImpact).getByText('Impact unavailable');
     const predictedNone = within(predictedBidding).getByText('None');
     expect(unavailable.className).toBe(predictedNone.className);
     expect(unavailable.className).toBe('mt-1 text-xs text-[#9ca3c7]');
@@ -206,7 +206,7 @@ describe('PlayerDetailDialog', () => {
     expect(unavailable.className).not.toMatch(/(?:^|\s)p(?:[trblxy]?)-/);
     expect(within(teamImpact).queryByText(reason)).toBeNull();
     expect(within(teamImpact).getByLabelText(`Impact unavailable: ${reason}`)).toBe(unavailable);
-    expect(within(teamImpact).queryByText('Impact unavailable')).toBeNull();
+    expect(within(teamImpact).queryByText('None')).toBeNull();
     expect(within(teamImpact).queryByText('Overall')).toBeNull();
     expect(within(teamImpact).queryByText('Lineup pts')).toBeNull();
   });
