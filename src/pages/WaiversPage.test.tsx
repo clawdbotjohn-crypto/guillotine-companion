@@ -145,8 +145,9 @@ describe('waiver controls', () => {
     expect(card.hasAttribute('disabled')).toBe(false);
     fireEvent.click(card);
     const dialog = screen.getByRole('dialog', { name: 'Test Runner' });
-    expect(within(dialog).getByText('$0')).toBeTruthy();
-    expect(within(within(dialog).getByLabelText('Acquisition context')).getByText('$0')).toBeTruthy();
+    const acquisition = within(dialog).getByLabelText('Acquisition context');
+    expect(within(within(acquisition).getByText('Suggested').parentElement!).getByText('$0')).toBeTruthy();
+    expect(within(within(acquisition).getByText('Predicted').parentElement!).getByText('$0')).toBeTruthy();
     const predictionState = within(dialog).getByRole('region', { name: 'Predicted bidding' });
     expect(within(predictionState).getByText('None')).toBeTruthy();
     expect(within(dialog).queryByText(/Predicted bidding is unavailable/i)).toBeNull();
