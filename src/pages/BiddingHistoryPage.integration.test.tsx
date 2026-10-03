@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { League, Matchup, NflState, Roster, SleeperUser, Transaction } from '../api/types';
+import { biddingProfileTransactionFixture } from '../logic/__fixtures__/biddingProfileTransactions';
 
 type QueryLike<T> = {
   data?: T;
@@ -104,6 +105,21 @@ describe('BiddingHistoryPage integration', () => {
     expect(playersQuery.refetch).toHaveBeenCalledOnce();
     expect(transactionsQuery.refetch).toHaveBeenCalledOnce();
     expect(rostersQuery.refetch).not.toHaveBeenCalled();
+  });
+
+  it('keeps bid evidence visible and retries when completed matchup coverage is partial', () => {
+    leagueQuery.data!.settings.last_scored_leg = 4;
+    matchupsQuery = query<Map<number, Matchup[]>>({ data: new Map([[1, []], [2, []]]) });
+    transactionsQuery = query<Map<number, Transaction[]>>({ data: biddingProfileTransactionFixture });
+
+    render(<BiddingHistoryPage />);
+
+    expect(screen.getByText(/Current elimination status is unavailable/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'All weeks' }));
+    expect(screen.getByRole('heading', { name: 'Completed auctions' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry status' }));
+    expect(matchupsQuery.refetch).toHaveBeenCalledOnce();
   });
 
   it('surfaces elimination-status unavailable when NFL state fails while bid evidence remains visible', () => {

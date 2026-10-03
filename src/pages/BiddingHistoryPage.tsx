@@ -260,6 +260,13 @@ export function BiddingHistoryPage() {
     [eligibilityBoundary],
   );
   const matchupsQuery = useAllMatchups(leagueId, completedWeek);
+  const hasCompletedMatchupBoundary = completedWeek !== null && completedWeek > 0;
+  const matchupsMissingExpectedWeeks = hasCompletedMatchupBoundary
+    && !matchupsQuery.isLoading
+    && !matchupsQuery.isError
+    && (!matchupsQuery.data
+      || Array.from({ length: completedWeek }, (_, index) => index + 1)
+        .some((week) => !matchupsQuery.data?.has(week)));
   // Keep the shared query key/range identical to Hub, Waivers, and League.
   const transactionsQuery = useAllTransactions(leagueId, 18);
 
@@ -275,10 +282,10 @@ export function BiddingHistoryPage() {
     ]));
   }, [rostersQuery.data, usersQuery.data]);
   const eliminatedRosterIds = useMemo(() => {
-    if (!matchupsQuery.data || !rostersQuery.data || !usersQuery.data) return new Set<number>();
+    if (matchupsMissingExpectedWeeks || !matchupsQuery.data || !rostersQuery.data || !usersQuery.data) return new Set<number>();
     const result = computeEliminations(matchupsQuery.data, rostersQuery.data, usersQuery.data);
     return new Set([...result.teams.values()].filter((team) => team.eliminatedWeek != null).map((team) => team.rosterId));
-  }, [matchupsQuery.data, rostersQuery.data, usersQuery.data]);
+  }, [matchupsMissingExpectedWeeks, matchupsQuery.data, rostersQuery.data, usersQuery.data]);
 
   if (!leagueId) {
     return <div className="flex min-h-[60vh] items-center justify-center text-sm text-[#6b6e99]">Select a league first</div>;
@@ -294,13 +301,9 @@ export function BiddingHistoryPage() {
     transactionsQuery.isError ? 'transactions' : null,
   ].filter((source): source is string => source != null);
   const hasRequiredError = failedRequiredSources.length > 0;
-  const hasCompletedMatchupBoundary = completedWeek !== null && completedWeek > 0;
-  const matchupsAbsent = hasCompletedMatchupBoundary
-    && !matchupsQuery.isLoading
-    && !matchupsQuery.isError
-    && (!matchupsQuery.data || matchupsQuery.data.size === 0);
   const eliminationStatusUnavailable = nflStateQuery.isLoading || nflStateQuery.isError
-    || (hasCompletedMatchupBoundary && (matchupsQuery.isLoading || matchupsQuery.isError || matchupsAbsent));
+    || (hasCompletedMatchupBoundary
+      && (matchupsQuery.isLoading || matchupsQuery.isError || matchupsMissingExpectedWeeks));
 
   const retryRequiredData = () => retryFailedHistoryQueries([
     leagueQuery,
@@ -311,7 +314,7 @@ export function BiddingHistoryPage() {
   ]);
   const retryEliminationStatus = () => {
     if (nflStateQuery.isError || !nflStateQuery.data) void nflStateQuery.refetch();
-    if (matchupsQuery.isError || matchupsAbsent) void matchupsQuery.refetch();
+    if (matchupsQuery.isError || matchupsMissingExpectedWeeks) void matchupsQuery.refetch();
   };
 
   return (
@@ -342,7 +345,7 @@ export function BiddingHistoryPage() {
           players={playersQuery.data}
           eligibleWeeks={eligibleWeeks}
           eliminationStatusUnavailable={eliminationStatusUnavailable}
-          onRetryEliminationStatus={(nflStateQuery.isError || matchupsQuery.isError || matchupsAbsent) ? retryEliminationStatus : undefined}
+          onRetryEliminationStatus={(nflStateQuery.isError || matchupsQuery.isError || matchupsMissingExpectedWeeks) ? retryEliminationStatus : undefined}
         />
       )}
     </main>
