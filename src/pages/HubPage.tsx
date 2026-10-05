@@ -13,6 +13,8 @@ import {
   useLeagueHistory,
   useNflState,
   useWeeklyProjections,
+  useWeeklyGames,
+  useCurrentLiveMatchups,
   useDraftPicks,
 } from '../api';
 import {
@@ -30,6 +32,7 @@ import {
   projectAllTeams,
   classifyCanonicalBidEvents,
   getActiveRosterIds,
+  buildLiveScoringModel,
   buildMaxVorpPlayerValues,
   buildModeledPositionRanks,
   buildSelectedRosterValueDisplay,
@@ -40,6 +43,7 @@ import { SeasonPicker } from '../components/SeasonPicker';
 import { HubRosterCard } from '../components/HubRosterCard';
 import { HubByeWarnings } from '../components/HubByeWarnings';
 import { HubPositionRankings } from '../components/HubPositionRankings';
+import { HubLiveScoring } from '../components/HubLiveScoring';
 import { useSwitchSeason } from '../hooks/useSwitchSeason';
 import { Calendar } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -140,6 +144,20 @@ export function HubPage() {
     projectionWeek,
     projectionWeek != null,
   );
+  const liveSeasonEnabled = projectionWeek != null
+    && !!league?.season
+    && league.season === nflStateQuery.data?.season;
+  const weeklyGamesQuery = useWeeklyGames(
+    league?.season ?? null,
+    projectionWeek,
+    liveSeasonEnabled,
+  );
+  const liveMatchupsQuery = useCurrentLiveMatchups(
+    leagueId,
+    projectionWeek,
+    liveSeasonEnabled,
+    weeklyGamesQuery.data,
+  );
   const eliminationModel = useMemo(
     () => matchups && rosters && users ? computeEliminations(matchups, rosters, users) : null,
     [matchups, rosters, users],
@@ -229,6 +247,39 @@ export function HubPage() {
         getPlayerPosition,
       )
     : null;
+  const liveModel = liveSeasonEnabled
+    && liveMatchupsQuery.data
+    && weeklyGamesQuery.data
+    && players
+    ? buildLiveScoringModel({
+        rosters,
+        matchups: liveMatchupsQuery.data,
+        weeklyProjections: weeklyScoredPlayers,
+        games: weeklyGamesQuery.data,
+        players,
+        elimination: elimResult,
+      })
+    : null;
+  const liveUpdatedAt = liveModel
+    ? Math.min(liveMatchupsQuery.dataUpdatedAt, weeklyGamesQuery.dataUpdatedAt)
+    : null;
+  const liveLoading = liveSeasonEnabled
+    && (liveMatchupsQuery.isLoading || weeklyGamesQuery.isLoading || playersLoading);
+  const liveRefreshing = liveMatchupsQuery.isFetching || weeklyGamesQuery.isFetching;
+  const liveUnavailableReason = !liveSeasonEnabled
+    ? nflStateQuery.data && league?.season !== nflStateQuery.data.season
+      ? 'Live scoring is unavailable for a selected historical season.'
+      : 'There is no current playing week to score.'
+    : liveMatchupsQuery.isError || weeklyGamesQuery.isError
+      ? 'Sleeper official scores or game status could not be loaded.'
+      : undefined;
+  const refreshLiveScores = async () => {
+    await Promise.all([
+      liveMatchupsQuery.refetch(),
+      weeklyGamesQuery.refetch(),
+      weeklyProjectionQuery.refetch(),
+    ]);
+  };
   const projections = projectAllTeams(rosters, weeklyScoredPlayers, league, elimResult);
   const myProjection = projections.find((team) => team.rosterId === rosterId);
   const allRosterHistoricalRanks = computeAllRosterHistoricalRanks(elimResult);
@@ -379,6 +430,16 @@ export function HubPage() {
           isLoading={historyLoading}
         />
 
+        <HubLiveScoring
+          week={projectionWeek}
+          model={liveModel}
+          isLoading={liveLoading}
+          isRefreshing={liveRefreshing}
+          unavailableReason={liveUnavailableReason}
+          updatedAt={liveUpdatedAt}
+          currentRosterId={rosterId}
+          onRefresh={refreshLiveScores}
+        />
 
         {/* Pre-season card */}
         <Card hover={false} className="p-6 mb-6">
@@ -517,6 +578,16 @@ export function HubPage() {
         isLoading={historyLoading}
       />
 
+      <HubLiveScoring
+        week={projectionWeek}
+        model={liveModel}
+        isLoading={liveLoading}
+        isRefreshing={liveRefreshing}
+        unavailableReason={liveUnavailableReason}
+        updatedAt={liveUpdatedAt}
+        currentRosterId={rosterId}
+        onRefresh={refreshLiveScores}
+      />
 
       <UpcomingProjectionCard
         week={projectionWeek}

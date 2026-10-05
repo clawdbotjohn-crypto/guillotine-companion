@@ -16,8 +16,10 @@ import type {
   FantasyCalcResponse,
   FantasyProsResponse,
   ProjectionSnapshotResponse,
+  SleeperGame,
 } from './types';
 import { getReceptionScoring, getFantasyProsScoring, hasSuperflex } from '../logic/rankingSources';
+import { getLiveRefreshInterval, isWithinLiveGameWindow, LIVE_STALE_MS } from '../logic/liveScoring';
 
 const STALE_5M = 1000 * 60 * 5;
 const STALE_30M = 1000 * 60 * 30;
@@ -66,6 +68,39 @@ export function useMatchups(leagueId: string | null, week: number) {
     queryFn: () => api.getMatchups(leagueId!, week),
     enabled: !!leagueId && week > 0,
     staleTime: STALE_1H,
+  });
+}
+
+export function useCurrentLiveMatchups(
+  leagueId: string | null,
+  week: number | null,
+  enabled: boolean,
+  games: readonly SleeperGame[] | undefined,
+) {
+  return useQuery<Matchup[]>({
+    queryKey: ['live-matchups', leagueId, week],
+    queryFn: () => api.getMatchups(leagueId!, week!),
+    enabled: enabled && !!leagueId && week != null && week > 0,
+    staleTime: LIVE_STALE_MS,
+    refetchInterval: () => getLiveRefreshInterval(games),
+    refetchOnWindowFocus: () => isWithinLiveGameWindow(games),
+    retry: 1,
+  });
+}
+
+export function useWeeklyGames(
+  season: string | null,
+  week: number | null,
+  enabled = true,
+) {
+  return useQuery<SleeperGame[]>({
+    queryKey: ['sleeper-weekly-games', season, week],
+    queryFn: () => api.getWeeklyGames(season!, week!),
+    enabled: enabled && !!season && week != null && week >= 1 && week <= 18,
+    staleTime: LIVE_STALE_MS,
+    refetchInterval: (query) => getLiveRefreshInterval(query.state.data),
+    refetchOnWindowFocus: (query) => isWithinLiveGameWindow(query.state.data),
+    retry: 1,
   });
 }
 

@@ -13,6 +13,23 @@ export {
 } from './elimination';
 
 export {
+  buildLiveScoringModel,
+  formatLiveUpdatedAt,
+  getLiveFreshness,
+  getLiveRefreshInterval,
+  getRemainingGameFraction,
+  isWithinLiveGameWindow,
+  LIVE_FRESHNESS_MS,
+  LIVE_REFRESH_MS,
+  LIVE_STALE_MS,
+  riskLabel,
+  type LiveFreshness,
+  type LiveProjectionQuality,
+  type LiveScoringModel,
+  type LiveTeamScore,
+} from './liveScoring';
+
+export {
   getProjectionScoring,
   getProjectionPoints,
   getRestOfSeasonStartWeek,
