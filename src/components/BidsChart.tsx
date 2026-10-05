@@ -12,7 +12,7 @@ import {
   ZAxis,
 } from 'recharts';
 import type { BidInfo, TeamInfo } from '../logic/elimination';
-import { buildBidChartData, type BidChartPoint } from './bidChartData';
+import { buildBidChartData, formatBidTimestamp, type BidChartPoint } from './bidChartData';
 import { Card } from './ui';
 
 const POSITION_COLORS: Record<string, string> = {
@@ -43,6 +43,7 @@ export function BidsChart({ bids, weeks, teams, positions }: BidsChartProps) {
   const firstWeek = weeks[0] ?? 1;
   const lastWeek = weeks[weeks.length - 1] ?? firstWeek;
   const positionLabel = positions?.length ? positions.join('/') : 'all positions';
+  const weekScopeLabel = weeks.length === 1 ? ` in Week ${firstWeek}` : '';
   const accessibleSummary = summary
     .map(({ week, count }) => `Week ${week}: ${count} observed ${count === 1 ? 'win' : 'wins'}`)
     .join('; ');
@@ -65,13 +66,13 @@ export function BidsChart({ bids, weeks, teams, positions }: BidsChartProps) {
         {points.length === 0 ? (
           <div className="min-h-36 flex items-center justify-center text-center px-4">
             <p className="text-[#4a4d77] text-xs">
-              No completed winning waiver bids found for {positionLabel}.
+              No completed winning waiver bids found for {positionLabel}{weekScopeLabel}.
             </p>
           </div>
         ) : (
           <div
             role="img"
-            aria-label={`Completed winning waiver bid amounts by week for ${positionLabel}. ${accessibleSummary}.`}
+            aria-label={`Completed winning waiver bid amounts by week for ${positionLabel}${weekScopeLabel}. ${accessibleSummary}.`}
             aria-describedby={summaryId}
           >
             <ResponsiveContainer width="100%" height={220}>
@@ -152,7 +153,8 @@ function BidDot({ cx = 0, cy = 0, payload }: BidDotProps) {
   if (!payload) return <g />;
   const isZero = payload.amount === 0;
   const color = POSITION_COLORS[payload.position] ?? '#a5b4fc';
-  const label = `${payload.playerName}, ${payload.position}, ${payload.teamName}, Week ${payload.week}, winning bid $${payload.amount}`;
+  const transactionTime = formatBidTimestamp(payload.createdAt);
+  const label = `${payload.playerName}, ${payload.position}, ${payload.teamName}, Week ${payload.week}, winning bid $${payload.amount}, transaction time ${transactionTime}`;
 
   return (
     <circle
@@ -172,12 +174,15 @@ function BidDot({ cx = 0, cy = 0, payload }: BidDotProps) {
   );
 }
 
-function BidTooltip({ point }: { point: BidChartPoint }) {
+export function BidTooltip({ point }: { point: BidChartPoint }) {
   return (
     <div className="max-w-56 rounded-lg border border-[#2a2e55] bg-[#0e1025] p-2 font-['Space_Mono'] text-[11px] shadow-xl">
       <div className="break-words text-[#f0f0ff]">{point.playerName}</div>
       <div className="break-words text-[#6b6e99]">{point.position} · {point.teamName}</div>
       <div className="mt-1 text-[#f59e0b]">Week {point.week} · ${point.amount} winning bid</div>
+      <div className="mt-1 break-words text-[10px] text-[#6b6e99]">
+        Transaction time: {formatBidTimestamp(point.createdAt)}
+      </div>
     </div>
   );
 }

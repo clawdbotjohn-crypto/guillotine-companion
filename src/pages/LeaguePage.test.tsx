@@ -88,7 +88,7 @@ function transaction(playerId: string, rosterId: number, amount: number, week: n
     drops: null,
     settings: { waiver_bid: amount },
     leg: week,
-    created: week,
+    created: Date.UTC(2026, 8, 10 + week, 14, 30, 0),
   };
 }
 
@@ -135,7 +135,7 @@ describe('LeaguePage Bids by Week placement and filter wiring', () => {
     window.HTMLElement.prototype.scrollTo = vi.fn();
   });
 
-  it('places the full trend above filters, keeps it independent from week selection, and applies position selection', () => {
+  it('filters the chart by week and position, restores all weeks, and includes transaction-only weeks', () => {
     render(<LeaguePage />);
     fireEvent.click(screen.getByRole('button', { name: 'Bids' }));
 
@@ -144,15 +144,31 @@ describe('LeaguePage Bids by Week placement and filter wiring', () => {
     const positionFilter = screen.getByTestId('bids-position-filter');
     expect(chart.compareDocumentPosition(weekFilter) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(weekFilter.compareDocumentPosition(positionFilter) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(weekFilter).getByRole('button', { name: '3' })).toBeTruthy();
+    expect(screen.getByLabelText(/Wide Receiver.*Week 1.*\$0/)).toBeTruthy();
     expect(screen.getByLabelText(/Quarterback.*Week 3.*\$40/)).toBeTruthy();
 
     fireEvent.click(within(weekFilter).getByRole('button', { name: '1' }));
-    expect(screen.getByLabelText(/Quarterback.*Week 3.*\$40/)).toBeTruthy();
-
-    fireEvent.click(within(positionFilter).getByRole('button', { name: 'WR' }));
     expect(screen.getByLabelText(/Wide Receiver.*Week 1.*\$0/)).toBeTruthy();
     expect(screen.queryByLabelText(/Quarterback.*Week 3/)).toBeNull();
-    expect(screen.getByLabelText(/Week 2: 0 observed wins/)).toBeTruthy();
-    expect(screen.getByLabelText(/Week 3: 0 observed wins/)).toBeTruthy();
+    expect(screen.getByLabelText(/all positions in Week 1.*Week 1: 1 observed win/)).toBeTruthy();
+
+    fireEvent.click(within(positionFilter).getByRole('button', { name: 'FLEX' }));
+    expect(screen.getByLabelText(/Wide Receiver.*Week 1/)).toBeTruthy();
+
+    fireEvent.click(within(weekFilter).getByRole('button', { name: '3' }));
+    expect(screen.queryByLabelText(/Wide Receiver.*Week 1/)).toBeNull();
+    expect(screen.queryByLabelText(/Quarterback.*Week 3/)).toBeNull();
+    expect(screen.getByText('No completed winning waiver bids found for RB/WR/TE in Week 3.')).toBeTruthy();
+
+    fireEvent.click(within(weekFilter).getByRole('button', { name: 'All' }));
+    expect(screen.getByLabelText(/Wide Receiver.*Week 1/)).toBeTruthy();
+    expect(screen.queryByLabelText(/Quarterback.*Week 3/)).toBeNull();
+    expect(screen.getByLabelText(/Week 1: 1 observed win; Week 2: 0 observed wins; Week 3: 0 observed wins/)).toBeTruthy();
+
+    fireEvent.click(within(positionFilter).getByRole('button', { name: 'All' }));
+    expect(screen.getByLabelText(/Wide Receiver.*Week 1.*\$0/)).toBeTruthy();
+    expect(screen.getByLabelText(/Quarterback.*Week 3.*\$40/)).toBeTruthy();
+    expect(screen.getByLabelText(/Week 1: 1 observed win; Week 2: 0 observed wins; Week 3: 1 observed win/)).toBeTruthy();
   });
 });

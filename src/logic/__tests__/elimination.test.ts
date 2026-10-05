@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { computeEliminations, getActiveRosterIds, getCompletedLeagueWeek, getUpcomingPlayingWeek, isGuillotineLeague } from '../elimination';
-import type { Matchup, Roster, SleeperUser } from '../../api/types';
+import { computeEliminations, extractBids, getActiveRosterIds, getCompletedLeagueWeek, getUpcomingPlayingWeek, isGuillotineLeague } from '../elimination';
+import type { Matchup, Roster, SleeperUser, Transaction } from '../../api/types';
 
 // Mock the players store
 vi.mock('../../store/players', () => ({
@@ -224,6 +224,34 @@ describe('current-week elimination guard', () => {
       makeUser('u1', 'Alice'), makeUser('u2', 'Bob'), makeUser('u3', 'Charlie'),
     ]);
     expect([...getActiveRosterIds(result)]).toEqual([2, 3]);
+  });
+});
+
+describe('extractBids', () => {
+  it('preserves the exact Sleeper transaction timestamp and a genuine $0 winning bid', () => {
+    const created = Date.UTC(2026, 8, 17, 14, 23, 45, 678);
+    const winningTransaction: Transaction = {
+      type: 'waiver',
+      status: 'complete',
+      transaction_id: 'winning-zero-bid',
+      roster_ids: [7],
+      adds: { 'player-7': 7 },
+      drops: null,
+      settings: { waiver_bid: 0 },
+      leg: 4,
+      created,
+    };
+
+    expect(extractBids(new Map([[4, [winningTransaction]]]))).toEqual([{
+      week: 4,
+      rosterId: 7,
+      playerId: 'player-7',
+      playerName: 'Player player-7',
+      position: 'WR',
+      amount: 0,
+      status: 'complete',
+      createdAt: created,
+    }]);
   });
 });
 

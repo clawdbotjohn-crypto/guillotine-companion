@@ -10,9 +10,23 @@ export interface BidWeekSummary {
   count: number;
 }
 
+const BID_TIME_FORMATTER = new Intl.DateTimeFormat(undefined, {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+  second: '2-digit',
+  timeZoneName: 'short',
+});
+
+export function formatBidTimestamp(createdAt: number): string {
+  return BID_TIME_FORMATTER.format(new Date(createdAt));
+}
+
 /**
- * Preserve every observed bid as one point. Small deterministic horizontal offsets make dense
- * same-week data inspectable without moving a point into another week's visual band.
+ * Preserve every observed bid as one point while keeping NFL weeks as the chart's only x buckets.
+ * Transaction timestamps remain point metadata for detail views; they never affect x geometry.
  */
 export function buildBidChartData(
   bids: BidInfo[],
@@ -35,16 +49,13 @@ export function buildBidChartData(
   const points: BidChartPoint[] = [];
   for (const week of weeks) {
     const weekBids = bidsByWeek.get(week) ?? [];
-    weekBids.forEach((bid, index) => {
-      const offset = weekBids.length <= 1
-        ? 0
-        : ((index / (weekBids.length - 1)) - 0.5) * 0.56;
+    for (const bid of weekBids) {
       points.push({
         ...bid,
-        plotWeek: week + offset,
+        plotWeek: week,
         teamName: teams.get(bid.rosterId)?.displayName ?? `Team ${bid.rosterId}`,
       });
-    });
+    }
   }
 
   return {

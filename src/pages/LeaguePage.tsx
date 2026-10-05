@@ -84,6 +84,7 @@ export function LeaguePage() {
     ...elimResult.weeks.map((week) => week.week),
     ...bids.map((bid) => bid.week),
   ])].sort((a, b) => a - b);
+  const visibleBidChartWeeks = selectedWeek === null ? bidChartWeeks : [selectedWeek];
   const positionMatches = (position: string) => bidPosition === 'ALL'
     || position === bidPosition
     || (bidPosition === 'FLEX' && ['RB', 'WR', 'TE'].includes(position));
@@ -156,11 +157,11 @@ export function LeaguePage() {
         </Card>
       )}
 
-      {/* Full-season bid trend stays independent of the week picker below. */}
+      {/* The chart and detail views share the same week and position filters. */}
       {hasWeekData && activeView === 'bids' && (
         <BidsChart
           bids={bids}
-          weeks={bidChartWeeks}
+          weeks={visibleBidChartWeeks}
           teams={elimResult.teams}
           positions={visibleBidPositions}
         />
@@ -180,17 +181,17 @@ export function LeaguePage() {
           >
             All
           </button>
-          {elimResult.weeks.map((w) => (
+          {bidChartWeeks.map((week) => (
             <button
-              key={w.week}
-              onClick={() => setSelectedWeek(w.week)}
+              key={week}
+              onClick={() => setSelectedWeek(week)}
               className={`shrink-0 w-9 h-9 rounded-lg text-xs font-['Space_Mono'] font-bold transition-all
-                ${selectedWeek === w.week
+                ${selectedWeek === week
                   ? 'bg-[#6366f1] text-white shadow-[0_0_8px_rgba(99,102,241,0.4)]'
                   : 'bg-[#161a3a] text-[#6b6e99] hover:bg-[#1a1e3a]'
                 }`}
             >
-              {w.week}
+              {week}
             </button>
           ))}
         </div>
@@ -362,7 +363,7 @@ export function LeaguePage() {
           {bidsMode === 'grid' ? (
             <BidGrid
               bids={filteredBids}
-              weeks={elimResult.weeks.map((w) => w.week)}
+              weeks={bidChartWeeks}
               teams={elimResult.teams}
               totalBudget={league?.settings?.waiver_budget ?? 1000}
               selectedWeek={selectedWeek}

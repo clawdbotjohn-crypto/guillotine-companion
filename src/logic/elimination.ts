@@ -246,6 +246,8 @@ export interface BidInfo {
   position: string;
   amount: number;
   status: string;
+  /** Exact Sleeper transaction `created` timestamp in milliseconds. */
+  createdAt: number;
 }
 
 import { getPlayerName as getPlayerNameFromStore, getPlayerPosition } from '../store/players';
@@ -265,6 +267,7 @@ export function extractBids(weekTransactions: Map<number, Transaction[]>): BidIn
             position: getPlayerPosition(playerId),
             amount: t.settings!.waiver_bid!,
             status: 'complete',
+            createdAt: t.created,
           });
         }
       }
