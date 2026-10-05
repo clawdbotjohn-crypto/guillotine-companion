@@ -17,6 +17,7 @@ import {
 import { Card, Skeleton, StatusBadge, PositionBadge } from '../components/ui';
 import { Trophy, Medal, Calendar } from 'lucide-react';
 import { BidGrid } from '../components/BidGrid';
+import { BidsChart } from '../components/BidsChart';
 import { ScoresChart } from '../components/ScoresChart';
 import { FaabTracker } from '../components/FaabTracker';
 import { SeasonPicker } from '../components/SeasonPicker';
@@ -79,6 +80,11 @@ export function LeaguePage() {
     : null;
   const projections = projectAllTeams(rosters, weeklyScoredPlayers, league, elimResult);
   const bids = transactions ? extractBids(transactions) : [];
+  const bidChartWeeks = [...new Set([
+    ...elimResult.weeks.map((week) => week.week),
+    ...bids.map((bid) => bid.week),
+  ])].sort((a, b) => a - b);
+  const visibleBidChartWeeks = selectedWeek === null ? bidChartWeeks : [selectedWeek];
   const positionMatches = (position: string) => bidPosition === 'ALL'
     || position === bidPosition
     || (bidPosition === 'FLEX' && ['RB', 'WR', 'TE'].includes(position));
@@ -151,10 +157,20 @@ export function LeaguePage() {
         </Card>
       )}
 
+      {/* The chart and detail views share the same week and position filters. */}
+      {hasWeekData && activeView === 'bids' && (
+        <BidsChart
+          bids={bids}
+          weeks={visibleBidChartWeeks}
+          teams={elimResult.teams}
+          positions={visibleBidPositions}
+        />
+      )}
+
       {/* Week picker — Bids (list mode) + Grid share the same week filter with an All option */}
       {hasWeekData && activeView === 'bids' && (
         <>
-        <div className="flex gap-1.5 overflow-x-auto pb-3 mb-2 scrollbar-hide">
+        <div data-testid="bids-week-filter" className="flex gap-1.5 overflow-x-auto pb-3 mb-2 scrollbar-hide">
           <button
             onClick={() => setSelectedWeek(null)}
             className={`shrink-0 px-3 h-9 rounded-lg text-xs font-['Space_Mono'] font-bold transition-all
@@ -165,21 +181,21 @@ export function LeaguePage() {
           >
             All
           </button>
-          {elimResult.weeks.map((w) => (
+          {bidChartWeeks.map((week) => (
             <button
-              key={w.week}
-              onClick={() => setSelectedWeek(w.week)}
+              key={week}
+              onClick={() => setSelectedWeek(week)}
               className={`shrink-0 w-9 h-9 rounded-lg text-xs font-['Space_Mono'] font-bold transition-all
-                ${selectedWeek === w.week
+                ${selectedWeek === week
                   ? 'bg-[#6366f1] text-white shadow-[0_0_8px_rgba(99,102,241,0.4)]'
                   : 'bg-[#161a3a] text-[#6b6e99] hover:bg-[#1a1e3a]'
                 }`}
             >
-              {w.week}
+              {week}
             </button>
           ))}
         </div>
-        <div className="flex gap-1 overflow-x-auto pb-3 mb-4 scrollbar-hide" aria-label="Filter bids by position">
+        <div data-testid="bids-position-filter" className="flex gap-1 overflow-x-auto pb-3 mb-4 scrollbar-hide" aria-label="Filter bids by position">
           {(['ALL', 'QB', 'RB', 'WR', 'TE', 'FLEX', 'DEF', 'K'] as const).map((position) => (
             <button
               key={position}
@@ -347,7 +363,7 @@ export function LeaguePage() {
           {bidsMode === 'grid' ? (
             <BidGrid
               bids={filteredBids}
-              weeks={elimResult.weeks.map((w) => w.week)}
+              weeks={bidChartWeeks}
               teams={elimResult.teams}
               totalBudget={league?.settings?.waiver_budget ?? 1000}
               selectedWeek={selectedWeek}
