@@ -250,6 +250,7 @@ export function HubPage() {
   const liveModel = liveSeasonEnabled
     && liveMatchupsQuery.data
     && weeklyGamesQuery.data
+    && weeklyScoredPlayers?.size
     && players
     ? buildLiveScoringModel({
         rosters,
@@ -261,18 +262,33 @@ export function HubPage() {
       })
     : null;
   const liveUpdatedAt = liveModel
-    ? Math.min(liveMatchupsQuery.dataUpdatedAt, weeklyGamesQuery.dataUpdatedAt)
+    ? Math.min(
+        liveMatchupsQuery.dataUpdatedAt,
+        weeklyGamesQuery.dataUpdatedAt,
+        weeklyProjectionQuery.dataUpdatedAt,
+      )
     : null;
   const liveLoading = liveSeasonEnabled
-    && (liveMatchupsQuery.isLoading || weeklyGamesQuery.isLoading || playersLoading);
-  const liveRefreshing = liveMatchupsQuery.isFetching || weeklyGamesQuery.isFetching;
+    && (
+      liveMatchupsQuery.isLoading
+      || weeklyGamesQuery.isLoading
+      || weeklyProjectionQuery.isLoading
+      || playersLoading
+    );
+  const liveRefreshing = liveMatchupsQuery.isFetching
+    || weeklyGamesQuery.isFetching
+    || weeklyProjectionQuery.isFetching;
   const liveUnavailableReason = !liveSeasonEnabled
     ? nflStateQuery.data && league?.season !== nflStateQuery.data.season
       ? 'Live scoring is unavailable for a selected historical season.'
       : 'There is no current playing week to score.'
     : liveMatchupsQuery.isError || weeklyGamesQuery.isError
       ? 'Sleeper official scores or game status could not be loaded.'
-      : undefined;
+      : weeklyProjectionQuery.isError
+        ? 'Sleeper weekly projections could not be loaded.'
+        : weeklyProjectionQuery.isSuccess && !weeklyScoredPlayers?.size
+          ? 'Sleeper has no usable projections for this scoring week.'
+          : undefined;
   const refreshLiveScores = async () => {
     await Promise.all([
       liveMatchupsQuery.refetch(),

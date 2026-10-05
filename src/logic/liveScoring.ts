@@ -10,6 +10,7 @@ export const LIVE_REFRESH_MS = 60_000;
 export const LIVE_FRESHNESS_MS = 120_000;
 const LIVE_WINDOW_BEFORE_MS = 15 * 60_000;
 const LIVE_WINDOW_AFTER_MS = 5 * 60 * 60_000;
+const LIVE_WAKE_AHEAD_MS = 6 * 60 * 60_000;
 
 export type LiveProjectionQuality = 'full' | 'partial' | 'unavailable';
 export type LiveFreshness = 'fresh' | 'stale' | 'unavailable';
@@ -95,7 +96,7 @@ export function getRemainingGameFraction(game: SleeperGame): number | null {
     return Math.min(1, Math.max(0, totalRemaining / 3600));
   }
 
-  const quarter = finite(metadata.quarter ?? metadata.period ?? metadata.qtr);
+  const quarter = finite(metadata.quarter_num ?? metadata.quarter ?? metadata.period ?? metadata.qtr);
   const clock = metadata.time_remaining ?? metadata.clock;
   if (quarter == null || !Number.isInteger(quarter) || quarter < 1 || quarter > 4) return null;
   let seconds: number | null = null;
@@ -125,13 +126,29 @@ export function isWithinLiveGameWindow(games: readonly SleeperGame[] | undefined
   if (!games?.length) return false;
   if (games.some(isGameInProgress)) return true;
   return games.some((game) => {
+    if (isGameComplete(game)) return false;
     const start = normalizedStartTime(game.start_time);
     return start != null && now >= start - LIVE_WINDOW_BEFORE_MS && now <= start + LIVE_WINDOW_AFTER_MS;
   });
 }
 
+/**
+ * Poll once a minute only in a live window. When a kickoff is within six hours,
+ * return one one-shot delay to wake the query at the window boundary; games
+ * hours or days away do not cause background polling.
+ */
 export function getLiveRefreshInterval(games: readonly SleeperGame[] | undefined, now = Date.now()): number | false {
-  return isWithinLiveGameWindow(games, now) ? LIVE_REFRESH_MS : false;
+  if (isWithinLiveGameWindow(games, now)) return LIVE_REFRESH_MS;
+  const nextWindow = (games ?? [])
+    .filter((game) => !isGameComplete(game))
+    .map((game) => normalizedStartTime(game.start_time))
+    .filter((start): start is number => start != null)
+    .map((start) => start - LIVE_WINDOW_BEFORE_MS)
+    .filter((windowStart) => windowStart > now)
+    .sort((left, right) => left - right)[0];
+  if (nextWindow == null) return false;
+  const delay = nextWindow - now;
+  return delay <= LIVE_WAKE_AHEAD_MS ? Math.max(1_000, delay) : false;
 }
 
 export function getLiveFreshness(updatedAt: number | null | undefined, now = Date.now()): LiveFreshness {
@@ -225,8 +242,9 @@ export function buildLiveScoringModel(input: BuildLiveScoringInput): LiveScoring
   });
 
   const activeTeams = teams.filter((team) => !team.eliminated);
+  // Partial totals remain visible, but never drive survival labels or a cutline.
   const rankingsAvailable = activeTeams.length > 0
-    && activeTeams.every((team) => team.projectedFinal != null);
+    && activeTeams.every((team) => team.projectedFinal != null && team.projectionQuality === 'full');
   let projectedCutline: number | null = null;
   if (rankingsAvailable) {
     const standings = rankActiveTeams(

@@ -82,7 +82,9 @@ describe('live scoring model', () => {
       weeklyProjections: new Map(), games,
       players: new Map([['done', player('done', 'DONE')]]), elimination: elimination([2, 3]),
     });
-    expect(model.teams[0]).toMatchObject({ projectedFinal: 12, projectionQuality: 'partial' });
+    expect(model.teams[0]).toMatchObject({ projectedFinal: 12, projectionQuality: 'partial', standing: null });
+    expect(model.rankingsAvailable).toBe(false);
+    expect(model.projectedCutline).toBeNull();
   });
 
   it('fails closed when an empty game feed cannot establish starter state', () => {
@@ -111,18 +113,28 @@ describe('live scoring model', () => {
 
 describe('live query policy and freshness', () => {
   const now = 1_000_000_000_000;
-  it('refreshes only during bounded kickoff windows or an explicit in-progress state', () => {
+  it('polls only in live windows, schedules one bounded wake-up, and ignores games hours away', () => {
     const near = [{ status: 'pre_game', start_time: now + 10 * 60_000 }];
-    const far = [{ status: 'pre_game', start_time: now + 3 * 60 * 60_000 }];
+    const oneHourAway = [{ status: 'pre_game', start_time: now + 60 * 60_000 }];
+    const far = [{ status: 'pre_game', start_time: now + 12 * 60 * 60_000 }];
     expect(isWithinLiveGameWindow(near, now)).toBe(true);
     expect(getLiveRefreshInterval(near, now)).toBe(LIVE_REFRESH_MS);
+    expect(getLiveRefreshInterval(oneHourAway, now)).toBe(45 * 60_000);
     expect(getLiveRefreshInterval(far, now)).toBe(false);
     expect(isWithinLiveGameWindow([{ status: 'in_progress' }], now)).toBe(true);
+    expect(getLiveRefreshInterval([{ status: 'complete', start_time: now }], now)).toBe(false);
   });
 
-  it('derives bounded remaining fractions only from trustworthy progress metadata', () => {
+  it('derives bounded remaining fractions from observed Sleeper progress fields only', () => {
     expect(getRemainingGameFraction(games[1])).toBe(0.25);
+    expect(getRemainingGameFraction({
+      status: 'in_progress',
+      metadata: { quarter_num: '2', time_remaining: '07:30', is_in_progress: true },
+    })).toBe(0.625);
     expect(getRemainingGameFraction({ status: 'in_progress', metadata: { quarter: 2 } })).toBeNull();
+    expect(getRemainingGameFraction({
+      status: 'in_progress', metadata: { quarter_num: 5, time_remaining: '10:00' },
+    })).toBeNull();
   });
 
   it('reports fresh, stale, and unavailable timestamps', () => {
