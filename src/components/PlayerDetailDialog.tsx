@@ -5,9 +5,17 @@ import type { CanonicalBidEvent, FreeAgentTeamImpact } from '../logic';
 import type { ManagerDetailData } from '../logic/managerDetails';
 import { isEligibleBuyerPrediction, orderManagerPredictions, type ManagerPredictionDisplay } from '../logic/managerPredictionDisplay';
 import { formatDisplayCurrency } from '../logic/displayCurrency';
+import { rankQuartile } from '../logic/rankingQuartiles';
 import { WaiverManagerPredictions } from './ManagerBiddingProfiles';
 
 export type PlayerProjectionState = 'loading' | 'error' | 'loaded' | 'unavailable';
+
+function rankColor(rank: number, outOf: number): string {
+  const quartile = rankQuartile(rank, outOf);
+  if (quartile === 'top') return '#10b981';
+  if (quartile === 'bottom') return '#f43f5e';
+  return '#f59e0b';
+}
 
 export interface PlayerDetailData {
   playerId: string;
@@ -158,8 +166,24 @@ export function PlayerDetailDialog({ open, onClose, data }: { open: boolean; onC
                   >
                     {impactDelta != null && impactDelta > 0 ? '+' : ''}{impactDelta?.toFixed(1)}
                   </p>
-                  <p className="font-['Space_Mono']">Overall {impact.overallRank.before}/{impact.overallRank.outOf} → {impact.overallRank.after}/{impact.overallRank.outOf}</p>
-                  <p className="font-['Space_Mono']">{impact.position} {impact.positionRank.before}/{impact.positionRank.outOf} → {impact.positionRank.after}/{impact.positionRank.outOf}</p>
+                  <p
+                    aria-label={`Overall ${impact.overallRank.before}/${impact.overallRank.outOf} to ${impact.overallRank.after}/${impact.overallRank.outOf}`}
+                    className="font-['Space_Mono']"
+                  >
+                    <span aria-hidden="true">Overall </span>
+                    <span data-testid="team-impact-overall-before" style={{ color: rankColor(impact.overallRank.before, impact.overallRank.outOf) }}>{impact.overallRank.before}/{impact.overallRank.outOf}</span>
+                    <span aria-hidden="true"> → </span>
+                    <span data-testid="team-impact-overall-after" style={{ color: rankColor(impact.overallRank.after, impact.overallRank.outOf) }}>{impact.overallRank.after}/{impact.overallRank.outOf}</span>
+                  </p>
+                  <p
+                    aria-label={`${impact.position} ${impact.positionRank.before}/${impact.positionRank.outOf} to ${impact.positionRank.after}/${impact.positionRank.outOf}`}
+                    className="font-['Space_Mono']"
+                  >
+                    <span aria-hidden="true">{impact.position} </span>
+                    <span data-testid="team-impact-position-before" style={{ color: rankColor(impact.positionRank.before, impact.positionRank.outOf) }}>{impact.positionRank.before}/{impact.positionRank.outOf}</span>
+                    <span aria-hidden="true"> → </span>
+                    <span data-testid="team-impact-position-after" style={{ color: rankColor(impact.positionRank.after, impact.positionRank.outOf) }}>{impact.positionRank.after}/{impact.positionRank.outOf}</span>
+                  </p>
                   <p className="font-['Space_Mono']">Lineup pts {impact.lineupPoints.before.toFixed(1)} → {impact.lineupPoints.after.toFixed(1)}</p>
                 </div>
               )}

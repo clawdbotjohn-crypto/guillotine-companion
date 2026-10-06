@@ -124,8 +124,12 @@ describe('PlayerDetailDialog', () => {
     expect(within(teamImpact).queryByText('None')).toBeNull();
     expect(within(teamImpact).getByText('+13.0')).toBeTruthy();
     expect(within(teamImpact).getByLabelText('Lineup points delta plus 13.0')).toBeTruthy();
-    expect(within(teamImpact).getByText('Overall 24/26 → 18/26')).toBeTruthy();
-    expect(within(teamImpact).getByText('RB 18/26 → 3/26')).toBeTruthy();
+    expect(within(teamImpact).getByLabelText('Overall 24/26 to 18/26')).toBeTruthy();
+    expect(within(teamImpact).getByLabelText('RB 18/26 to 3/26')).toBeTruthy();
+    expect(within(teamImpact).getByTestId('team-impact-overall-before').style.color).toBe('rgb(244, 63, 94)');
+    expect(within(teamImpact).getByTestId('team-impact-overall-after').style.color).toBe('rgb(245, 158, 11)');
+    expect(within(teamImpact).getByTestId('team-impact-position-before').style.color).toBe('rgb(245, 158, 11)');
+    expect(within(teamImpact).getByTestId('team-impact-position-after').style.color).toBe('rgb(16, 185, 129)');
     expect(within(teamImpact).getByText('Lineup pts 64.0 → 77.0')).toBeTruthy();
     expect(within(teamImpact).queryByText('Optimized next-week lineup · active teams only')).toBeNull();
     expect(within(teamImpact).queryByText('Projection change:')).toBeNull();
