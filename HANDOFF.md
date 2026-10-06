@@ -44,10 +44,10 @@
 ### Hosted QA on PR preview
 - Confirmed on live preview (2026 SeaMex data path):
   - no side `Bids` rail on Waivers cards,
-  - card tap/click opens Player Details,
-  - popup still exposes `Predicted bidding`,
-  - Team Impact shown as compact four-line stack with no explanatory text.
-- **Blocker for explicit mobile rerun:** after desktop verification, OpenClaw browser control service timed out before running a second forced 390×844 capture pass.
+  - card tap/click opens Player Details and popup bidding remains present,
+  - Team Impact is a compact four-line stack with `Overall:`, `WR:`, and `Lineup pts:`,
+  - complete accessible labels remain present (`Overall: 7/24 to 3/24`, `WR: 1/24 to 1/24`),
+  - before/after rank values retain independent amber/green quartile colors while labels/arrows remain neutral.
 
 ## Files changed
 
@@ -56,6 +56,7 @@
 - `src/pages/WaiversPage.tsx`
 - `src/pages/WaiversPage.test.tsx`
 - `PROGRESS.md`
+- `HANDOFF.md`
 
 ## Safety / boundaries
 

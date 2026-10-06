@@ -8,7 +8,7 @@ Authoritative source: Discord message [`1556958219526471684`](https://discord.co
 
 - [x] Update existing review PR #21 only.
 - [x] Add colons between each compact Team Impact row label and its values: `Overall:`, `{position}:`, and `Lineup pts:`. Preserve the vertical four-line layout, independently colored rank values, accessible text, calculations, and `None` states.
-- [x] Update focused assertions and run resource-safe verification. Focused `PlayerDetailDialog` tests passed 12/12, file-scoped lint passed with 0 warnings/errors, and `git diff --check` passed. Existing PR/preview refresh and hosted verification are recorded below; no merge, production deploy, branch deletion, or PR #20 change was performed.
+- [x] Update focused assertions and run resource-safe verification. Commit `29deec1` updated existing PR #21; focused `PlayerDetailDialog` tests passed 12/12, file-scoped lint passed with 0 warnings/errors, `git diff --check` passed, and both GitHub checks passed. Hosted preview QA confirmed `Overall:`, `WR:`, and `Lineup pts:` in the four-line stack with complete accessible labels, independent rank colors, and popup bidding preserved. No merge, production deploy, branch deletion, or PR #20 change was performed.
 
 ## P0 — Apply established rank colors to Team Impact transitions (owner refinement, 2026-10-06)
 
