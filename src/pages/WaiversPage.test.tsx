@@ -174,7 +174,7 @@ describe('waiver controls', () => {
     expect(within(dialog).getByRole('heading', { name: 'Bidding history' })).toBeTruthy();
   });
 
-  it('preserves full accessible manager prediction rows and detail access beside player details', () => {
+  it('removes the side bids rail and keeps popup Predicted bidding as the details path', () => {
     const prediction: ManagerPredictionDisplay = {
       rosterId: 1, managerName: 'Prediction Manager', predictedBid: 40, currentFaab: 100,
       cappedByFaab: false, likelihood: 'Likely',
@@ -188,15 +188,16 @@ describe('waiver controls', () => {
       showManagerPredictions
     />);
     const playerButton = screen.getByRole('button', { name: /Test Runner, suggested bid/i });
-    const predictionsButton = screen.getByRole('button', { name: 'Show bid predictions for Test Runner' });
-    fireEvent.click(predictionsButton);
-    expect(predictionsButton.getAttribute('aria-expanded')).toBe('true');
-    expect(screen.getByText('Bid Predictions')).toBeTruthy();
-    expect(screen.getByText('Prediction Manager')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /open details for Prediction Manager/i }));
+    expect(screen.queryByRole('button', { name: /show bid predictions/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /hide bids/i })).toBeNull();
+    expect(screen.queryByText('Bid Predictions')).toBeNull();
+    fireEvent.click(playerButton);
+    const dialog = screen.getByRole('dialog', { name: 'Test Runner' });
+    expect(within(dialog).getByText('Predicted bidding')).toBeTruthy();
+    expect(within(dialog).getByText('Prediction Manager')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: /open details for Prediction Manager/i }));
     expect(screen.getByRole('dialog', { name: 'Prediction Manager' })).toBeTruthy();
-    expect(screen.queryByRole('dialog', { name: 'Test Runner' })).toBeNull();
-    expect(playerButton).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: 'Test Runner' })).toBeTruthy();
   });
 
   it('uses the VoRP team count label and accessible explanatory disclosure', () => {
@@ -256,6 +257,7 @@ describe('waiver controls', () => {
     expect(screen.queryByRole('button', { name: /bid predictions/i })).toBeNull();
     rerender(<WaiverPlayerCard {...cardProps} strategy="safe" managerPredictions={predictions} showManagerPredictions />);
     expect(screen.getByText((_text, element) => element?.textContent === 'Predicted bid $40')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /bid predictions/i })).toBeNull();
   });
 
   it('keeps rostered and unrostered cards at the same collapsed density without an arrow icon', () => {

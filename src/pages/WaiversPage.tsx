@@ -3,7 +3,6 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { AlertTriangle, ShoppingCart, Info, RefreshCw, UserCheck } from 'lucide-react';
 import { Button, Card, Skeleton } from '../components/ui';
 import { FaabOverBudgetWarning } from '../components/FaabOverBudgetWarning';
-import { WaiverManagerPredictions } from '../components/ManagerBiddingProfiles';
 import { buildManagerDetailData, type ManagerDetailData } from '../logic/managerDetails';
 import { PlayerDetailDialog, type PlayerProjectionState } from '../components/PlayerDetailDialog';
 import { buildManagerPredictions, isEligibleBuyerPrediction, managerName, orderManagerPredictions, type ManagerPredictionDisplay } from '../logic/managerPredictionDisplay';
@@ -245,7 +244,6 @@ export function WaiverPlayerCard({
   teamImpactContext?: TeamImpactContext;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [predictionsOpen, setPredictionsOpen] = useState(false);
   const suggestion = row.suggestions.find((item) => item.strategy === strategy);
   const value = suggestion?.value ?? 0;
   const projectionWeek = playingWeek == null ? '—' : playingWeek;
@@ -326,25 +324,7 @@ export function WaiverPlayerCard({
             </div>
           </div>
         </button>
-        {hasPredictionDetails && (
-          <button
-            type="button"
-            aria-label={`${predictionsOpen ? 'Hide' : 'Show'} bid predictions for ${row.name}`}
-            aria-expanded={predictionsOpen}
-            aria-controls={`player-bids-${row.playerId}`}
-            onClick={() => setPredictionsOpen((open) => !open)}
-            className="shrink-0 border-l border-[#20264d] px-3 text-[10px] font-semibold uppercase tracking-wider text-[#9ca3c7] hover:bg-[#161a3a] hover:text-[#f0f0ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#818cf8]"
-          >
-            {predictionsOpen ? 'Hide bids' : 'Bids'}
-          </button>
-        )}
         </div>
-        {hasPredictionDetails && predictionsOpen && (
-          <div id={`player-bids-${row.playerId}`} className="border-t border-[#20264d] px-2.5 pb-2.5 pt-2 animate-in fade-in slide-in-from-top-1 duration-200">
-            <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#8b8eb8]">Bid Predictions</h3>
-            <WaiverManagerPredictions predictions={orderedPredictions} detailsByRosterId={managerDetails} getPlayerName={resolvePlayerName} />
-          </div>
-        )}
       </Card>
       <PlayerDetailDialog
         open={detailsOpen}

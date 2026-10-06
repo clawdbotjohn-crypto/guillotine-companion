@@ -102,7 +102,7 @@ describe('PlayerDetailDialog', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(document.activeElement).toBe(opener);
   });
-  it('shows complete free-agent Team Impact with an honest starter/drop and bid-independent points', () => {
+  it('shows Team Impact as a four-line vertical stack without explanatory copy', () => {
     const impact = {
       status: 'available' as const,
       overallRank: { before: 24, after: 18, outOf: 26 },
@@ -114,33 +114,25 @@ describe('PlayerDetailDialog', () => {
       assumedDropPlayerId: 'bench-rb',
       dropReason: 'lowest-projected-non-starter' as const,
     };
-    const getPlayerName = (playerId: string) => ({ 'old-rb': 'Old Starter', 'bench-rb': 'Bench Player' })[playerId] ?? playerId;
-    const { rerender } = render(<PlayerDetailDialog open onClose={vi.fn()} data={{
+    render(<PlayerDetailDialog open onClose={vi.fn()} data={{
       ...data,
       remainingFaab: 100,
       teamImpact: impact,
-      getPlayerName,
     }} />);
     const dialog = screen.getByRole('dialog', { name: 'Detail Player' });
     const teamImpact = within(dialog).getByRole('region', { name: 'Team Impact' });
     expect(within(teamImpact).queryByText('None')).toBeNull();
-    expect(within(teamImpact).getByText('24/26 → 18/26')).toBeTruthy();
-    expect(within(dialog).getByText('18/26 → 3/26')).toBeTruthy();
-    expect(within(dialog).getByText('64.0 → 77.0')).toBeTruthy();
-    expect(within(dialog).getByText(/Detail Player enters; Old Starter moves out/)).toBeTruthy();
-    expect(within(dialog).getByText(/Bench Player · lowest projected non-starter/)).toBeTruthy();
-    expect(within(dialog).getByText('$100 → $88')).toBeTruthy();
-    expect(within(dialog).getByText('The suggested bid changes FAAB only. It does not change projected points.')).toBeTruthy();
-
-    rerender(<PlayerDetailDialog open onClose={vi.fn()} data={{
-      ...data,
-      suggestedBid: 99,
-      remainingFaab: 100,
-      teamImpact: impact,
-      getPlayerName,
-    }} />);
-    expect(within(dialog).getByText('64.0 → 77.0')).toBeTruthy();
-    expect(within(dialog).getByText('$100 → $1')).toBeTruthy();
+    expect(within(teamImpact).getByText('+13.0')).toBeTruthy();
+    expect(within(teamImpact).getByLabelText('Lineup points delta plus 13.0')).toBeTruthy();
+    expect(within(teamImpact).getByText('Overall 24/26 → 18/26')).toBeTruthy();
+    expect(within(teamImpact).getByText('RB 18/26 → 3/26')).toBeTruthy();
+    expect(within(teamImpact).getByText('Lineup pts 64.0 → 77.0')).toBeTruthy();
+    expect(within(teamImpact).queryByText('Optimized next-week lineup · active teams only')).toBeNull();
+    expect(within(teamImpact).queryByText('Projection change:')).toBeNull();
+    expect(within(teamImpact).queryByText('Starter change:')).toBeNull();
+    expect(within(teamImpact).queryByText('Assumed drop:')).toBeNull();
+    expect(within(teamImpact).queryByText('FAAB:')).toBeNull();
+    expect(within(teamImpact).queryByText('The suggested bid changes FAAB only. It does not change projected points.')).toBeNull();
   });
 
   it('renders calculated no-change and truthful $0 Team Impact as the same simple None state as empty Predicted bidding', () => {
