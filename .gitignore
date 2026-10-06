@@ -3,3 +3,8 @@ dist
 .DS_Store
 
 api/local.settings.json
+
+# Local-only pre-waiver source payloads/mappings; committed panels contain salted aliases only.
+analysis/prewaiver-inputs-private/
+analysis/prewaiver-alias-map*.json
+.env.prewaiver
