@@ -167,24 +167,24 @@ export function PlayerDetailDialog({ open, onClose, data }: { open: boolean; onC
                     {impactDelta != null && impactDelta > 0 ? '+' : ''}{impactDelta?.toFixed(1)}
                   </p>
                   <p
-                    aria-label={`Overall ${impact.overallRank.before}/${impact.overallRank.outOf} to ${impact.overallRank.after}/${impact.overallRank.outOf}`}
+                    aria-label={`Overall: ${impact.overallRank.before}/${impact.overallRank.outOf} to ${impact.overallRank.after}/${impact.overallRank.outOf}`}
                     className="font-['Space_Mono']"
                   >
-                    <span aria-hidden="true">Overall </span>
+                    <span aria-hidden="true">Overall: </span>
                     <span data-testid="team-impact-overall-before" style={{ color: rankColor(impact.overallRank.before, impact.overallRank.outOf) }}>{impact.overallRank.before}/{impact.overallRank.outOf}</span>
                     <span aria-hidden="true"> → </span>
                     <span data-testid="team-impact-overall-after" style={{ color: rankColor(impact.overallRank.after, impact.overallRank.outOf) }}>{impact.overallRank.after}/{impact.overallRank.outOf}</span>
                   </p>
                   <p
-                    aria-label={`${impact.position} ${impact.positionRank.before}/${impact.positionRank.outOf} to ${impact.positionRank.after}/${impact.positionRank.outOf}`}
+                    aria-label={`${impact.position}: ${impact.positionRank.before}/${impact.positionRank.outOf} to ${impact.positionRank.after}/${impact.positionRank.outOf}`}
                     className="font-['Space_Mono']"
                   >
-                    <span aria-hidden="true">{impact.position} </span>
+                    <span aria-hidden="true">{impact.position}: </span>
                     <span data-testid="team-impact-position-before" style={{ color: rankColor(impact.positionRank.before, impact.positionRank.outOf) }}>{impact.positionRank.before}/{impact.positionRank.outOf}</span>
                     <span aria-hidden="true"> → </span>
                     <span data-testid="team-impact-position-after" style={{ color: rankColor(impact.positionRank.after, impact.positionRank.outOf) }}>{impact.positionRank.after}/{impact.positionRank.outOf}</span>
                   </p>
-                  <p className="font-['Space_Mono']">Lineup pts {impact.lineupPoints.before.toFixed(1)} → {impact.lineupPoints.after.toFixed(1)}</p>
+                  <p className="font-['Space_Mono']">Lineup pts: {impact.lineupPoints.before.toFixed(1)} → {impact.lineupPoints.after.toFixed(1)}</p>
                 </div>
               )}
             </section>

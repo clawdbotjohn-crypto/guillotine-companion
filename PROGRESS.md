@@ -1,16 +1,26 @@
 # Guillotine Companion — Current Progress
 
+## P0 — Add key/value colons to Team Impact rows (owner refinement, 2026-10-06)
+
+Authoritative source: Discord message [`1556958219526471684`](https://discord.com/channels/@me/1466769475880620163/1556958219526471684), John:
+
+> “Minor change on the GB PR: We should separate the key value with a colon. So like \"Overall: 21/24 --> 17/24\".”
+
+- [x] Update existing review PR #21 only.
+- [x] Add colons between each compact Team Impact row label and its values: `Overall:`, `{position}:`, and `Lineup pts:`. Preserve the vertical four-line layout, independently colored rank values, accessible text, calculations, and `None` states.
+- [x] Update focused assertions and run resource-safe verification. Focused `PlayerDetailDialog` tests passed 12/12, file-scoped lint passed with 0 warnings/errors, and `git diff --check` passed. Existing PR/preview refresh and hosted verification are recorded below; no merge, production deploy, branch deletion, or PR #20 change was performed.
+
 ## P0 — Apply established rank colors to Team Impact transitions (owner refinement, 2026-10-06)
 
 Authoritative source: Discord message [`1556955114978414653`](https://discord.com/channels/@me/1466769475880620163/1556955114978414653), John:
 
 > “For GB Team Impact, minor change, but we should probably use the same color scheme elsewhere for the position and overall before and after values.”
 
-- [ ] Update existing review PR #21 only; do not create another PR, merge, deploy, delete branches, or alter PR #20.
-- [ ] Color the **before and after rank values independently** for both `Overall` and the position row using the app's established rank quartiles: top 25% green (`#10b981`), middle 50% amber (`#f59e0b`), bottom 25% red (`#f43f5e`). Keep labels/arrows neutral and leave `Lineup pts` unchanged.
-- [ ] Reuse the shared `rankQuartile()` semantics so tiny leagues, ties, invalid values, and active-team denominators remain consistent with Hub projected-position rankings and manager strength/need presentation.
-- [ ] Preserve the four-line layout, accessible complete text, `None` states, popup bidding, Waivers rail removal, and all Team Impact calculations.
-- [ ] Add focused regression assertions for independently colored before/after values and push a hosted preview update for owner verification.
+- [x] Update existing review PR #21 only; do not create another PR, merge, deploy, delete branches, or alter PR #20.
+- [x] Color the **before and after rank values independently** for both `Overall` and the position row using the app's established rank quartiles: top 25% green (`#10b981`), middle 50% amber (`#f59e0b`), bottom 25% red (`#f43f5e`). Keep labels/arrows neutral and leave `Lineup pts` unchanged.
+- [x] Reuse the shared `rankQuartile()` semantics so tiny leagues, ties, invalid values, and active-team denominators remain consistent with Hub projected-position rankings and manager strength/need presentation.
+- [x] Preserve the four-line layout, accessible complete text, `None` states, popup bidding, Waivers rail removal, and all Team Impact calculations.
+- [x] Add focused regression assertions for independently colored before/after values and push commit `1fd6728` to PR #21. Focused tests passed 12/12 and file-scoped lint passed; GitHub/Azure preview checks are rebuilding.
 
 ## P0 — Simplify Team Impact to the four essential lines (owner request, 2026-10-05)
 
