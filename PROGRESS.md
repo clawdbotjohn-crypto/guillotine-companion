@@ -28,6 +28,14 @@ Authoritative source: Discord message [`1556881785235841097`](https://discord.co
 - [x] Add focused regression coverage that the card has one primary details action, no side `Bids`/`Hide bids` control or duplicate inline panel, and the popup still exposes predicted bidding.
 - [x] Include this in the same narrowly scoped review PR as the approved Team Impact simplification, then provide an exact hosted preview for owner verification. Do not merge or deploy production.
 
+Execution status (2026-10-05 PT):
+- Review PR #21: https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/21
+- Preview URL: https://nice-moss-07ec56310-21.centralus.7.azurestaticapps.net
+- Focused regression tests passed: `src/components/PlayerDetailDialog.test.tsx`, `src/pages/WaiversPage.test.tsx`
+- GitHub checks passed: `build`, `Build and Deploy`
+- Hosted QA confirmed on preview data path (2026 league): no side `Bids` rail on Waivers cards, card click opens Player Details, popup still exposes `Predicted bidding`, and Team Impact renders as `+/-` plus the three stacked `before → after` rows.
+- Desktop pass completed in-browser; separate explicit 390×844 re-run was blocked when the OpenClaw browser control service timed out before the mobile viewport capture step.
+
 > **Updated:** 2026-10-05
 > **Purpose:** Current owner-approved work, unresolved requirements, and operating constraints only.
 > **Archive:** Detailed completed/review history through 2026-10-03 is preserved in `docs/archive/PROGRESS-through-2026-10-03.md`.
