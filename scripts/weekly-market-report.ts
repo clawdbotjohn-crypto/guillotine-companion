@@ -98,13 +98,20 @@ export function plainFiveBulletAnswer(analysis: WeeklyMarketAnalysis): string[] 
   const trendText = previous && trend.length
     ? `Material trend W${previous.week}→W${latest.week}: serious-market top-three arithmetic multipliers rose for ${up}/${trend.length} comparable methods and fell for ${down}/${trend.length} (Δ range ${signed(Math.min(...trend))}× to ${signed(Math.max(...trend))}×).`
     : `Material trend: ${previous ? `W${previous.week} and W${latest.week} have no comparable multiplier coverage` : `only W${latest.week} is eligible`}, so no week-over-week direction can be claimed.`;
+  const exactWeeks = analysis.provenanceByWeek
+    .filter((row) => row.provenance === 'exact')
+    .map((row) => `W${row.week}`);
+  const reconstructedWeeks = analysis.provenanceByWeek
+    .filter((row) => row.provenance === 'reconstructed')
+    .map((row) => `W${row.week}`);
+  const provenanceText = `immutable exact pre-waiver snapshots: ${exactWeeks.join(', ') || 'none'}; reconstructed same-week snapshots: ${reconstructedWeeks.join(', ') || 'none'}`;
 
   return [
     `Newest supported week W${latest.week} top-three winning multipliers (arithmetic/geometric/median; coverage): ${ratioList(latest.winnerMultipliers)}. Pooled season-to-date top-three: ${ratioList(pooledTopThree(weeks, 'winningRatios'))}.`,
     `Newest supported week W${latest.week} top-three serious-market multipliers (arithmetic/geometric/median; coverage): ${ratioList(latest.marketMultipliers)}. Pooled season-to-date top-three: ${ratioList(pooledTopThree(weeks, 'marketRatios'))}.`,
     `Serious-market raw identity fit — W${latest.week}: ${fitList(latestMetrics.metrics)}. Cumulative: ${fitList(overall.metrics)}. R² is an unfitted prediction score, not fitted-regression R².`,
     `Closest current strategy: W${latest.week} ${latestLeader} (MAE ${number(latestLeaderMetric.mae, 1)}).${leaderChange} Cumulative leader: ${overallLeader} (MAE ${number(metricFor(overall.metrics, overallLeader).mae, 1)}).`,
-    `${trendText} Recommendation: do not change any formula from this small reconstructed sample; treat shape and market scale separately. Provenance caveat: deterministic anonymized fixture from read-only Supabase tables projection_snapshot_runs and projection_snapshot_values and Sleeper GET /v1/league/[private], /v1/players/nfl, and /v1/league/[private]/transactions/{week}; same-week snapshots are reconstructed, not proof of the pre-waiver forecast.`,
+    `${trendText} Recommendation: do not change any formula from this small sample; treat shape and market scale separately. Provenance caveat: deterministic anonymized fixture from read-only Supabase tables projection_snapshot_runs and projection_snapshot_values and Sleeper GET /v1/league/[private], /v1/players/nfl, and /v1/league/[private]/transactions/{week}; ${provenanceText}. Reconstructed weeks are not proof of their pre-waiver forecasts; exact weeks can score fixed prior hypotheses without validating a production formula change.`,
   ];
 }
 

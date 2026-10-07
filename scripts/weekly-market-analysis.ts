@@ -37,6 +37,7 @@ export interface WeeklyAnalysisEvent {
   actualBid: number;
   outcome: 'won' | 'legitimate-loss';
   preBidFaab: number;
+  snapshotProvenance?: 'exact' | 'reconstructed';
   suggestions: Record<MarketStrategyId, number> & Record<string, number>;
 }
 
@@ -136,6 +137,10 @@ export interface WeeklyMarketAnalysis {
   };
   ownerDirected: WeeklyMarketView;
   withExcludedTarget: WeeklyMarketView;
+  provenanceByWeek: Array<{
+    week: number;
+    provenance: 'exact' | 'reconstructed';
+  }>;
 }
 
 interface Cluster {
@@ -417,5 +422,15 @@ export function buildWeeklyMarketAnalysis(events: WeeklyAnalysisEvent[]): Weekly
     },
     ownerDirected: buildView(clusters, true),
     withExcludedTarget: buildView(clusters, false),
+    provenanceByWeek: [...new Set(events.map((event) => event.decisionWeek))]
+      .sort((a, b) => a - b)
+      .map((week) => ({
+        week,
+        provenance: events
+          .filter((event) => event.decisionWeek === week)
+          .every((event) => event.snapshotProvenance === 'exact')
+          ? 'exact'
+          : 'reconstructed',
+      })),
   };
 }

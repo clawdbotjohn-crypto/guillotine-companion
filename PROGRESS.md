@@ -1,3 +1,48 @@
+# 2026-10-07 — Recurring owner decision report refresh (implementation complete; uncommitted)
+
+## Status and boundaries
+
+- Implemented directly on `analysis/bidding-strategy-accuracy`; changes are ready for a review-only branch commit/push. No branch change, reset, merge, deploy, workflow dispatch, external mutation, or product-formula change occurred.
+- Copied only the refreshed deterministic fixture from `/tmp/gb-refresh-audit/scripts/fixtures/bidding-strategy-seamex-2026.json`; detached legacy Markdown was not copied.
+- Latest canonical auction evidence is decision Week 5: immutable exact Supabase projection snapshot captured `2026-10-07T03:04:03.701Z` (14,780 rows), completed Sleeper transaction index 4 processed `2026-10-07T07:06:19Z`, fixture `dataThrough=2026-10-07T07:11:03.664Z`, and 112 canonical W5 events. W2–W4 remain reconstructed (130/158/128 events).
+- The separate owner-specific 30-row top/middle panel still has no matching later pre-waiver capture, so Q1 remains frozen at the existing exact owner audit; it was not fabricated or projected forward.
+- Append-only check: all 416 prior W2–W4 event objects remain byte-equivalent to branch HEAD; stable aliases were preserved and only 112 W5 events plus new snapshot metadata were appended.
+
+## Implemented
+
+- Added append-only exact-fixture discovery and explicit app/decision/playing/provider transaction coordinates; no new decision week or transaction-array index is hard-coded. Exact/reconstructed provenance is carried into ladders, calibration points, longitudinal tables, and winner follow-ups.
+- Added coefficient sensitivity for `c=2.0/2.5/3.0` against canonical winners and observed-minimum proxies, split by fixed tier and provenance. Q4 now keeps only six exact-W5 all-tier winner/minimum rows (c=2.0/2.5/3.0) in its compact body table; the exhaustive coefficient × target × tier × provenance × robustness matrix is confined to Appendix C. Raw, named owner-directed (Monangai), ratio-gap, MAD, and IQR sensitivities remain separate; raw rows are never silently deleted.
+- Added the two-panel calibration visual: Safe vs canonical winner with fitted line; decayed Weeks-as-Starter base vs winner with 2×/2.5×/3×/fitted lines. Exact and reconstructed points use distinct encodings; the exact owner W4 audit replaces its reconstructed ladder/calibration duplicate.
+- Added retained top-credible/top-all forecast-band MAE, bias, and coverage against winners/minimum proxies; absent median/high bands remain explicitly not retained rather than reconstructed.
+- Added claims-per-manager raw/canonical quantiles, winner/nonwinner and top/bottom-volume comparisons, and Spearman relations to wins/spend. The table is explicitly scoped to the exact app-W5/decision-W4 owner audit; cumulative manager-claim distribution is marked unsupported because reconstructed W2–W4 lacks comparable canonical alternative/contingency classification. Alternatives, token claims, roster-full failures, and unknown contingencies remain distinct; non-bids are never `$0`.
+- Updated weekly market analysis/report provenance so reconstructed W2–W4 train context is distinct from exact W5 scoring. Existing prior-week-fit rows now include the W4→W5 held-out score.
+- Regenerated nine-question-first Markdown, HTML, and deterministic 24-page PDF.
+
+## Direct findings (descriptive; no production recommendation)
+
+- Exact canonical W5 coefficient scoring favors `c=3.0` among the three declared candidates, but all three underpredict winners materially: winner MAE/bias/coverage are `$59.3/-$57.5/9.1%` at 2.0×, `$54.8/-$50.5/9.1%` at 2.5×, and `$51.1/-$43.4/18.2%` at 3.0× (`n=11`). Against observed minimum proxies, 3.0× is also lowest MAE (`$26.7`) but remains under (`-$13.5`, 27.3% coverage). This is one exact held-out later week, not enough evidence for a formula change.
+- Exact W5 tier behavior remains heterogeneous: the canonical ratio/MAE rows have scoreable denominator support for 6 of 11 winners; zero-model/high-price rows remain in the raw visual and coefficient score instead of disappearing.
+- Owner-audit forecast bands are scoreable only for retained top-credible/top-all values; median/high remain not retained.
+- Exact owner-audit canonical-claim distribution: raw min/P25/median/P75/P90/max `0/2.0/3.0/6.0/9.7/16`; canonical `0/1.8/3.0/5.3/6.7/8`. Claims correlate descriptively with wins (`ρ=0.56`) and winning spend (`ρ=0.50`) in this one auction; this is not a stable manager-style estimate.
+- The nonlinear/tier/liquidity production-model question remains **Not enough evidence**. There is now one valid reconstructed-prior→exact-later scoring pair, but no exact-prior→exact-later sequence and no time-aligned privacy-safe positional-need outcome panel.
+
+## Verification
+
+- `vitest scripts/__tests__/bidding-analysis-presentation.test.ts`: 16 passed.
+- `vitest scripts/__tests__/weekly-market-analysis.test.ts scripts/__tests__/bidding-strategy-analysis.test.ts`: 12 passed.
+- `vitest scripts/__tests__/prewaiver-capture.test.ts`: 8 passed.
+- Two consecutive `--pdf` generations produced byte-identical Markdown/HTML/PDF hashes (record final hashes in `HANDOFF.md`).
+- `git diff --check`, output guards (`NaN`, `[object Object]`, `undefined`), bounded private/secret scan, full lint, typecheck, capped serial production build, and PDF integrity/render check passed. Ghostscript rendered all 24 PDF pages at low resolution with consistent dimensions and no near-blank pages.
+
+## Remaining gaps / next exact capture
+
+- Freeze the owner-specific 30-row pre-waiver panel before a future auction if Q1 is to advance.
+- Accumulate at least one exact-prior→exact-later pair before validating fitted nonlinear/tier/liquidity curves or promoting coefficient choice.
+- Persist median/high forecast bands if those bands should be scored; do not backfill them historically.
+- Capture time-aligned positional need, active liquidity, roster/injury/bye, and prior acquisitions before outcomes to advance Q8.
+
+---
+
 # Guillotine Companion — Progress
 
 ## ✅ P0 — Correct replacement-level zeroing for Safe / Weeks-as-Starter / Aggressive (completed 2026-09-27)
@@ -381,4 +426,4 @@ Architecture: `docs/BIDDING-PROFILES-PLAN.md`
 - The calculation discovers latest/previous eligible weeks and pools raw top-three rows; no W4 or two-week constants were added. Aggressive and Middle VORP remain outside the five bullets; Middle stays in the separate analysis-only appendix.
 - Generated provenance now names read-only Supabase tables `projection_snapshot_runs`/`projection_snapshot_values` and the Sleeper league, player-catalog, and weekly-transaction GET endpoint shapes without printing IDs or credentials.
 - Focused report/presentation tests: 10 passed. `npm run check`: passed (one pre-existing unrelated React set-state lint warning). `git diff --check` and privacy scans passed. HTML DOM/render sanity passed; generated report structure retained 21 PDF pages.
-- Markdown, HTML, and PDF are byte-identical across immediate repeat generation. Chromium timestamp and tagged-node IDs are normalized without changing PDF byte widths/xref offsets. Final SHA-256: MD `6bbaac9cb2ec646f4c3b7cd67ebc4780e5c57f13d4a2f828b0f57214dbb5b13b`; HTML `500768be1b240e16335fa45ef6b9f0dc02f44baae592e7abd9756d4c747ddefb`; PDF `30e816f8dd4dcc451c705fdcf065ca6200b4450c788507d1c7fa605874e878c4`. No merge, deploy, main push, workflow dispatch, or external-data mutation.
+- Markdown, HTML, and PDF are byte-identical across immediate repeat generation. Chromium timestamp and tagged-node IDs are normalized without changing PDF byte widths/xref offsets. Final SHA-256: MD `6bbaac9cb2ec646f4c3b7cd67ebc4780e5c57f13d4a2f828b0f57214dbb5b13b`; HTML `7f9e30b8ee3f3012f8dc69f024b3b4809526265ceebe4bcf8ae28d85aead967a`; PDF `40c868c38947ad707234e06b344b20c5d48e0d21879bb5e2ecb80bd46615a176`. No merge, deploy, main push, workflow dispatch, or external-data mutation.

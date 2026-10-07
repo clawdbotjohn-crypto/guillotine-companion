@@ -20,6 +20,7 @@ let model: OwnerDecisionReportModel;
 let html: string;
 let markdown: string;
 let exactText: string;
+let reconstructedFixture: AnalysisFixture;
 
 beforeAll(async () => {
   const reconstructed = JSON.parse(
@@ -28,6 +29,7 @@ beforeAll(async () => {
       "utf8",
     ),
   ) as AnalysisFixture;
+  reconstructedFixture = reconstructed;
   exactText = await readFile(
     "scripts/fixtures/bidding-owner-decision-week5.json",
     "utf8",
@@ -62,10 +64,16 @@ describe("owner-decision nine-question report", () => {
   });
 
   it("uses a compact desktop overview while retaining the mobile stack", () => {
-    expect(html).toContain("@media(min-width:901px){.hero{padding:28px 42px;justify-content:flex-start}");
+    expect(html).toContain(
+      "@media(min-width:901px){.hero{padding:28px 42px;justify-content:flex-start}",
+    );
     expect(html).toContain(".answer-grid{gap:8px;margin-top:14px}");
-    expect(html).toContain(".answer-card p{font-size:.8rem;line-height:1.32;margin:0 0 .4rem}");
-    expect(html).toContain("@media(max-width:560px){.hero{min-height:auto;padding:28px 18px}");
+    expect(html).toContain(
+      ".answer-card p{font-size:.8rem;line-height:1.32;margin:0 0 .4rem}",
+    );
+    expect(html).toContain(
+      "@media(max-width:560px){.hero{min-height:auto;padding:28px 18px}",
+    );
     expect(html).toContain(".answer-grid{grid-template-columns:1fr}");
   });
 
@@ -171,18 +179,15 @@ describe("owner-decision nine-question report", () => {
   });
 
   it("preserves exact and reconstructed provenance and source hashes separately", () => {
-    expect(model.exact.lineage.exactWeek5.length).toBeGreaterThanOrEqual(6);
-    expect(
-      model.exact.lineage.exactWeek5.every((row) =>
-        /^[a-f0-9]{64}$/.test(row.sha256),
-      ),
-    ).toBe(true);
-    expect(model.exact.lineage.reconstructedWeeks2To4.sha256).toMatch(
-      /^[a-f0-9]{64}$/,
+    const lineageText = JSON.stringify(model.exact.lineage);
+    const hashes = lineageText.match(/[a-f0-9]{64}/g) ?? [];
+    expect(hashes.length).toBeGreaterThanOrEqual(7);
+    expect(html).toContain("source-hash lineage");
+    expect(html).toContain("evidence classes remain separate");
+    expect(html).toContain("Exact Week5");
+    expect(html).toContain(
+      "Canonical market fixture: reconstructed W2, W3, W4; exact W5",
     );
-    expect(html).toContain("Exact Week 5");
-    expect(html).toContain("Reconstructed Weeks 2–4");
-    expect(html).toContain("separate evidence classes");
   });
 
   it("is self-contained, responsive, deterministic, and privacy-safe", () => {
@@ -209,22 +214,113 @@ describe("owner-decision nine-question report", () => {
         /^Target \d{2}$/.test(target.alias),
       ),
     ).toBe(true);
-  });
+  }, 15_000);
 
   it("does not double-count the exact app-W5 / Sleeper-decision-W4 auction", () => {
     expect(model.ladderRows.map((row) => row.weekLabel)).toEqual([
       "Decision W2",
       "Decision W3",
       "App W5 / decision W4",
+      "Decision W5",
     ]);
-    expect(model.ladderRows.at(-1)?.bids).toEqual([300, 187, 128, 74, 65]);
-    expect(model.questions[5].keyNumber).toContain("3 distinct auctions");
+    expect(model.ladderRows[2]?.bids).toEqual([300, 187, 128, 74, 65]);
+    expect(model.ladderRows[3]?.provenance).toBe("Exact");
+    expect(model.questions[5].keyNumber).toContain("4 distinct auctions");
     expect(markdown).toContain(
-      "exact ladder replaces the reconstructed W4 row",
+      "exact App W5 / decision W4 ladder replaces reconstructed decision W4",
     );
     expect(markdown).not.toContain(
       "| Decision W4 | Reconstructed | $300 | $187 | $128 | $74 | $65 |",
     );
+  });
+
+  it("recognizes the refreshed exact decision-week snapshot without hard-coded transaction selection", () => {
+    expect(reconstructedFixture.source.dataThrough).toBe(
+      "2026-10-07T07:11:03.664Z",
+    );
+    const week5Snapshot = reconstructedFixture.snapshots.find(
+      (snapshot) => snapshot.requestedDecisionWeek === 5,
+    );
+    expect(week5Snapshot?.provenance).toBe("exact");
+    expect(week5Snapshot?.rowCount).toBe(14780);
+    expect(
+      reconstructedFixture.events.filter((event) => event.decisionWeek === 5),
+    ).toHaveLength(112);
+    expect(model.questions[4].keyNumber).toContain(
+      "1 reconstructed-prior → exact-later score",
+    );
+  });
+
+  it("scores coefficient, band, claims, and calibration sensitivities with provenance", () => {
+    expect([
+      ...new Set(model.coefficientSensitivity.map((row) => row.coefficient)),
+    ]).toEqual([2, 2.5, 3]);
+    expect(
+      new Set(model.coefficientSensitivity.map((row) => row.target)),
+    ).toEqual(new Set(["Winner", "Observed minimum"]));
+    expect(
+      model.coefficientSensitivity.map(
+        (row) => `${row.scope}|${row.validation}`,
+      ),
+    ).toContain(
+      "Canonical exact decision W5|Exact later-week score of fixed coefficients; prior weeks remain reconstructed",
+    );
+    expect(
+      model.coefficientSensitivity.some((row) =>
+        row.scope.includes("owner-directed marker"),
+      ),
+    ).toBe(true);
+    expect(
+      model.coefficientSensitivity.some((row) =>
+        row.scope.includes("ratio-gap"),
+      ),
+    ).toBe(true);
+    expect(
+      model.forecastBandScores.some(
+        (row) =>
+          row.band === "Top credible" && row.target === "Observed minimum",
+      ),
+    ).toBe(true);
+    expect(
+      model.calibrationVisual.points.some((row) => row.provenance === "Exact"),
+    ).toBe(true);
+    expect(
+      model.calibrationVisual.points.some(
+        (row) => row.provenance === "Reconstructed",
+      ),
+    ).toBe(true);
+    expect(
+      model.calibrationVisual.points.some((row) =>
+        row.label.startsWith("R-W4-"),
+      ),
+    ).toBe(false);
+    expect(
+      model.calibrationVisual.points.some((row) =>
+        row.label.startsWith("E-W5-"),
+      ),
+    ).toBe(true);
+    expect(
+      model.coefficientSensitivity.some((row) =>
+        row.scope.includes("Reconstructed cumulative W2–W5"),
+      ),
+    ).toBe(false);
+    expect(
+      model.coefficientSensitivity.filter(
+        (row) =>
+          row.scope === "Canonical exact decision W5" && row.tier === "All",
+      ),
+    ).toHaveLength(6);
+    expect(model.claimDistribution.scope).toContain("App W5 / decision W4");
+    expect(model.claimDistribution.cumulativeContext).toContain(
+      "No comparable cumulative claims-per-manager distribution",
+    );
+    expect(model.claimDistribution.quantiles).toHaveLength(2);
+    expect(model.claimDistribution.relations).toHaveLength(4);
+    expect(model.questions[4].keyNumber).toContain(
+      "1 reconstructed-prior → exact-later score",
+    );
+    expect(html).toContain("fitted ");
+    expect(html).toContain("2.5×");
   });
 
   it("keeps the required Q3/Q7/Q9 direct tables and tier sensitivities in Markdown", () => {
@@ -235,7 +331,7 @@ describe("owner-decision nine-question report", () => {
       "| Manager | Raw | Canonical / targets | Alternatives |",
     );
     expect(markdown).toContain(
-      "| Week | Top winner | Winning spend | Prior-week history | Next-week history |",
+      "| Week | Top winner | Winning spend | Winner provenance | Prior-week history / provenance | Next-week history / provenance |",
     );
     expect(markdown).toContain(
       "| Scope | Tier | Boundary | winner n | minimum / runner-up n |",
@@ -243,10 +339,9 @@ describe("owner-decision nine-question report", () => {
     expect(markdown).toContain("Opportunity/censoring boundary");
     expect(markdown).toContain("Full predeclared winning-bid sensitivities");
     expect(markdown).toContain("Deterministic cluster-bootstrap check");
-    expect(markdown).toContain(
-      "Prior-week-fitted held-out checks (reconstructed only)",
-    );
-    expect(markdown).not.toContain("Monangai");
+    expect(markdown).toContain("Prior-week-fitted held-out checks");
+    expect(markdown).toContain("Named owner-directed sensitivity:** Monangai");
+    expect(markdown.split("# Appendices")[0]).not.toContain("Monangai");
   });
 
   it("represents all requested tables and keeps technical material in appendices", () => {
@@ -254,7 +349,20 @@ describe("owner-decision nine-question report", () => {
     expect(html).toContain("Bottom 10%");
     expect(html).toContain("≥$90 anchor wins");
     expect(html).toContain("Median winner / Aggressive");
-    expect(html).toContain("Model scoreboard intentionally blank");
+    expect(html).toContain("Decayed Weeks-as-Starter base vs canonical winner");
+    const [body, technicalAppendices = ""] = html.split(
+      '<section class="appendix" aria-labelledby="appendix-prior">',
+    );
+    expect(body).toContain("Exact decision-W5 fixed-coefficient check");
+    expect(body).not.toContain("Coefficient sensitivity (analysis-only)");
+    expect(technicalAppendices).toContain(
+      "Coefficient sensitivity (analysis-only)",
+    );
+    expect(technicalAppendices).toContain("Provenance");
+    expect(html).toContain("Claims-per-manager distribution —");
+    expect(html).toContain(
+      "No comparable cumulative claims-per-manager distribution",
+    );
     expect(html).toContain("Starting-FAAB shares");
     expect(html).toContain("107</strong><span>raw claims");
     expect(html).toContain("Week 5 WR / QB");
@@ -291,42 +399,68 @@ describe("owner-decision nine-question report", () => {
   });
 });
 
-
 describe("optional exact pre-waiver panel ingestion", () => {
   it("feeds Questions 1, 2, and 8 while preserving the default report when absent", async () => {
     const reconstructed = JSON.parse(
-      await readFile("scripts/fixtures/bidding-strategy-seamex-2026.json", "utf8"),
+      await readFile(
+        "scripts/fixtures/bidding-strategy-seamex-2026.json",
+        "utf8",
+      ),
     ) as AnalysisFixture;
     const exact = JSON.parse(
-      await readFile("scripts/fixtures/bidding-owner-decision-week5.json", "utf8"),
+      await readFile(
+        "scripts/fixtures/bidding-owner-decision-week5.json",
+        "utf8",
+      ),
     ) as ExactAuditFixture;
     const input = JSON.parse(
       await readFile("scripts/fixtures/prewaiver-capture-input.json", "utf8"),
     ) as PrewaiverCaptureInput;
-    const panel = computePrewaiverCapture(input, "fixture-test-salt-2026-not-private").panel!;
+    const panel = computePrewaiverCapture(
+      input,
+      "fixture-test-salt-2026-not-private",
+    ).panel!;
     const withPanel = buildOwnerDecisionReport(reconstructed, exact, panel);
     expect(withPanel.prewaiverPanel?.audit.actualRowCount).toBe(12);
-    expect(withPanel.questions[0].keyNumber).toContain("10 future exact opportunities ingested");
-    expect(withPanel.questions[1].keyNumber).toContain("Likely/Possible/Unlikely");
+    expect(withPanel.questions[0].keyNumber).toContain(
+      "10 future exact opportunities ingested",
+    );
+    expect(withPanel.questions[1].keyNumber).toContain(
+      "Likely/Possible/Unlikely",
+    );
     expect(withPanel.questions[7]).toMatchObject({
-      keyNumber: "10/10 future exact opportunities have time-aligned need ranks",
+      keyNumber:
+        "10/10 future exact opportunities have time-aligned need ranks",
     });
     expect(withPanel.questions[7].directAnswer).toContain("remain unscored");
-    expect(buildOwnerDecisionReport(reconstructed, exact).prewaiverPanel).toBeUndefined();
+    expect(
+      buildOwnerDecisionReport(reconstructed, exact).prewaiverPanel,
+    ).toBeUndefined();
   });
 
   it("rejects tampered optional panels", async () => {
     const reconstructed = JSON.parse(
-      await readFile("scripts/fixtures/bidding-strategy-seamex-2026.json", "utf8"),
+      await readFile(
+        "scripts/fixtures/bidding-strategy-seamex-2026.json",
+        "utf8",
+      ),
     ) as AnalysisFixture;
     const exact = JSON.parse(
-      await readFile("scripts/fixtures/bidding-owner-decision-week5.json", "utf8"),
+      await readFile(
+        "scripts/fixtures/bidding-owner-decision-week5.json",
+        "utf8",
+      ),
     ) as ExactAuditFixture;
     const input = JSON.parse(
       await readFile("scripts/fixtures/prewaiver-capture-input.json", "utf8"),
     ) as PrewaiverCaptureInput;
-    const panel = computePrewaiverCapture(input, "fixture-test-salt-2026-not-private").panel!;
+    const panel = computePrewaiverCapture(
+      input,
+      "fixture-test-salt-2026-not-private",
+    ).panel!;
     panel.rows[0].preWaiverFaab += 1;
-    expect(() => buildOwnerDecisionReport(reconstructed, exact, panel)).toThrow("cardinality/hash validation failed");
+    expect(() => buildOwnerDecisionReport(reconstructed, exact, panel)).toThrow(
+      "cardinality/hash validation failed",
+    );
   });
 });

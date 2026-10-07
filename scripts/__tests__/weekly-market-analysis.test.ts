@@ -26,12 +26,13 @@ describe('weekly top-three and median-market analysis', () => {
       [285, 153, 99],
       [231, 187, 103],
       [300, 187, 128],
+      [255, 150, 107],
     ]);
     expect(analysis.withExcludedTarget.topThree[1].rows.map((row) => row.winningBid)).toEqual([234, 231, 187]);
   });
 
   it('reports exact weekly winning and serious-median ratio aggregates', () => {
-    const [week2, week3, week4] = analysis.ownerDirected.topThree;
+    const [week2, week3, week4, week5] = analysis.ownerDirected.topThree;
     expect(week2.winnerMultipliers['max-vorp'].arithmeticMean).toBeCloseTo(3.3402014652, 9);
     expect(week2.winnerMultipliers.vorp.geometricMean).toBeCloseTo(3.2431277708, 9);
     expect(week2.marketMultipliers['corrected-safe'].median).toBeCloseTo(0.9868421053, 9);
@@ -43,20 +44,23 @@ describe('weekly top-three and median-market analysis', () => {
     expect(week2.rows.map((row) => row.seriousMedianBid)).toEqual([85, 75, 56.5]);
     expect(week3.rows.map((row) => row.seriousMedianBid)).toEqual([56, 66.5, 54.5]);
     expect(week4.rows.map((row) => row.seriousMedianBid)).toEqual([171, 100, 61]);
+    expect(week5.winnerMultipliers['max-vorp'].arithmeticMean).toBeCloseTo(3.6610169492, 9);
+    expect(week5.rows.map((row) => row.seriousMedianBid)).toEqual([83, 57, 28.5]);
   });
 
   it('finds the fixture leaders overall and for every eligible week', () => {
-    const [overall, week2, week3, week4] = analysis.ownerDirected.marketMetrics;
-    expect([overall.week, week2.week, week3.week, week4.week]).toEqual([null, 2, 3, 4]);
-    expect(overall).toMatchObject({ seriousMedianClusters: 41, closest: 'Current-team VoRP', closestWinning: 'Corrected Safe', closestAllBid: 'Current-team VoRP' });
+    const [overall, week2, week3, week4, week5] = analysis.ownerDirected.marketMetrics;
+    expect([overall.week, week2.week, week3.week, week4.week, week5.week]).toEqual([null, 2, 3, 4, 5]);
+    expect(overall).toMatchObject({ seriousMedianClusters: 54, closest: 'Current-team VoRP', closestWinning: 'Corrected Safe', closestAllBid: 'Current-team VoRP' });
     expect(week2).toMatchObject({ seriousMedianClusters: 13, closest: 'Max VORP' });
     expect(week3).toMatchObject({ seriousMedianClusters: 15, closest: 'Current-team VoRP' });
     expect(week4).toMatchObject({ seriousMedianClusters: 13, closest: 'Corrected Weeks as Starter', closestWinning: 'Corrected Safe', closestAllBid: 'Max VORP' });
-    expect(overall.metrics.find((row) => row.id === 'middle-vorp')?.mae).toBeCloseTo(27.2857142857, 9);
+    expect(week5).toMatchObject({ seriousMedianClusters: 13, closest: 'Corrected Weeks as Starter', closestWinning: 'Corrected Safe', closestAllBid: 'Corrected Weeks as Starter' });
+    expect(overall.metrics.find((row) => row.id === 'middle-vorp')?.mae).toBeCloseTo(26.1111111111, 9);
     expect(week2.metrics.find((row) => row.id === 'max-vorp')?.mae).toBeCloseTo(14.8636363636, 9);
     expect(week3.metrics.find((row) => row.id === 'vorp')?.mae).toBeCloseTo(6.6, 9);
     expect(week4.metrics.find((row) => row.id === 'corrected-weeks-starter')?.mae).toBeCloseTo(16.3, 9);
-    expect(analysis.withExcludedTarget.marketMetrics[0].seriousMedianClusters).toBe(42);
+    expect(analysis.withExcludedTarget.marketMetrics[0].seriousMedianClusters).toBe(55);
     expect(analysis.withExcludedTarget.marketMetrics[0].closest).toBe('Current-team VoRP');
   });
 
@@ -72,7 +76,11 @@ describe('weekly top-three and median-market analysis', () => {
     expect(nextMiddleMarket).toMatchObject({ fitWeek: 3, testWeek: 4, n: 5, scaleEstimator: 'median' });
     expect(nextMiddleMarket.fittedMultiplier).toBeCloseTo(1.1847826087, 9);
     expect(nextMiddleMarket.mae).toBeCloseTo(31.35, 9);
-    expect(analysis.ownerDirected.heldOutScaleMetrics.seriousMedian).toHaveLength(10);
+    const exactWeek5Score = analysis.ownerDirected.heldOutScaleMetrics.seriousMedian.find(
+      (row) => row.id === 'middle-vorp' && row.fitWeek === 4 && row.testWeek === 5,
+    );
+    expect(exactWeek5Score).toMatchObject({ fitWeek: 4, testWeek: 5, n: 4, scaleEstimator: 'median' });
+    expect(analysis.ownerDirected.heldOutScaleMetrics.seriousMedian).toHaveLength(15);
   });
 
   it('guards zero denominators, reports coverage, and treats R² as an unfitted diagnostic', () => {
@@ -86,14 +94,14 @@ describe('weekly top-three and median-market analysis', () => {
     const bullets = plainFiveBulletAnswer(analysis);
     const markdown = renderWeeklyMarketMarkdown(analysis);
     expect(bullets).toHaveLength(5);
-    expect(bullets[0]).toContain('Newest supported week W4');
+    expect(bullets[0]).toContain('Newest supported week W5');
     expect(bullets[0]).toContain('Pooled season-to-date top-three');
-    expect(bullets[1]).toContain('Newest supported week W4');
+    expect(bullets[1]).toContain('Newest supported week W5');
     expect(bullets[1]).toContain('Pooled season-to-date top-three');
-    expect(bullets[2]).toContain('Serious-market raw identity fit — W4');
+    expect(bullets[2]).toContain('Serious-market raw identity fit — W5');
     expect(bullets[2]).toContain('Cumulative:');
     expect(bullets[2]).toMatch(/R² .*MAE .*ρ .*n=/);
-    expect(bullets[3]).toContain('leadership changed Current-team VoRP → Corrected Weeks as Starter');
+    expect(bullets[3]).toContain('leadership was unchanged');
     expect(bullets[3]).toContain('Cumulative leader: Current-team VoRP');
     expect(bullets[4]).toContain('Recommendation: do not change any formula');
     expect(bullets[4]).toContain('projection_snapshot_runs and projection_snapshot_values');
@@ -102,8 +110,10 @@ describe('weekly top-three and median-market analysis', () => {
     }
     expect(bullets.join('\n')).not.toMatch(/Middle VORP|Aggressive/);
     expect(markdown.indexOf('## Five-bullet answer')).toBeLessThan(markdown.indexOf('## Weekly top-three'));
-    expect(markdown).toContain('Max VORP a/g/m 2.74/2.73/2.71×');
-    expect(markdown).toContain('Current-team VoRP R² 0.52, MAE 19.6, ρ 0.72, n=10');
+    expect(markdown).toContain('Max VORP a/g/m 3.66/3.60/3.66×');
+    expect(markdown).toContain('Current-team VoRP R² 0.01, MAE 17.8, ρ 0.39, n=9');
+    expect(markdown).toContain('immutable exact pre-waiver snapshots: W5');
+    expect(markdown).toContain('reconstructed same-week snapshots: W2, W3, W4');
     expect(markdown).toContain('private GET-only catalog match');
     expect(markdown).not.toMatch(/player_[0-9]|manager_[0-9]|league[_ -]?id\s*[0-9]|\b[0-9]{17,20}\b/i);
   });

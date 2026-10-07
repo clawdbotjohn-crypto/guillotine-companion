@@ -1761,5 +1761,12 @@
       "sha256": "9d5ea0aa16bf1128e810abd91c1cfd84fb7dfd7b0523393fa5afe5ced4c027d3",
       "provenance": "reconstructed projection snapshots and transaction-ledger FAAB"
     }
+  },
+  "coordinate": {
+    "appWeek": 5,
+    "decisionWeek": 4,
+    "playingWeek": 4,
+    "providerTransactionIndex": 3,
+    "label": "App W5 / Sleeper decision W4 / provider transaction index 3 / playing W4"
   }
 }

@@ -1,3 +1,43 @@
+# HANDOFF — Recurring owner decision report refresh (2026-10-07)
+
+## Current state
+
+Implementation is complete and verified in this worktree; commit/push are pending final review. The report pipeline now ingests the refreshed exact canonical decision-Week-5 evidence while keeping the frozen owner-specific 30-row panel and reconstructed W2–W4 history in separate evidence classes. No product bidding formula changed. Do not merge/deploy without owner authorization.
+
+## What changed
+
+- Refreshed `scripts/fixtures/bidding-strategy-seamex-2026.json` from the detached read-only audit (W2/W3/W4 reconstructed; W5 exact; event counts 130/158/128/112).
+- Added explicit owner-fixture coordinates and future exact-fixture discovery/deduplication.
+- Added coefficient/tier/proxy, forecast-band, robust/owner-directed, claims-distribution, provenance, and two-panel calibration outputs. Q4 contains only six exact-W5 all-tier winner/minimum coefficient rows; the exhaustive matrix is Appendix C-only. Claims distributions explicitly identify their single exact owner-audit week and why cumulative canonical context is unsupported.
+- Updated weekly market provenance and W4→W5 exact held-out scoring.
+- Regenerated Markdown/HTML/PDF twice with matching hashes:
+  - Markdown `c5cc9f4c5963af7a86a2b11f46c9f44c5ac6dce9c197e78d32bf0b6efc3dd6f3`
+  - HTML `7f9e30b8ee3f3012f8dc69f024b3b4809526265ceebe4bcf8ae28d85aead967a`
+  - PDF `e17d23862b92b2456952752f9dd54e4e8307184055147b9f7b8450e3f58b95e`
+
+## Review priorities
+
+1. Check `scripts/owner-decision-report.ts` evidence boundaries: owner exact app W5/decision W4, canonical reconstructed W2–W4, canonical exact W5.
+2. Check `scripts/generate-bidding-analysis-presentation.ts` two-panel SVG, coefficient tables, named Monangai sensitivity placement (appendix only), claims quantiles, and exact-data discovery.
+3. Check that Q5 remains `Not enough evidence` despite one reconstructed-prior→exact-later score pair.
+4. Verify direct tables remain aliased and non-bids/contingencies/FAAB censoring remain explicit.
+
+## Validation
+
+- Owner presentation tests: 16 passed.
+- Weekly market + strategy tests: 12 passed.
+- Pre-waiver capture tests: 8 passed (36 focused tests total).
+- Deterministic generation, `git diff --check`, output guards, bounded secret scan, and PDF parse/type checks passed.
+- Full `npm run lint`, `npm run typecheck`, and capped serial production `npm run build` passed. The four relevant suites pass together after giving the deterministic presentation test a 15-second budget.
+
+## Known gaps
+
+- Q1 cannot advance until a matching future owner-specific 30-row pre-waiver panel exists.
+- No exact-prior→exact-later sequence yet; do not promote a coefficient or fitted curve.
+- Median/high bands and time-aligned positional need/liquidity controls were not retained for the historical owner audit.
+
+---
+
 # IMPLEMENTATION COMPLETE — Non-VORP replacement-level zeroing (2026-09-27)
 
 ## Status
@@ -578,4 +618,4 @@ No merge, no push to `main`, no `workflow_dispatch`, and no production deploymen
 - The calculation discovers latest/previous eligible weeks and pools raw top-three rows; no W4 or two-week constants were added. Aggressive and Middle VORP remain outside the five bullets; Middle stays in the separate analysis-only appendix.
 - Generated provenance now names read-only Supabase tables `projection_snapshot_runs`/`projection_snapshot_values` and the Sleeper league, player-catalog, and weekly-transaction GET endpoint shapes without printing IDs or credentials.
 - Focused report/presentation tests: 10 passed. `npm run check`: passed (one pre-existing unrelated React set-state lint warning). `git diff --check` and privacy scans passed. HTML DOM/render sanity passed; generated report structure retained 21 PDF pages.
-- Markdown, HTML, and PDF are byte-identical across immediate repeat generation. Chromium timestamp and tagged-node IDs are normalized without changing PDF byte widths/xref offsets. Final SHA-256: MD `6bbaac9cb2ec646f4c3b7cd67ebc4780e5c57f13d4a2f828b0f57214dbb5b13b`; HTML `500768be1b240e16335fa45ef6b9f0dc02f44baae592e7abd9756d4c747ddefb`; PDF `30e816f8dd4dcc451c705fdcf065ca6200b4450c788507d1c7fa605874e878c4`. No merge, deploy, main push, workflow dispatch, or external-data mutation.
+- Markdown, HTML, and PDF are byte-identical across immediate repeat generation. Chromium timestamp and tagged-node IDs are normalized without changing PDF byte widths/xref offsets. Final SHA-256: MD `6bbaac9cb2ec646f4c3b7cd67ebc4780e5c57f13d4a2f828b0f57214dbb5b13b`; HTML `7f9e30b8ee3f3012f8dc69f024b3b4809526265ceebe4bcf8ae28d85aead967a`; PDF `40c868c38947ad707234e06b344b20c5d48e0d21879bb5e2ecb80bd46615a176`. No merge, deploy, main push, workflow dispatch, or external-data mutation.
