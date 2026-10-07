@@ -2,7 +2,7 @@
 
 ## Status and boundaries
 
-- Implemented directly on `analysis/bidding-strategy-accuracy`; changes are ready for a review-only branch commit/push. No branch change, reset, merge, deploy, workflow dispatch, external mutation, or product-formula change occurred.
+- Implemented and pushed only to `analysis/bidding-strategy-accuracy`. No branch change, reset, merge, deploy, workflow dispatch, external mutation, or product-formula change occurred. PR #12 remains open but is `CONFLICTING`/`DIRTY` against four newer `main` commits; read-only merge-tree inspection localized the content conflict to `HANDOFF.md`, and it was intentionally left unresolved under the no-merge boundary.
 - Copied only the refreshed deterministic fixture from `/tmp/gb-refresh-audit/scripts/fixtures/bidding-strategy-seamex-2026.json`; detached legacy Markdown was not copied.
 - Latest canonical auction evidence is decision Week 5: immutable exact Supabase projection snapshot captured `2026-10-07T03:04:03.701Z` (14,780 rows), completed Sleeper transaction index 4 processed `2026-10-07T07:06:19Z`, fixture `dataThrough=2026-10-07T07:11:03.664Z`, and 112 canonical W5 events. W2–W4 remain reconstructed (130/158/128 events).
 - The separate owner-specific 30-row top/middle panel still has no matching later pre-waiver capture, so Q1 remains frozen at the existing exact owner audit; it was not fabricated or projected forward.

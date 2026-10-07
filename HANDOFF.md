@@ -2,7 +2,7 @@
 
 ## Current state
 
-Implementation is complete and verified in this worktree; commit/push are pending final review. The report pipeline now ingests the refreshed exact canonical decision-Week-5 evidence while keeping the frozen owner-specific 30-row panel and reconstructed W2–W4 history in separate evidence classes. No product bidding formula changed. Do not merge/deploy without owner authorization.
+Implementation is complete and verified in this worktree; commit/push are pending final review. The report pipeline now ingests the refreshed exact canonical decision-Week-5 evidence while keeping the frozen owner-specific 30-row panel and reconstructed W2–W4 history in separate evidence classes. No product bidding formula changed. Do not merge/deploy without owner authorization. PR #12 is open but currently reports `CONFLICTING`/`DIRTY` after four newer `main` commits; read-only merge-tree inspection found the content conflict in `HANDOFF.md`. It was intentionally not merged/rebased in this analysis-only run, so no CI checks started.
 
 ## What changed
 
