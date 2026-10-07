@@ -1,376 +1,208 @@
-# Guillotine Companion — Progress
+# Guillotine Companion — Current Progress
 
-## 🛡️ P0 — Projection snapshot reliability hardening (review-only, 2026-09-30)
+## P0 — Add key/value colons to Team Impact rows (owner refinement, 2026-10-06)
 
-- [x] **Evidence/root cause bounded honestly:** workflow `367263137` was active on default branch `main` more than three days before W4. No run existed from `02:45Z–04:30Z`; the sole schedule event arrived at `09:03:53Z` and skipped at local Wednesday 02:03. GitHub documents start-of-hour load, delayed events, and dropped queued jobs. At least one tick was dropped and the emitted tick was delayed 5–6 hours; the single `0 3,4` cron cannot identify which tick emitted. Activation/default-branch timing is ruled out.
-- [x] **Independent API failure bounded honestly:** W4 manual runs reached the correct production SWA and returned 401. A direct invalid-body probe using the Azure control-plane setting also returned 401, although source auth precedes parsing and matching auth + `{}` must return 400. Endpoint/header/environment and missing/short-setting cases are ruled out. The supported conclusion is managed-function runtime/config divergence; the underlying Azure propagation/recycle mechanism is not observable without runtime telemetry.
-- [x] **W4 retained honestly:** reconstructed/post-cutoff snapshot `90681181-3c51-4f68-91cd-ca1637ffbd95`, 15,761 rows, SHA-256 `9463b40e63b71c0088a311675d47bdc508a627ba446d703a54b5ba2ced4dc523`. Never relabel it exact.
-- [x] **Bounded code hardening on `fix/projection-snapshot-reliability`:** six independent off-hour schedules (02/07/12 in both PDT/PST UTC hours), tested Pacific/DST/Week-18 coordinate resolution, a post-`HEAD` timing recheck using the same resolver, a minute-13 API/workflow fetch-start cutoff plus bounded Sleeper abort retaining at least two minutes before the immutable +15m finish boundary, guarded manual exact dispatch, independent workflow attempts (no shared concurrency group), explicit job/curl timeouts, authenticated side-effect-free `HEAD` health, stable API error codes/actionable diagnostics, and a metadata-only exact retry short-circuit. No migration or exact-rule relaxation.
-- [x] **Duplicate/race semantics:** once exact metadata exists, retries return it without Sleeper/value-row download/ingestion. A truly concurrent miss may still fetch in both workers; the existing transactional RPC then returns an identical idempotent result or immutable conflict. No overwrite path exists.
-- [x] **Review PR:** review-only PR #16 is open: https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/16. Do not merge or deploy automatically.
-- [ ] **W5 owner actions (before Tue 2026-10-06 20:00 PDT):** review/merge the hardening only if approved; perform an owner-controlled SWA restart/redeploy/config refresh as needed; verify production `HEAD` returns 204 using synchronized workflow/runtime auth; verify repository variables/calendar; inspect a non-writing timing simulation; then watch the 20:02/20:07/20:12 opportunities. Shortly after cutoff, verify public GET reports same-week `exact`. If absent and still before the API's +13m upstream deadline, owner may use the already-validated direct exact fallback; at/after +13m preserve only reconstructed provenance.
-- [ ] **Unresolved owner decisions:** whether/when to merge and deploy; which Azure restart/redeploy action to use to reconcile managed runtime config; whether App Insights/runtime environment telemetry should be enabled; and whether to later build the broader no-write Sleeper/hash/DB preflight (not included in this smallest package).
-- [x] **Safety:** the coding implementation/worker made no production calls, captures, writes, config changes, workflow dispatches, or deploys. Separately, after source review, the orchestrator sent one deliberately invalid `{}` POST auth canary using the Azure control-plane value; it returned 401 before body parsing. Source guarantees this path cannot fetch Sleeper or initialize/use the repository, so it was non-writing and not a real capture. PR #14/#15 and `main` were untouched.
+Authoritative source: Discord message [`1556958219526471684`](https://discord.com/channels/@me/1466769475880620163/1556958219526471684), John:
 
-## ✅ P0 — Correct replacement-level zeroing for Safe / Weeks-as-Starter / Aggressive (completed 2026-09-27)
+> “Minor change on the GB PR: We should separate the key value with a colon. So like \"Overall: 21/24 --> 17/24\".”
 
-**Owner direction (2026-09-27):** Safe, Weeks-as-Starter, and Aggressive now use the selected ranking source's optimized starter pool. Shared FLEX/SUPER_FLEX slots are allocated once, and the final selected player at each position is the exact $0 boundary.
+- [x] Update existing review PR #21 only.
+- [x] Add colons between each compact Team Impact row label and its values: `Overall:`, `{position}:`, and `Lineup pts:`. Preserve the vertical four-line layout, independently colored rank values, accessible text, calculations, and `None` states.
+- [x] Update focused assertions and run resource-safe verification. Commit `29deec1` updated existing PR #21; focused `PlayerDetailDialog` tests passed 12/12, file-scoped lint passed with 0 warnings/errors, `git diff --check` passed, and both GitHub checks passed. Hosted preview QA confirmed `Overall:`, `WR:`, and `Lineup pts:` in the four-line stack with complete accessible labels, independent rank colors, and popup bidding preserved. No merge, production deploy, branch deletion, or PR #20 change was performed.
 
-**Completed on `fix/non-vorp-replacement-zeroing`:**
-- [x] Preserved the approved non-VORP semantics, current `buildLeagueContext`, fixed elimination cadence, survivor progression, Safe budget/position weights/rank-one premium, and Aggressive multiplier.
-- [x] Added one generic private slot allocator. The non-VORP model is built once per board; current and modeled stages use positive finite selected-source points/week and deterministic player-ID ties.
-- [x] Kept the public Max VORP wrapper on finite `totalPoints` eligibility (including zero), its exact comparator, formulas, selector, calibration, and output. Added selected-ID/golden regression protection.
-- [x] Added focused boundary, shared-slot, edge/sparse, deterministic tie, arbitrary context, actual stage-membership, Aggressive derivation, and Sleeper/FantasyCalc/FantasyPros ownership tests.
-- [x] Added reproducible `npm run analyze:non-vorp` and `docs/analysis/non-vorp-seamex-2026.md` with source/context/stages, boundaries, cutoffs, actual available rows, and frozen BEFORE/current AFTER comparison.
-- [x] SeaMex current live AFTER: Safe **192** (QB27/RB55/WR80/TE30); Weeks and Aggressive **181** each (QB26/RB52/WR76/TE27). Boundaries in the final live capture: QB Geno Smith #28; RB Brian Robinson #56; WR Calvin Ridley #81; TE Colby Parkinson #31.
-- [x] Independently verified 173 frontend tests, 36 API tests, focused waiver/ranking tests, lint (one pre-existing unrelated warning), typecheck, production build, `git diff --check`, secret scan, report sanity, and hosted desktop/mobile Waivers strategy switching.
-- [x] Review-only PR #13 is open with green CI and exact Azure preview `https://nice-moss-07ec56310-13.centralus.7.azurestaticapps.net`; branch is committed/pushed only. Not merged; no production deploy/workflow dispatch or production/Supabase/data mutation.
+## P0 — Apply established rank colors to Team Impact transitions (owner refinement, 2026-10-06)
 
-**Out of scope:** Custom valuations remain the separate P2 below.
+Authoritative source: Discord message [`1556955114978414653`](https://discord.com/channels/@me/1466769475880620163/1556955114978414653), John:
 
-## 🔮 P2 — User-created custom valuations (John, 2026-09-27; NEXT FEATURE CANDIDATE, DO NOT IMPLEMENT IN THIS SESSION)
+> “For GB Team Impact, minor change, but we should probably use the same color scheme elsewhere for the position and overall before and after values.”
 
-- [ ] Long term, support custom user valuation boards; this may be the next feature after replacement-level corrections. Preserve the existing detailed Custom Values requirements later in this roadmap: named boards, start from an existing source or blank, direct per-player editing, explicit commit before resorting, correct post-save ordering, and persistence across sessions. Plan storage/scope/auth and how a custom board becomes a selectable valuation source before implementation.
+- [x] Update existing review PR #21 only; do not create another PR, merge, deploy, delete branches, or alter PR #20.
+- [x] Color the **before and after rank values independently** for both `Overall` and the position row using the app's established rank quartiles: top 25% green (`#10b981`), middle 50% amber (`#f59e0b`), bottom 25% red (`#f43f5e`). Keep labels/arrows neutral and leave `Lineup pts` unchanged.
+- [x] Reuse the shared `rankQuartile()` semantics so tiny leagues, ties, invalid values, and active-team denominators remain consistent with Hub projected-position rankings and manager strength/need presentation.
+- [x] Preserve the four-line layout, accessible complete text, `None` states, popup bidding, Waivers rail removal, and all Team Impact calculations.
+- [x] Add focused regression assertions for independently colored before/after values and push commit `1fd6728` to PR #21. Focused tests passed 12/12 and file-scoped lint passed; GitHub/Azure preview checks are rebuilding.
 
-## 🚨 PR #11 owner follow-up — eliminated label in manager popup (John, 2026-09-26)
+## P0 — Simplify Team Impact to the four essential lines (owner request, 2026-10-05)
 
-- [x] When an eliminated manager's Bid Profile popup is opened, show the shared Teams/Teams `Eliminated` status badge beside the manager name.
-- [x] Do not show the badge for active managers or Waivers manager-prediction popups. Preserve existing modal geometry/accessibility and add regression coverage.
-- [x] Push to PR #11 after full verification; do not merge or deploy production.
+Authoritative source: Discord message [`1556879194926096504`](https://discord.com/channels/@me/1466769475880620163/1556879194926096504), John:
 
-## 🚨 PR #11 owner follow-up — visually separate eliminated Bid Profiles (John, 2026-09-26)
+> “There is a lot of text, but really we just need the +/- number, followed by the 3 arrow parts (Overall 22/26 --> 16/26), all stacked vertically. So basically no text or other information in that section when there is impact.”
 
-- [x] When `Show eliminated teams` is enabled, list all active/surviving Bid Profiles first, then all eliminated profiles; retain multiplier-descending/deterministic ordering within each group.
-- [x] Apply the same muted manager-name color used for eliminated cards in Teams/Teams so eliminated Bid Profiles are visually obvious.
-- [x] Preserve active-only FAAB quartiles, checkbox persistence/filtering, modal behavior, and all existing calculations. Add regression coverage, push to PR #11, and do not merge or deploy production.
+When `teamImpact.status === 'available'` and impact is non-zero:
 
-## 🚨 PR #11 analysis correction — evaluate every selectable VoRP count (John, 2026-09-26)
+- [x] Keep only the signed lineup-points delta (for example `+12.4`) followed by the three existing before → after metrics: `Overall`, the player's position rank, and `Lineup pts`.
+- [x] Stack the delta and all three metrics vertically; do not use the current three-column card grid.
+- [x] Remove the explanatory intro, “Projection change:” label, starter-change copy, assumed-drop copy, FAAB copy, and the explanatory footer from the rendered impact state.
+- [x] Keep only the minimal labels necessary to identify the three arrow metrics; do not add replacement prose or new information.
+- [x] Preserve the existing impact calculation, zero/`None` state, unavailable/`None` state, player-detail behavior, and accessibility.
+- [x] Add focused desktop/mobile rendering coverage and open only a review PR. Do not merge, deploy, or alter PR #20.
 
-- [x] Max VORP must evaluate every integer team count exposed by the existing VoRP selector, from current active-team count through 4 inclusive. For SeaMex now, that is all 25 counts 28, 27, …, 4—not only the 19 counts reachable under the elimination cadence.
-- [x] Regenerate the reproducible SeaMex report and reassess interior maxima, endpoint disagreements/deltas, position patterns, and runtime using all 25 selectable counts. Clearly distinguish this Max-VORP shape analysis from the separate unperformed real-bid strategy-accuracy study.
-- [x] Add a regression proving odd counts above 16 are included; run full verification and update PR #11 preview. No merge or production deploy.
-
-## 🚨 PR #11 owner preview fix — eliminated-team visibility in Bid Profiles (John, 2026-09-26)
-
-- [x] The shared `Show eliminated teams` checkbox on Teams must filter both the Teams tab and the Bid Profiles tab. Default unchecked: Bid Profiles lists active managers only. Checked: eliminated managers are added without changing multiplier-descending ordering or active-manager FAAB quartile calculations.
-- [x] If an eliminated manager’s profile modal is open when the checkbox is turned off, close it rather than leave hidden content open. Preserve the persisted checkbox preference and Teams behavior.
-- [x] Add component/integration regressions for both tabs and run full verification; push to the existing Max VORP PR and update its hosted preview. No merge or production deploy.
+## P0 — Remove redundant side `Bids` rail from collapsed Waivers cards (owner decision, 2026-10-05)
 
-## 🚀 PR #11 — Max VORP default strategy + bidding-style baseline (John, 2026-09-26; IMPLEMENT NOW)
+Authoritative source: Discord message [`1556881785235841097`](https://discord.com/channels/@me/1466769475880620163/1556881785235841097), John:
 
-**Product decision:** Add **Max VORP** and make it the default and first strategy option. Max VORP also replaces Weeks as Starter as the default baseline used to calculate manager bidding-style ratios. The separate real-bid strategy-accuracy analysis is not part of this PR and does not gate the decision.
+> “My guidance is to remove that side bid. Like you said it is redundant, the correct path is supposed to be to see bids in the player card popup (where it already is). Can you create a fix for this and share the link for me to verify?”
 
-### Required behavior
-- [x] Add a first-class strategy ID/implementation named `max-vorp`, displayed as **Max VORP**. Put it first in every strategy selector, legend, comparison, and stable strategy registry. Keep Weekly, Safe, Aggressive, and Weeks as Starter available unless a surface intentionally supports a smaller documented set.
-- [x] For each player, calculate VORP at every valid remaining-team count supported by the app/league progression and use the maximum **positive** VORP. SeaMex currently spans 28 active teams down to 4, but the implementation must derive supported bounds/counts from league/configuration logic rather than hard-code SeaMex. Clamp at `$0` only through the VORP/replacement-level definition; do not add arbitrary display thresholds.
-- [x] Use the exact all-count maximum unless measured analysis proves an endpoint-only shortcut is mathematically/empirically equivalent for all supported fixtures. Before choosing, run an all-player SeaMex analysis and report each player’s maximizing team count, interior maxima, endpoint-only disagreements/deltas, position patterns, and runtime. Include all players if practical, otherwise all players positive at the largest team count. Save a reproducible script/report in the repo.
-- [x] Make Max VORP the default selected strategy for new/unset state and the **first visible option**. Preserve an existing user’s explicit persisted non-default choice rather than silently overwriting it; migrate only legacy implicit/default state where distinguishable. Add hydration/migration tests.
-- [x] Make bidding-style/profile ratios use Max VORP as their baseline in both historical-event reconstruction and current manager predictions. Remove hard-coded Weeks-as-Starter lookups from profile/prediction code. Use one explicit, swappable `BIDDING_STYLE_BASELINE_STRATEGY`/strategy resolver so a later model can replace Max VORP without scattered edits.
-- [x] Version or record the baseline strategy used for generated profile/history calculations so future changes do not silently reinterpret persisted/snapshotted predictions. Existing immutable historical source evidence must not be mutated; derived views may be recomputed with an explicit strategy version.
-- [x] Preserve current manager multiplier formula, FAAB caps, buyer likelihood, ordering, Week 1/no-history fallbacks, ownership/elimination logic, and all PR #10 UI behavior. Only the baseline suggested bid changes to Max VORP.
-- [x] Define and test positional replacement populations, scarcity/tie behavior, all-zero/missing projections, monotonic/non-negative output, team-count bounds, eliminated-team progression, performance/caching, and deterministic results. Verify top players can peak at smaller-team scarcity while fringe starters can retain a larger-team maximum and replacement players naturally resolve to `$0`.
-- [x] Update all user-facing help/tooltips/docs so Max VORP is explained clearly and listed first/default. Do not expose implementation-only strategy IDs or claim empirical bid superiority.
+- [x] Forensics: PR #15's first implementation commit `de277b00` added universal player-details behavior and split the prior whole-card bid expansion into a separate right-side chevron rail on 2026-09-29 at 03:08 PDT. Commit `fe6cdbe3` changed that chevron into the visible vertical `Bids`/`Hide bids` text on 2026-09-29 at 21:46 PDT. PR #15 merged on 2026-10-02 at 03:36 PDT, so it was not a last-minute pre-merge addition; the visible text existed for more than two days and six subsequent PR commits before merge. It was nevertheless an implementation choice, not an explicit owner request.
+- [x] PR #19 did not touch `WaiversPage.tsx` or `PlayerDetailDialog.tsx`. Its runtime scope was the League/Bids chart and shared filters, exact transaction timestamps/zero-dollar preservation, and strict native Sleeper type-3 detection; the remaining changes were tests/types/copy supporting those behaviors.
+- [x] Remove the separate side disclosure rail, its local expanded state, and the duplicate inline `WaiverManagerPredictions` panel from collapsed waiver cards.
+- [x] Keep the whole-card click path opening `PlayerDetailDialog`, where `Predicted bidding` already exists. Preserve the compact summary's prediction indicator/value unless visual QA shows it is also redundant; do not remove the popup data.
+- [x] Add focused regression coverage that the card has one primary details action, no side `Bids`/`Hide bids` control or duplicate inline panel, and the popup still exposes predicted bidding.
+- [x] Include this in the same narrowly scoped review PR as the approved Team Impact simplification, then provide an exact hosted preview for owner verification. Do not merge or deploy production.
 
-### Verification and delivery
-- [x] Add focused numeric fixtures for all-count maxima, interior maxima, endpoint disagreements, zero floor, strategy order/default/hydration, swappable bidding baseline, historical/current profile ratios, and regressions proving `predictedWinningBid` is still not double-multiplied.
-- [x] Run focused tests, full frontend/API suites, lint, typecheck, production build, diff/secret checks, and performance sanity.
-- [ ] Browser-test real 2026 SeaMex on desktop and 390px: Max VORP first/default, strategy switching/persistence, representative elite/fringe/replacement player values, Bid Predictions/profile ratios, no regressions/overflow/console errors.
-- [ ] Work on `feat/max-vorp-strategy`, open a PR to `main`, obtain the exact Azure preview, and leave it review-only. Never merge, push main, dispatch production, or deploy production.
-- [ ] Final HANDOFF/report must include the Max-VORP formula/data flow, SeaMex all-count analysis results, endpoint-vs-full decision, test counts, browser evidence, commit, PR/checks, exact preview, blockers, and explicit no-merge/no-deploy confirmation.
-
-### Implementation result (2026-09-26)
-
-- **Formula:** at every reachable survivor stage from current active teams through four, build the exact optimized replacement pool and final-four calibration, compute `max(0, ROS points - positional replacement) × (initial FAAB / average final-four-team VORP)`, select the highest unrounded value, and round once. Equal maxima prefer the earlier/larger-team stage.
-- **Progression:** generic two eliminations per week above 16, then one per week, lower-bounded at four. Current and historical contexts share the progression logic.
-- **Analysis:** reproducible `npm run analyze:max-vorp` output is checked in at `docs/analysis/max-vorp-seamex-2026.md`. Live 2026 SeaMex (28 active teams, Weeks 4–18, 2,110 players with selected-scoring projection data) found 192 positive players, 21 interior maxima, and 21 endpoint-only disagreements. Mean positive endpoint miss was $1.850; largest was $6.720 (Lamar Jackson), so exact all-count evaluation is retained. Cold compute was 90.01 ms; complete results are memoized.
-- **Defaults/persistence:** the ordered registry puts `max-vorp` first and makes it the fresh/unset default. Store schema is v2; explicit valid legacy choices remain unchanged and `exponential` still migrates to `aggressive`.
-- **Baseline:** one frozen `BIDDING_BASELINE` descriptor (`max-vorp-v1`) drives historical profile ratios and current predictions. Derived evidence/profiles record strategy/version; source evidence remains immutable. Predictions multiply exactly once and retain FAAB caps/order/likelihood behavior.
-- **Docs:** `docs/MAX-VORP.md` documents formula, data flow, migration, baseline, caching, and analysis.
-
-
-### Verification result (2026-09-26)
-
-- Local: frontend 24 files / 161 tests; API 2 files / 36 tests; typecheck, lint, production build, diff check, and changed-file secret scan all passed.
-- PR #11: https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/11 — mergeable/CLEAN; CI `build` and Azure `Build and Deploy` successful.
-- Exact preview: https://nice-moss-07ec56310-11.centralus.7.azurestaticapps.net
-- Hosted real SeaMex: Max VORP first/default; explicit Weeks-as-Starter persisted across reload, then Max VORP restored/persisted; 1440×1000 and 390×844 had no horizontal overflow or console errors.
-- Values: Jahmyr Gibbs $227 (elite), Devin Singletary $2 (fringe), Drew Lock $0 (replacement).
-- Profiles: real manager list/history rendered; Houston0ilers Standard 0.95x with $84/$90, $66/$65, and Week 1 $59/$48 evidence. No unrostered SeaMex player currently has positive Max VORP, so current manager prediction cannot naturally render in hosted data; direct regression coverage verifies baseline × multiplier exactly once and FAAB caps.
-- Commit: `7c32a1fa0d6972108aa291ec8fe64ddaf173a4b4` plus final documentation evidence commit.
-- Safety: no merge, no production deploy, no workflow dispatch.
-
-### Explicitly separate follow-ups
-- Real-bid model-accuracy/outlier analysis remains a separate future effort.
-- Fixing positive values for too many replacement-level players in non-VORP Weekly/Safe/Aggressive strategies remains a later post-Max-VORP PR.
-- Player-level winning/recent bid history and own-team green-border polish remain separate.
-
-## ✅ PR #10 owner correction round 3.4 — remove expanded-row top gap (John, 2026-09-26; VERIFIED + MERGED)
-
-- [x] In expanded Waivers Bid Predictions, align the right-side `Predicted`/`Remaining FAAB` column to the top of the row beside the manager name. Removing the style badge left an awkward empty top gap because the prediction column still started on the second row. Keep likelihood below the manager name and Remaining FAAB below Predicted. Screenshot: `de4b8536-5be4-4368-a1ea-0c27b40f4233.jpg`.
-- [x] Verification passed; John approved the hosted preview and PR #10 merged to `main` as `2dccfcbe6d2f3fa7e03999a661694340f104147a`.
-
-## ✅ PR #10 owner correction round 3.3 — final badge removal + bye empty state (John, 2026-09-26; VERIFIED + MERGED)
-
-- [x] Remove the aggression/style badge entirely from expanded Waivers Bid Predictions rows. It does not fit beside the team name on mobile. Preserve style+multiplier badges on Teams cards and in the manager popup.
-- [x] When a manager has no upcoming byes, render exactly: `No byes in the next few weeks.`
-- [x] Focused/full verification and hosted owner review passed; included in PR #10 merge commit `2dccfcbe6d2f3fa7e03999a661694340f104147a`.
-
-## ✅ PR #10 owner correction round 3.2 — final mobile alignment + prediction consistency (John, 2026-09-26; COMPLETE)
-
-**Status:** Completed on implementation commit `3460721c5a22ed2e0d6c3023f2f5bb0cb63a7044` and verified on the exact Azure PR environment with real SeaMex data at desktop and 390px. Screenshot references: `db9546cb-380e-47eb-ab95-929c66adb11e.jpg` and annotated `885d0b52-b895-45f9-bdd7-1443badcc25e.jpg`. PR remains open; no merge, production deploy, or workflow dispatch.
-
-- [x] **Expanded Bid Predictions mobile alignment:**
-  - `Predicted` + `$N` and `Remaining FAAB` + `$N` are separate compact inline groups with a measured 6px label/value gap; FAAB remains beneath Predicted.
-  - Style badge is on the manager-name top row with 0px center-line delta; multiplier remains omitted only on this surface.
-  - Likelihood/FAAB colors, row click/modal, and complete eligible/Unlikely rendering remain intact. At 390px the first row is 100.5px high with zero card/page overflow.
-- [x] **Collapsed Waivers Suggested bid spacing:** label and amount are one adjacent inline group with a measured 6px gap at 390px and desktop; separate yellow Predicted bid and 57.5px compact summary height remain.
-- [x] **Collapsed/expanded predicted-bid consistency:** collapsed uses only Likely/Possible manager predictions, ordered by feasible capped bid descending; Unlikely never drives it and market `predictedWinningBid` is not used. Tests cover a higher Unlikely global max and tied FAAB-capped eligible bids. Hosted Seth collapsed `$30` exactly matched first expanded eligible MikeZertuche89 `$30`.
-- [x] **Popup Team Needs grouping:** strengths render before weaknesses, case-insensitive duplicate positions are removed with strength priority, neutral remains hidden only here. Hosted 390px popup rendered `QB, DEF` strengths then `K` weakness, with 3/3 unique positions and zero overlap pairs.
-- [x] **Popup FAAB copy:** only `Remaining FAAB` and `$N` are visible; quartile remains in the group aria-label and shared color semantics. Hosted popup showed `$165` red with accessible `Bottom FAAB quartile` and no visible quartile copy.
-- [x] Focused regressions (**3 files / 35 tests**), full frontend (**23 files / 154 tests**) and API (**2 files / 36 tests**) suites, lint, typecheck, build, diff check, and changed-line secret scan passed. GitHub `build` and `Build and Deploy` passed; exact preview is <https://nice-moss-07ec56310-10.centralus.7.azurestaticapps.net>. Desktop 1280×900 and mobile 390×844 had 6px compact gaps, exact `$30` value match, zero horizontal overflow, and zero console errors. No blockers; no merge/deploy.
-
-## 🚨 PR #10 owner correction round 3.1 — post-completion preview fixes (John, 2026-09-26; IMPLEMENT NOW)
-
-**Status:** ✅ Completed and verified on the exact hosted PR preview at desktop and 390px. John reviewed the completed hosted preview and confirmed every item below is still valid. This section supersedes conflicting presentation details in prior completed sections. Keep Max VORP, replacement-level valuation, player bid history, and own-team border out of this correction.
-
-**Failure protocol:** The previous run claimed 16/16 round-3 acceptance despite these visible mismatches. Before changing code, identify why each survived prior tests/hosted QA (ambiguous requirement, wrong surface asserted, stale/incorrect selector, or shared-helper logic not matching rendered data). Add regression tests that fail on the current implementation. Do not accept DOM presence alone when the requirement is ordering or layout.
-
-- [x] **Teams → Bid Profiles ordering:** restore strict most-aggressive-to-least-aggressive ordering by manager multiplier. Use deterministic tie-breaking. FAAB quartile/color must not change card order. Verify the first/last real SeaMex cards and a deterministic fixture.
-- [x] **Team Needs presentation differs by surface while categorization stays shared:**
-  - Manager popup: show only top-quartile strengths and bottom-quartile weaknesses. Render no neutral/middle positions at all.
-  - Hub: continue showing every position; neutral/middle positions remain visible in yellow.
-  - Both must use the same shared quartile classification helper, with only the rendering/filter differing.
-- [x] **Collapsed Teams FAAB color:** apply the exact same shared FAAB quartile text color and accessible tier semantics used by popup Remaining FAAB to collapsed `Current FAAB`.
-- [x] **Waivers compact suggested-bid layout:** the text **Suggested bid** must be horizontally to the **left** of its amount, not beneath it. Preserve compact height and the separate yellow manager-derived Predicted bid behavior. Verify actual geometry/order at desktop and 390px, not only text presence.
-- [x] **Expanded Waivers Bid Predictions card layout:**
-  - On this one space-constrained surface only, omit the numeric multiplier from the aggression/style badge. Keep the multiplier everywhere else it currently belongs, including Teams Bid Profiles and manager popup/history tags. Implement via an explicit presentation option rather than altering shared model data.
-  - Color bidder-likelihood text: **Likely bidder green**, **Possible bidder yellow**, **Unlikely bidder red**. Retain accessible text and existing buyer-tier math/order.
-  - Place **Remaining FAAB beneath the Predicted bid amount** (John corrected “next to” to “beneath”). Do not put Remaining FAAB beneath the manager name/style column. Add structural/geometry coverage.
-- [x] **Hub bye horizon regression:** the live Hub still renders one extra bye week compared with the manager popup. Trace the actual rendered data path and week-coordinate interpretation; then make Hub and popup show the same intended window of current scoring week + next two weeks. Add a boundary regression proving the first excluded week does not render on Hub. Do not merely assert both call the same helper.
-- [x] Re-run focused tests, full frontend/API suites, lint, typecheck, production build, diff/secret checks, commit/push, green CI/preview deployment, and hosted real SeaMex QA at desktop + 390px.
-- [x] Final `HANDOFF.md` must include a correction-by-correction evidence trace with before/after rendered observations, exact file/test, real ordering, popup-vs-Hub needs behavior, FAAB classes, Suggested-bid geometry, expanded-card column placement, and exact bye weeks included/excluded. No item is done until John’s visible complaint is absent on the exact hosted preview.
-
-## 🔮 Future polish — identify John’s team card
-
-- [ ] In Teams/Bid Profiles, give John’s own team the same green-border identity treatment used for John’s rostered players on Waivers. Reuse one ownership/current-user visual token and verify it remains accessible. John explicitly said this does not need to be in PR #10 round 3.1.
-
-## 🚨 PR #10 owner review round 3 — modal/Teams terminology and visual consistency (John, 2026-09-26; IMPLEMENT NOW)
-
-**Status: John authorized implementation. The attached mobile screenshot is the reference for the current problems. PR #10 scope is only this round-3 section; explicitly exclude all Future PR/Analysis sections below.**
-
-**Owner-review gate:** Before claiming completion, produce a requirement-by-requirement trace in `HANDOFF.md` mapping every checkbox in this section to the implementation file, focused test, and real desktop/mobile preview observation. Re-read John’s full round-3 section after implementation and compare the rendered UI against it. Do not mark a checkbox complete from code inspection alone.
-
-- [x] The shared manager-detail popup opens too low on mobile. Waivers and Teams must use the same placement: center it in the viewport or use a near/full-height mobile sheet. It must remain above fixed navigation, expose Bidding History without requiring awkward initial scrolling, respect safe areas, and preserve accessible focus/close behavior.
-- [x] Position strength/need categories must be identical between Hub and the bid popup. Replace thirds with shared **top quartile = strength**, **bottom quartile = need**, middle 50% = neutral. Use one shared helper/component and deterministic tie/small-league behavior so labels cannot diverge.
-- [x] Upcoming byes must use one shared window/helper on Hub and in the bid popup. John’s intended popup window is current week + next two weeks; Hub appears to include one extra week and should be aligned unless later feedback changes the common window.
-- [x] Show **FAAB remaining** prominently in the manager popup.
-- [x] Remove all user-facing bid-count/implementation copy from Teams Bid Profiles and the popup: no `3 bids`, `3 canonical bids`, numbered evidence counts, or `canonical bid` wording.
-- [x] Restore the prior compact Teams Bid Profile card composition:
-  - Combine bidding style and multiplier in one badge/element, as before.
-  - Remove the bid-count text and put **Current FAAB** in that location.
-  - Keep **Highest bid** on the left side.
-- [x] Color Current/Remaining FAAB consistently across Teams and the modal. Rank **active managers** by current FAAB: top quartile green, bottom quartile red, middle 50% yellow/neutral. Ensure `$0` is red and the league maximum is green; add an accessible non-color label/description. Use one shared helper with deterministic ties and small-league behavior.
-- [x] Remove the `Learning` tag. Managers without enough history get no style badge.
-- [x] Replace `No canonical bid`/`No canonical bids` with a simple user-facing `—` (or similarly neutral empty state); never expose the word canonical.
-- [x] Recalibrate bidding-style thresholds so `1.18×` is not Aggressive and **Aggressive starts at `1.50×`**. Preserve Conservative below `0.85×`; classify `0.85×` through `<1.50×` as Standard unless existing product semantics require a clearly documented narrower neutral subdivision. Update the one shared constant/helper, cards, modal, tests, and docs together. No `Learning` style.
-- [x] **Superseding the prior collapsed three-manager summary:** collapsed Waivers player cards return to one compact overall **Predicted bid** in the prior yellow styling. Its numeric value is the highest eligible manager-level predicted bid (not the old market-adjusted `predictedWinningBid`). Do not show manager usernames or three prediction lines while collapsed.
-- [x] Keep the compact card label/amount composition natural and remove the divider from the previous multi-manager layout.
-- [x] Players whose current/suggested value is `$0` show no Predicted bid and the card is not expandable, because no meaningful manager-bid detail exists. Add keyboard/ARIA and boundary tests for exactly zero versus positive values.
-- [x] Expanded Waivers manager predictions should visually reuse the compact Teams → Bid Profiles manager-card language: manager name, shared aggression/style badge beneath the name, FAAB remaining, predicted bid amount, and buyer status beneath that amount. Use clearer labels: **Likely bidder**, **Possible bidder**, and **Unlikely bidder**. Keep the same numeric predictions, eligibility, ordering, cap treatment, and shared modal opening behavior.
-- [x] Rename the Waivers section heading from **Manager Predictions** to **Bid Predictions**.
-- [x] Add responsive visual/component coverage for modal placement/safe-area/nav overlap, shared quartiles, shared bye window, FAAB display/colors, no implementation terminology, no Learning tag, style+multiplier composition, empty states, new category thresholds, and divider-free Suggested-bid layout.
-
-## 🔮 Future PR — Max VORP strategy + empirical bid-model comparison (John, 2026-09-26)
-
-**Product direction:** In its dedicated follow-up PR, **Max VORP becomes the default suggested-bid strategy and the baseline used for bidding-style ratios**, replacing Weeks as Starter. The separate empirical strategy-accuracy analysis below does **not** gate that default choice. Keep the dependency modular/versioned so John can swap the baseline again later. Do not alter PR #10 valuation math.
-
-### Max VORP definition and league analysis
-- [ ] Add a new suggested-bid strategy named **Max VORP**. For each player, compute VORP at every allowed remaining-team count (SeaMex currently spans 28 teams down to 4) and use that player’s maximum positive VORP across the range. Replacement-level players should naturally remain around `$0`; top players receive the strongest scarcity value; fringe current starters can retain value from an earlier/larger-team state even if they later fall below replacement.
-- [ ] Before implementation, run an all-player SeaMex analysis across every allowed team count. At minimum include every player with positive VORP at the maximum team count; include all players if computationally reasonable. Report each player’s maximizing team count and verify whether any peak occurs at an interior count rather than only the largest or smallest allowed count. Do not assume endpoint-only behavior without evidence.
-- [ ] Compare the full all-count maximum against the cheaper endpoint-only approximation (highest and lowest team counts). Quantify disagreements, player/value deltas, runtime, and positional patterns before choosing an optimization.
-- [ ] Define replacement populations/positions, scarcity treatment, budget normalization, monotonicity, zero floor, tie handling, caching/performance, calibration fixtures, and migration/UX impact. Avoid cosmetic clamping or hard-coded thresholds.
-- [ ] Preserve separate Weekly, Safe, and Aggressive strategies for comparison, but make the baseline strategy dependency explicit and swappable through one strategy selector/interface. Replace Weeks as Starter with Max VORP anywhere manager bidding-category ratios currently depend on the baseline, without coupling profiles permanently to Max VORP.
-- [ ] Version the strategy used for predictions/history so future model swaps do not silently reinterpret historical ratios.
-
-### Separate future analysis — which bid strategy best predicts real bids
-- [ ] Build an offline analysis comparing Max VORP, Weekly, Safe, Aggressive, and the current Weeks-as-Starter baseline against historical real bids. Do not change production behavior until results are reviewed.
-- [ ] Separate the target being evaluated: winning/top serious bids versus all bids. Low token bids may represent “only if nobody wants him” rather than willingness to win, so report metrics both with and without low-intent bids where a defensible rule can be defined.
-- [ ] Use robust outlier handling for irrational/high bids (example: a `$200+` bid on backup RB Monangai). Candidate analysis: compare the top ~5 bids per player/waiver event after flagging an isolated top bid that is far above the next cluster. Never delete raw evidence; mark exclusions and run sensitivity analyses with all bids included.
-- [ ] Predefine/compare defensible outlier rules (for example top-to-second ratio, median/MAD or IQR on normalized bid ratios) and avoid choosing the rule that merely makes the favored strategy look best. Report sample sizes and results under multiple thresholds.
-- [ ] Normalize for available FAAB, week/team-count context, caps, player/position, and manager bidding behavior where possible. Evaluate MAE/median absolute error, calibration, rank correlation, winner accuracy, and serious-bid/top-N fit rather than one aggregate metric.
-- [ ] Use walk-forward or leave-week-out validation so the same event does not both fit and evaluate manager multipliers/strategy thresholds. Produce a reproducible report with raw-event traceability and a recommendation, including uncertainty and known data limitations.
-
-### Guardrail
-- [ ] Preserve current PR #10 math until this dedicated PR is approved. PR #10 may only suppress zero-value prediction UI as specified above; it must not introduce interim value zeroing or switch the profile denominator.
-
-## 🔮 Future PR after Max VORP — replacement-level zeroing for non-VORP strategies
-
-- [ ] Diagnose why Weekly, Safe, Aggressive, and any other non-VORP bid strategies still assign **positive (`> $0`) values to too many replacement-level players**. John explicitly excluded this from the current PR #10 work.
-- [ ] After Max VORP lands, define a shared replacement-level/zero-floor concept that makes those strategy curves reach `$0` at an appropriate player tier without cosmetic display clamping, arbitrary player-count cutoffs, or breaking monotonicity.
-- [ ] Preserve genuinely positive values above replacement and evaluate by position, remaining-team count, week, FAAB scale, and edge cases around exactly `$0`.
-- [ ] Add comparative fixtures/visualizations for Max VORP, Weekly, Safe, and Aggressive before changing production values; keep strategy implementations independently selectable.
-
-## 🔮 Future PR — player-level waiver bid history (John, 2026-09-26)
-
-**Goal:** Give both free-agent and rostered-player cards useful market history without mixing historical transactions into current bid predictions. Implement after PR #10 and the Max VORP follow-up unless reprioritized.
-
-- [ ] For any player with historical bids, add a player-card expansion section **before Bid Predictions** that shows prior successful/winning claims: buyer/manager, winning amount, and bidding cycle/week/date. Use canonical transaction identity/deduplication and truthful successful-claim classification.
-- [ ] Add a separate **Most recent bids** section below winning history that lists all legitimate bids from that player’s latest completed bidding cycle, including winning and losing bids, ordered meaningfully with clear outcome labels. Do not combine bids from multiple cycles or count duplicated transaction views.
-- [ ] Apply the same history to free agents and currently rostered players. A currently free player may still have prior winning/release history; current ownership and historical acquisition are separate facts.
-- [ ] On collapsed **rostered-player** cards, replace vague value-adjacent prediction wording with **Winning bid: $N** for that player’s most recent successful acquisition when available. Prefer `Winning bid` over `Actual Value`; “Actual Value” is ambiguous and could be mistaken for the current valuation. If no valid acquisition exists, use a neutral empty state or omit the line.
-- [ ] Keep the existing current-value display for rostered players; winning bid is acquisition history, not a substitute for current modeled value. Do not show manager predictions for rostered players.
-- [ ] Define behavior for `$0` claims/free-agent adds, dropped-and-reacquired players, multiple winning claims, commissioner moves, trades, orphaned/duplicate transaction data, failed bids, ties, and incomplete historical cycles.
-- [ ] Reuse the same won/lost colors and accessible labels as Bidding History, but do not expose `canonical`, reconstruction, evidence-count, or other implementation terminology.
-- [ ] Add focused transaction/dedupe/cycle-selection tests plus desktop/mobile card-layout and expansion tests.
-
-
-## 🚨 PR #10 owner review round 2 — modal details + live-data regressions (John, 2026-09-25)
-
-**Status: implemented on the PR branch; code/tests complete and live preview verification recorded in `HANDOFF.md`.**
-
-- [x] In the Bidding History modal, color **Actual bid** green for a successful/winning claim and red for a legitimate losing claim. Include a non-color won/lost label or icon for accessibility.
-- [x] Make the manager’s bidding style/category visually obvious by restoring the existing colored style badge next to the manager/owner name. Reuse the exact badge colors and visual language from Teams → Bid Profiles rather than introducing a second style system.
-- [x] In each manager-history modal, place **Upcoming byes** above Team needs:
-  - Include that manager’s currently rostered players whose byes occur during the current NFL week or next two weeks.
-  - Order first by nearest bye week, then by current player value descending; do not display the value.
-  - Display player name and position + positional rank when available, e.g. `WR #4`.
-  - Handle no upcoming byes with a compact empty state.
-- [x] Below Upcoming byes and above Bidding History, add **Team needs** from next-week position projections across active teams:
-  - Top/strong third: green up-arrow plus green position label, e.g. `↑ QB`.
-  - Bottom/weak third: red down-arrow plus red position label, e.g. `↓ WR`.
-  - Omit or neutrally de-emphasize middle-third positions.
-  - Use SVG/icon + text, not color alone; keep deterministic tie/small-league handling aligned with buyer-likelihood calculations.
-- [x] Teams → Bid Profiles must use the same manager-detail/modal component and Bidding History presentation as Waivers so the two surfaces cannot drift.
-- [x] Keep the Teams collapsed manager card largely as-is, but add a compact `Highest bid: $N` line beneath the style badge, sourced from canonical bidding history and with an honest no-history state.
-- [x] **Bug investigation: stale/non-available players in Waivers.** Zay Flowers and Lamar Jackson were free agents before Tuesday’s bidding but are now rostered; Jeremiyah Love appears as a free agent despite likely always being owned. Determine whether current ownership is stale, incorrectly derived from transaction-week state, filtered to active rosters, or cached. The default available-player list must be computed from current Sleeper roster ownership after processed waivers. Do not merely hard-code exclusions. Add current-roster/cache invalidation regression tests and real SeaMex verification. This may become a separate follow-up commit/PR only if the owner-review UI work would otherwise be blocked.
-- [x] **Regression investigation: Teams count now says 29 active / 3 eliminated instead of 28 / 4.** This was previously correct. Trace current-week/elimination derivation and identify the exact regression before changing it. Restore 28 active / 4 eliminated for the current SeaMex state without league-specific constants; add a deterministic regression test and verify Hub/Teams/Waivers use one consistent active-roster set.
-- [x] Browser-test desktop and 390px mobile for both Waivers and Teams: modal fit/scroll/focus, bye ordering, needs badges, style badge, history colors/grid, compact collapsed sizing, current free-agent ownership, and 28/4 team counts.
-
-## 🚨 PR #10 owner review round 2 — restore compact Waivers cards (John, 2026-09-25)
-
-**Status: implemented on the PR branch.**
-
-- [x] Restore the collapsed waiver player card to approximately its pre-bidding-profile height/density. It must not contain three full bidder cards.
-- [x] Use one compact right-side summary element in the collapsed card:
-  - Show **Suggested bid**.
-  - Under it, show at most three single-line bidder summaries ordered highest to lowest, e.g. `miluna92  $119`, followed by bidder 2 and bidder 3.
-  - Do not show multiplier, category, buyer label, remaining FAAB, or full row/card chrome until expansion.
-- [x] When **Show rostered players** is enabled, do not show bid predictions or bidder summaries. Show only the player’s current valued price.
-- [x] Correct and simplify collapsed player metadata. Show only the player name, natural position + positional rank (for example `WR #4`), team if useful, next-week projection, and bye week. Remove the raw/source `Value 262.3`, duplicate weekly `Rank 4`/`Rank 9`, starter-weeks text, and any other duplicate ranking/value metadata. Preserve injury status only if it remains compact and useful. Do not change the underlying valuation merely to fit the layout.
-- [x] Remove the standalone **Predicted bid** line now that top bidders are available. Keep the overall Predicted winning bid only in preseason/Week 1 when manager-level predictions cannot be produced.
-- [x] Expanding a player card should reveal the manager bidders and predicted bids in a smooth, compact list—visually closer to the current compact expanded-list rows, not stacked large cards.
-- [x] Do not embed a large **Bidding History** accordion inside every manager row. Clicking a manager row/card should open a single modal dialog containing that manager’s Bidding History, so only one history surface is open at a time. Include accessible modal focus management, keyboard close, backdrop close where appropriate, and mobile fit/scroll behavior.
-- [x] In the Bidding History modal, each historical event uses a compact 2×2 metric grid: two fields on top and two below. Use explicit labels **Suggested bid** and **Actual bid**; retain **Pre-bid FAAB** and **Ratio** unless John’s continuation changes them.
-- [x] Add mobile/desktop visual and interaction coverage for original-height collapsed cards, rostered-player mode, metadata cleanup, preseason/Week-1 fallback, expansion, manager modal behavior, 2×2 history layout, overflow, and keyboard/focus behavior.
-
-### Round-2 root cause and prevention — 2026-09-25
-
-- **Stale/non-available players:** ownership had two independent defects. `useRosters` treated live ownership as one-hour-stale metadata, so navigation could retain the pre-waiver snapshot; and `computeAvailablePlayers` / `computeRosteredPlayerOwners` deliberately skipped eliminated rosters, making players still present on those current Sleeper rosters appear free. Prevention: current rosters are stale immediately and refetch on mount/focus; availability and owner labels use every current Sleeper roster, while elimination still limits only buyers/projections. Live SeaMex evidence: roster 15 currently owns Zay Flowers (`9997`) and Jeremiyah Love (`13287`), so both are excluded; Sleeper currently reports no roster owner for Lamar Jackson (`6994`), so Lamar honestly remains available rather than being hard-coded.
-- **29/3 team count:** all matchup queries scanned through Week 18 and accepted a week as “complete” once any roster had positive points. As the active NFL week began, partial scores entered elimination-rate/current-week math and produced the transient bad count. `NFL display_week` is also already the in-progress week for this live state, so it is not a safe boundary. Prevention: every page now clips current-season matchup history to authoritative `league.settings.last_scored_leg`; a shared `getActiveRosterIds()` supplies Hub/Teams/Waivers and buyer tiers. Live SeaMex reports `leg=3`, `last_scored_leg=2`; only Weeks 1–2 are applied, producing 28 active / 4 eliminated.
-
-## 🚨 P0 PR #10 follow-up — correct baseline and de-emphasize non-buyers (John, 2026-09-25)
-
-- [ ] **Fix an inflation bug:** manager multipliers are defined relative to the app's **Weeks-as-Starter weekly suggested bid**, not its higher market-adjusted `predictedWinningBid`. Both historical event ratios and current manager forecasts must use the corresponding Weeks-as-Starter suggestion (`strategy === 'weeks-starter'`) as their baseline. Do not feed `row.predictedWinningBid` into `calculateHistoricalBaseline()` or `buildManagerPredictions()`.
-- [ ] Preserve formulas after that correction: historical ratio = actual bid / min(historical Weeks-as-Starter suggestion, pre-bid FAAB); current uncapped estimate = current Weeks-as-Starter suggestion × manager multiplier; displayed predicted bid = min(uncapped estimate, current FAAB).
-- [ ] Add regression tests proving the larger market-adjusted predicted-winning number is never used as the manager-multiplier baseline and showing the corrected lower forecast numerically.
-- [ ] Color a FAAB-capped displayed predicted bid red, with accessible non-color text/label indicating it is capped by available FAAB.
-- [ ] Collapsed top-three predictions should include only **Likely** and **Possible** buyers. Do not include **Unlikely** buyers merely because their numeric prediction is high; showing fewer than three is preferable to implying false interest.
-- [ ] Expanded manager list remains complete, but sort Likely first, Possible next, and Unlikely last; visually de-emphasize/gray Unlikely buyers. Within each tier, retain deterministic predicted-bid ordering.
-
-## 📈 This-season prediction calibration + weekly league snapshots (John, 2026-09-25)
-
-- [ ] Persist immutable, pre-waiver weekly prediction snapshots in the dedicated Guillotine database so this season can become a calibration dataset. Snapshot enough league state to reproduce each forecast: league/season/week/cutoff, active/eliminated rosters, rostered players, current FAAB, position-strength/need tier, player baseline, manager multiplier, uncapped estimate, capped prediction, and exact model/version inputs.
-- [ ] After waivers process, attach canonical actual winners, winning bids, legitimate losing bids, and no-bid outcomes to the frozen predictions; never rewrite the original forecast.
-- [ ] Track error/calibration by player, manager, week, buyer tier, cap state, and behavior category. Measure predicted-vs-actual bid error plus whether Likely/Possible/Unlikely tiers actually bid.
-- [ ] To evaluate whether displaying predictions changes a user's willingness to bid, add an explicit privacy-conscious exposure/intended-bid measurement or app-mediated bid flow; transaction outcomes alone cannot establish that behavioral effect. Keep observational accuracy separate from causal product-impact claims.
-- [ ] Use this season's evidence to recalibrate next season's buyer likelihood and decide whether Unlikely teams can be hidden entirely; during this season they remain visible, gray, and below likely/possible buyers when expanded.
-- [ ] Design the capture schedule/idempotency/RLS/retention before implementation. Use only dedicated Supabase ref `xduqpomhjdlgmtmmkfed`; never expose service-role credentials to the browser.
-
-## 🚨 PR #10 owner review — redesign bidding predictions inside player cards (John, 2026-09-25; feedback continuing)
-
-**Status: implemented and verified on the PR #10 branch; awaiting owner review.**
-
-- [x] Remove the standalone **Manager bid profiles** section from Waivers.
-- [x] Put manager bid predictions directly on each waiver player card instead.
-- [x] Compact the collapsed player-card layout to make room:
-  - Hide `14/14 starter weeks` until the card is expanded.
-  - Remove the duplicate `• WR4` text before starter weeks (John had already requested its removal).
-  - Shorten projection copy where possible, e.g. `18.8 proj.`.
-  - Remove the right-side `21%`; useful, but lower priority than predicted bids.
-- [x] Collapsed player card, right side: show the **top 3 highest predicted manager bids**, each with owner/username. For each visible prediction show only username, predicted bid, multiplier, and category; also consider remaining FAAB because it is decision-useful. Do **not** show confidence labels.
-- [x] Clicking a player expands that same card. Expanded card should show the top 10 predicted bids, with a **Show more…** control when additional managers exist.
-- [x] Expanded manager rows should retain the useful Manager-profile evidence but remove implementation language such as `reconstructed` and confidence labels.
-- [x] Simplify confusing `Raw`, `Willingness`, and `Feasible` columns. Candidate user-facing fields are **FAAB available** and **Predicted bid**. Before revising copy, explain to John exactly what all three current values mean.
-- [x] Simplify each historical evidence row from six numbers to: **Suggested** value (the historical weekly baseline used by the multiplier), **Actual bid**, **Pre-bid FAAB**, and **Ratio**.
-- [x] Replace the confusing `Transaction Wk 1 · decision Wk 2` display with one user-facing label for the week that just finished: **`Wk 1`** in this example. Keep the decision-week mapping internal.
-- [x] Rename **Evidence** to **Bidding History**.
-- [x] Remove visible `Model bidding-profile-v1` copy and the duplicate FAAB footer; these are implementation details, and current FAAB belongs in the manager prediction fields.
-- [x] Add a Teams **Bid Profiles** sub-tab: list managers from most to least aggressive, show current FAAB, multiplier and category, and expand a manager to show the same simplified Bidding History/behavior details used on Waivers.
-- [x] Week 1/no manager behavior: retain the existing overall **Predicted winning bid** rather than fabricating manager-specific predictions.
-- [x] Add a simple buyer-need signal per manager/player using active-team position strength thirds: top third/strong at the target player's position = **Unlikely buyer**; middle third = **Possible buyer**; bottom third/weak = **Likely buyer**. Treat this as a visible heuristic, not a hidden multiplier in the numeric bid prediction. Reuse existing position-strength logic where possible and handle ties/small leagues honestly.
-- [x] Preserve the overall Waivers page structure: same player list, now with top-three manager predictions in collapsed cards and additional manager/team bidding details only after expansion.
-- [x] Add focused responsive/browser tests for collapsed density, expansion, top-3/top-10 ordering, Show more behavior, Week-1 fallback, need tiers, Teams Bid Profiles ordering/expansion, and truthful missing-data states.
-
-### Implementation completion — 2026-09-25 19:40 PDT
-
-Implemented the owner revision in the existing PR branch. Waiver cards now show the top three active-manager, FAAB-capped predictions while collapsed and top ten plus Show more when expanded. The full-card toggle is a native button with keyboard support. Player metadata uses the requested Position/Value and Week/Rank labels. Teams now has aggressiveness-sorted Bid Profiles with current FAAB and simplified expandable history/behavior. Buyer likelihood uses active-team positional-strength thirds only and never feeds bid math. Week 1/no canonical history leaves only the overall predicted winning bid. Existing canonical history, snapshot provenance, deduplication, FAAB reconstruction, geometric multiplier, and backend security logic remain intact.
-
-Verification completed: focused owner-requirement tests, full frontend suite, API suite, lint, TypeScript/build, production build, diff check, changed-file secret scan, and desktop/mobile SeaMex browser QA. Final counts, hosted-preview evidence, commit, and PR status are recorded in `HANDOFF.md`.
-
-## ✅ Bidding-behavior profiles + bid predictions FE PR #10 (2026-09-25)
-
-- PR: <https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/10>
-- Preview: <https://nice-moss-07ec56310-10.centralus.7.azurestaticapps.net>
-
-- [x] Passed the hard backend gate before branching: PR #9 is merged to `main`; production credential-free GET returns explicit effective provenance; at that gate the dedicated DB contained reconstructed decision Weeks 1–3 only and no Week 4 row. See the current W4 reconstructed state above.
-- [x] Added versioned, strongly typed `bidding-profile-v1` modeling: completed wins plus proved same-batch losses; invalid/unmatched failure rejection; manager/player/batch contingency collapse; transaction-ledger pre-submission FAAB; deterministic top three; capped event ratios; geometric multiplier; style thresholds `<0.85`, `0.85–1.15`, `>1.15`; evidence-aware confidence; and willingness vs current-FAAB-capped prediction.
-- [x] Added credential-free projection snapshot client/types/query hook. Historical evidence uses effective snapshot provenance and never promotes reconstructed/fallback evidence to exact.
-- [x] Added the Waivers `Manager bid profiles` UI with live Sleeper target baselines, all-manager summaries, raw baseline/willingness/feasible bid, multiplier/style/confidence, expandable top-three rows, explicit provenance/ledger/budget/duplicate details, and loading/empty/error/insufficient states.
-- [x] Kept V1 honest: historical baselines reuse the Weeks-as-Starter formula with immutable snapshot rows and static league setup, while clearly deferring unavailable historical roster/ownership/needs/survivor replay.
-- [x] Added deterministic fixtures and 17 new logic/component/API-hook tests covering wins, legitimate losses, invalid/unmatched failures, duplicate paths, ledger spend/transfers, inferred budget lower bounds, top-three tie-breaking, tiny/zero baseline, zero bid, constrained observations, exact/reconstructed/fallback confidence, thresholds, exhausted FAAB, partial snapshot failure retention, snapshot filtering, explainability, and UI states.
-- [x] Browser-tested the real 2026 32-team `SeaMex Guillotine` Sleeper league against the live production snapshot GET at desktop and 390px mobile: 32 manager profiles, real W1–W3 evidence, reconstructed labels, no horizontal overflow, 44px select target, and no console errors.
-- [x] Full 128-test suite, 36 API regressions, lint, typecheck, production build, diff review, and secret scan pass. Independent review's one medium partial-snapshot resilience finding was fixed and regression-tested; no high findings.
-- [ ] Owner review/merge only. No production deploy or self-merge.
-
-## ✅ PR #9 final pre-activation correction — early W4 deleted; not activated (2026-09-25)
-
-- [x] Honored John's final direction to delete the too-early reconstructed decision-Week-4 run instead of retaining it. Migration `202609250006` is absent-safe on clean replay and deletes only ID `7a6cfceb-c1f8-4eb5-b64b-d84db2ac38e8` after exact metadata, 15,821-child, and ordered child-audit-hash checks.
-- [x] Changed the values FK to `ON DELETE CASCADE`; the migration transaction temporarily disables only the two immutable delete triggers after all guards pass, deletes the exact parent ID, verifies parent and children are gone, and restores trigger state. Any mismatch fails the migration.
-- [x] Reverified linked and credential refs as dedicated project `xduqpomhjdlgmtmmkfed`, rehearsed migration 006 inside a rolled-back real PostgreSQL transaction, confirmed dry-run listed only 006, and applied only 006. Remote migration history is now 001–006 and up to date.
-- [x] Post-apply proof: target parent `0`, target children `0`, exact Week 4 coordinate rows `0`. W1–W3 IDs, content hashes, row/child counts, and independent ordered child audit hashes remain unchanged.
-- [x] A rolled-back synthetic exact Week 4 probe succeeded; identical retry reused the same ID with `created=false`; differing exact evidence failed with SQLSTATE `23505`; rollback left no fabricated Week 4 row.
-- [x] Migration 005 remains valid additive history and continues to provide provenance-aware exact/reconstructed idempotency and conflict behavior. No history was hidden or rewritten.
-- [x] Docs now state that Sleeper route `week` is a matchup week, not a Tuesday snapshot; the route has no as-of/revision contract; live Sleeper returns current forecasts; and the canonical Tuesday snapshot preserves the historical ROS bidding baseline. Only reconstructed W1–W3 rows exist; there are no historical exact rows.
-- [x] Focused/full tests, lint, typecheck, build, diff check, secret scan, clean replay through 006, and a mismatched-target rollback rehearsal all pass. Independent review is recorded in `HANDOFF.md`.
-- [x] Did not merge, configure application/repository settings, activate the scheduler, dispatch a workflow, or deploy.
-
-## ✅ PR #9 exact/reconstructed coexistence correction — migration 005 retained
-
-- [x] Migration `202609250005` replaced the old coordinate-only uniqueness constraint with a provenance-aware evidence key; valid reconstructed and exact evidence can coexist when intentionally retained.
-- [x] The service-role RPC keeps identical exact retries idempotent and rejects differing exact hash, count, or actual child values. Forced RLS, immutability, calendar, and capture-window checks remain intact.
-- [x] GET is deterministic within the requested season: highest decision week first, then exact before reconstructed. API provenance separates decision week from preceding playing week and exposes same-week/fallback, stored capture kind/timing, and effective exactness.
-
-## ✅ PR #9 late integrity findings — corrected; awaiting review
-
-- [x] Persisted immutable `capture_started_at` alongside `fetched_at`; API passes the actual sampled start, GET/types/docs expose it, and exact DB/API rules validate start >= cutoff, finish >= start, and finish <= cutoff + 15 minutes.
-- [x] Added sequenced-clock acceptance, early-start rejection, and late-finish rejection tests for both PDT and PST. A direct service-role RPC early-start exact claim is rejected remotely.
-- [x] Added forced-RLS/default-deny immutable `projection_season_calendar`, seeded authoritative 2026 Week 1 local Tuesday `2026-09-08`. DB RPC/trigger derive expected coordinates, and API validates the calendar for exact and reconstructed captures.
-- [x] Applied only reviewed migration 004 to verified dedicated ref `xduqpomhjdlgmtmmkfed`. It preserved the then-existing evidence and backfilled reconstructed rows with the only honest historical start (`capture_started_at = fetched_at`); migration 006 later removed only the explicitly audited early W4 run.
-- [x] Re-ran remote early-start/wrong-reconstructed-cutoff/default-deny/immutability/credential-free-GET/idempotency/metadata probes plus API/full tests, lint, typecheck, build, syntax, diff, secret scan, and migration dry-run.
-- [x] Documented the reviewed-migration owner process for adding future immutable season calendar rows. No merge, production setting, scheduler activation, workflow dispatch, or production deployment performed.
-
-## P0 — Bidding Profiles V1 (John, 2026-09-24)
-
-Architecture: `docs/BIDDING-PROFILES-PLAN.md`
-
-- [x] **PR1: Dedicated projection-snapshot backend (merged as PR #9)** — Core immutable forced-RLS tables, explicit immutable provenance, DST-aware cutoff/window guards, transactional/idempotent service-role RPC with honest conflicts, managed Function, Sleeper compaction/hash, tests, and operations docs are complete. The too-early W4 seed was guard-deleted and no historical exact evidence was manufactured; after the missed live window, W4 was separately preserved with honest reconstructed/post-cutoff provenance as documented above. Immutable DB-owned season calendar coordinates and start/finish window guards are enforced.
-- [x] **PR2/PR3: Canonical evidence, profile math, and explainable UI (feature PR ready)** — Strongly typed classification, duplicate handling, FAAB reconstruction, top-three selection, ratio/multiplier/style/confidence, public snapshot reads, live prediction, evidence UI, fixtures, real-league browser QA, and verification are complete on `feat/bidding-behavior-profiles`.
-
-## Constraints
-
-- Feature branch and PR only; never push directly to `main`.
-- No production deployment.
-- Dedicated Supabase project; do not use another app's database.
-- No per-league weekly roster/ownership/needs snapshots in V1.
-- Existing historical weeks are labeled reconstructed; only prospectively captured snapshots are exact.
-- Formula constants are versioned and tested in code.
+Execution status (2026-10-05 PT):
+- Review PR #21: https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/21
+- Preview URL: https://nice-moss-07ec56310-21.centralus.7.azurestaticapps.net
+- Focused regression tests passed: `src/components/PlayerDetailDialog.test.tsx`, `src/pages/WaiversPage.test.tsx`
+- GitHub checks passed: `build`, `Build and Deploy`
+- Hosted QA confirmed on preview data path (2026 league): no side `Bids` rail on Waivers cards, card click opens Player Details, popup still exposes `Predicted bidding`, and Team Impact renders as `+/-` plus the three stacked `before → after` rows.
+- Desktop pass completed in-browser; separate explicit 390×844 re-run was blocked when the OpenClaw browser control service timed out before the mobile viewport capture step.
+
+> **Updated:** 2026-10-05
+> **Purpose:** Current owner-approved work, unresolved requirements, and operating constraints only.
+> **Archive:** Detailed completed/review history through 2026-10-03 is preserved in `docs/archive/PROGRESS-through-2026-10-03.md`.
+
+## Owner-selected package delivered — Live scoring on Hub (2026-10-05)
+
+Authoritative sources: Discord DM `1556598413582401567`, `1555497219050278982` (“Add live scores to Hub”), and `1555501175110463619` (“Create a projection system where we have the score projections for every team in the league”).
+
+- [x] Review-only [PR #20](https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/20) adds a compact all-team Hub view with official Sleeper points, actual-starter app projected finals, remaining/in-progress counts, freshness, explicit refresh, and unavailable/partial states.
+- [x] Survival rank, risk, and cutline use only full projections for active teams; eliminated teams remain visible and excluded from the active denominator.
+- [x] Refresh is 60 seconds only in bounded live windows, with one kickoff wake-up inside six hours and no polling for games hours/days away.
+- [x] Independent review findings addressed; 247 frontend + 61 API tests, lint (one pre-existing warning), typecheck, build, diff/secret checks, CI, and hosted 1440×900/390×844 QA passed.
+- [x] Exact preview: `https://nice-moss-07ec56310-20.centralus.7.azurestaticapps.net`. PR remains unmerged; no production deploy or branch deletion.
+- [ ] **Owner design feedback (Discord `1556774531073310731`, 2026-10-05):** “I checked the 2nd GB work as well. It will need more design changes on how we want to implement it. But I'll think about how to do that soon.” Leave PR #20 open and do not invent or implement further design changes until John provides direction.
+
+## Current state
+
+- PR #19 was explicitly owner-approved in Discord messages `1556774531073310731` and `1556792284001992826` and squash-merged to `main` on 2026-10-05 as `7d825df44061a2bbfc9f0a0673fe46a848e9ed72`. Its branch was not deleted and no manual production workflow was triggered.
+- PR #18 (`feature/native-guillotine-bidding-history`) was **closed unmerged at John's request** because it replaced the requested graph with a separate History page. Do not reopen, merge, deploy, or delete its branch without explicit owner approval.
+- PR #20 is the independent Hub live-scoring package. It remains open and review-only pending John's design direction.
+- PR #20 overlaps merged PR #19 in shared model/type surfaces (`src/api/types.ts`, `src/logic/elimination.ts`), so it may require a small conflict reconciliation; the packages are otherwise independent.
+- No production deployment or manual workflow dispatch is authorized. Every PR remains review-only until John approves that exact PR.
+
+## P0 — PR #19 ready for owner review: League/Bids graph + native identity
+
+### Authoritative source
+
+Discord message [`1555496839740919809`](https://discord.com/channels/@me/1466769475880620163/1555496839740919809), John:
+
+> “In League/Bids, add a graph at the top like the scores by week graph that shows bids by week visual.”
+
+John approved bundling the small native Sleeper identification correction. The quote above remains the visual scope.
+
+### Owner mobile-QA corrections — 2026-10-05
+
+Source: Discord message `1556593005849219072` with screenshots from the PR #19 mobile preview.
+
+- [x] **Week scope filters the graph:** `All / 1 / 2 / 3…` now scopes Bids by Week and the supporting grid/list together; `All` restores the complete cross-week view. Position/FLEX and week filters intersect consistently.
+- [x] **One visual x-column per NFL week:** root cause was deterministic array-index jitter (`week ± 0.28`), not transaction-day plotting. Every point now uses the exact integer NFL week x-value; exact Sleeper transaction time remains in tooltip/title/accessible detail only.
+- [x] Validated on existing PR #19 branch at the exact preview with focused/full tests and hosted desktop/390px QA. Correction commit `764f678`; CI green, PR mergeable/clean, still unmerged and review-only.
+
+### Current review state
+
+- [x] Clean replacement branch from `origin/main`; no PR #18 code or branch reused.
+- [x] Existing League → Bids now begins with a responsive Bids by Week chart, while retaining the canonical `extractBids()`, filters, grid/list, and existing navigation/components.
+- [x] Position/FLEX and week filters update the chart and supporting content together; `All` restores every week. Completed wins, genuine `$0`, transaction timestamps, empty/partial weeks, labels, and tooltips retain explicit semantics.
+- [x] Native identity is strictly NFL + integer `settings.type === 3`; 0/1/2 and missing/malformed/fractional/novel values fail closed, independent of `playoff_teams`, team/roster shape, eligibility, and elimination.
+- [x] Focused/full frontend/API tests, lint, typecheck, production build, diff check, changed-file credential scan, independent review, and hosted desktop/mobile QA passed.
+- [x] **Owner-approved and merged:** John explicitly approved PR #19 in Discord message `1556774531073310731`; it was squash-merged on 2026-10-05 as `05c86b3a46bc68761bf79476a4ddbbd6c67d8434`. Branch deletion and manual production deployment were not performed.
+
+## P0 — Snapshot reliability and exact prospective evidence
+
+### Decision Week 5 no-write preflight — PASS (2026-10-05 20:03 PDT)
+
+- Current clean `origin/main` was `7d825df44061a2bbfc9f0a0673fe46a848e9ed72`. The merged runbook (`docs/PROJECTION-SNAPSHOTS.md`), workflow, API route, fetch/canonicalization/hash helpers, and repository boundary were reviewed before probing production.
+- GitHub workflow `367263137` (`.github/workflows/projection-snapshot.yml`) exists on default branch `main` and is `active`. Its six independent Wednesday UTC schedules (`03:02/03:07/03:12` and `04:02/04:07/04:12`) cover Tuesday 20:02/20:07/20:12 in PDT and PST; direct resolver simulations accepted W5 PDT and representative PST coordinates and rejected the wrong W5 UTC hour.
+- Required GitHub metadata is present without reading values: variables `PROJECTION_SEASON=2026` and `PROJECTION_FIRST_DECISION_WEEK_LOCAL_DATE=2026-09-08`; secrets `PROJECTION_SNAPSHOT_API_URL` and `PROJECTION_SNAPSHOT_SCHEDULER_SECRET` (plus the unrelated SWA deployment token).
+- Production Azure settings metadata/shape checks confirmed the scheduler secret is present and at least 32 characters, the calendar date is `2026-09-08`, and `SUPABASE_URL` points only to approved ref `xduqpomhjdlgmtmmkfed`; no value was printed or changed. No broader fetch/hash dry-run endpoint is deployed on current `main`, so the approved side-effect-free authenticated `HEAD` returned HTTP 204 and a deliberately invalid authenticated `POST {}` returned deterministic HTTP 400 `INVALID_REQUEST` for missing required fields—authorization passed, with validation occurring before any fetch, repository query, or ingestion.
+- Credential-free production GET for `season=2026&decisionWeek=5` was byte-for-byte identical before and after all probes: selected fallback snapshot `90681181-3c51-4f68-91cd-ca1637ffbd95`, stored Decision Week 4 reconstructed, 15,761 declared/returned rows, hash `9463b40e63b71c0088a311675d47bdc508a627ba446d703a54b5ba2ced4dc523`, response-body SHA-256 `35c28a56ad8385786ad6ffa9666c9aa260adc2fcdd9fdb358de1569a60bb58aa`. No W5 row was created.
+- Direct fallback readiness was exercised from that clean `origin/main` clone using only existing `fetchRemainingProjections()` + `hashRows()` for season 2026 / Decision Week 5; no repository was constructed and ingestion was not called. Proposal at 2026-10-06T03:03:24Z–03:03:26Z: 14,841 canonical rows for Weeks 5–18, SHA-256 `2295db739041d1deb31afa8ae0a58d23547b03d690d1fb0226a77a35e44813b2`.
+- Safety job `40be660b-c20a-41a9-a3b1-459b8c6e4ce9` is enabled, one-shot, scheduled for `2026-10-07T03:02:00.000Z`, and announces to Discord project channel `1467306156106977386` (`#clawdbot-projects`). Its prompt restricts production data to the approved Supabase ref and requires public-GET/workflow verification before any authorized in-window recovery.
+- Remaining owner action: none before the exact window. Observe Tuesday's scheduled captures/safety job; only owner-authorized in-window recovery may persist an exact W5 snapshot, and exact provenance must never be fabricated after the window.
+
+- [x] PR #16 merged and deployed with scheduler authentication moved to `X-Projection-Snapshot-Secret`; production no-write auth canaries passed.
+- [x] Monday Decision Week 5 no-write preflight (`306c496e-a561-44d6-bb39-6150fcb7fec1`) passed with immutable production evidence recorded above.
+- [ ] Keep Tuesday exact-window safety/recovery check (`40be660b-c20a-41a9-a3b1-459b8c6e4ce9`) under observation.
+- [ ] Require an exact same-week row inside the database-enforced capture window. Never relabel a late/reconstructed capture as exact.
+- [ ] Continue immutable pre-waiver positional-need snapshots and post-waiver canonical outcome attachment. Refuse or alert on missing/late capture.
+- [ ] A future fully non-persisting dry-run may exercise auth, timing, fetch/hash, and repository configuration, but must prove no row mutation.
+
+## Active recurring evidence work
+
+- [ ] Wednesday bidding-strategy calibration remains read-only and must separate winning price, serious-market/clearing proxies, claim participation, and modeled need. Keep production coefficient/formulas unchanged without held-out multi-week evidence.
+- [ ] Continue exact prospective snapshots, first-through-fifth winning-price tracking where analytically useful, and privacy-safe need/outcome evidence.
+- [ ] Preserve raw provider projections; injury status remains display context and must not alter projections, values, ranks, optimized lineups, ROS projections, or bid formulas.
+- [ ] Keep exact versus reconstructed provenance visible. Missing claims are not zero-dollar bids; FAAB caps are censoring.
+
+## Owner-approved product backlog
+
+### P1 — Make Hub and Team Profile share code and features
+
+Authoritative owner wording from Discord message `1555524854795382986`: **“Share team page and hub features and code.”** Do not expand this into a route merger, large canonical dashboard rewrite, or new information architecture unless John separately asks.
+
+- [ ] Create one shared team-view data/calculation layer keyed by `rosterId` for status, ranks, active-team denominator, weekly performance, roster, values, acquisitions, FAAB, draft/history, and common loading/unavailable states.
+- [ ] Extract reusable sections/components instead of importing one route wholesale into another. Route composition and owner-only actions may differ where useful.
+- [ ] Add parity tests proving `/hub` and `/teams/:ownRosterId` use the same canonical fields, values, denominators, and status semantics.
+- [ ] Do not turn this into unnecessary route consolidation or an information-architecture rewrite.
+
+### P1 — Live scoring on Hub
+
+Authoritative owner wording: Discord message `1555497219050278982`, **“Add live scores to Hub,”** and message `1555501175110463619`, **“Create a projection system where we have the score projections for every team in the league.”**
+
+- [ ] Design a compact Hub section showing current scored points and honest projected/survival context, remaining players, freshness, and a route to fuller league detail.
+- [ ] Build/reuse one shared projection model for every league team; distinguish official Sleeper points, app-computed projections, and stale/unavailable states.
+- [ ] Define game-window refresh/caching behavior before enabling polling; avoid overcrowding bottom navigation.
+
+### P1 — Durable custom player values
+
+- [ ] Design guided setup from a rankings source plus optional bidding style, configurable positional maximums, curve/spread, positive-player cutoffs, and understandable `$0` boundaries.
+- [ ] Preserve source-relative ordering unless explicitly edited. Keep named/versioned custom sets separate from provider-native values.
+- [ ] Define durable ownership/auth, persistence, autosave/versioning, reset/duplicate/recovery, and optional import/export before implementation.
+
+### P1 — Request/cache audit
+
+- [ ] Measure initial load, refresh, league/source switch, and tab-switch requests; identify duplicate provider/backend calls and request waterfalls.
+- [ ] Define freshness by data class, shared deduplication/cache ownership, event-aware invalidation, and an explicit accessible refresh path.
+- [ ] Add request-count/deduplication coverage without changing valuation semantics. Do not reactivate the previously deferred broad Waivers render-performance rewrite unless new evidence shows a current problem.
+
+### P2 — Manager likely-bids view, scenarios, and opponent needs
+
+- [ ] Authoritative owner request from Discord message `1555501175110463619`: **“Make likely bids a section for the manager that pops up. This way we can show every player we predict they might bid on.”** Do not invent ordering, confidence, filters, or extra layout requirements before design/review.
+- [ ] Explore a roster/acquisition scenario planner comparing one or more free-agent targets: optimized next-week points/ranks, displaced starter/drop, remaining FAAB, bye conflicts, and credible competitors.
+- [ ] Reuse existing position-need, FAAB, roster, and observed bid-history signals. Keep modeled `Likely/Possible/Unlikely` demand distinct from historical evidence and never imply certainty.
+- [ ] Consider a conditional-claims checklist/export, but do not submit bids automatically.
+
+### P2 — Additional league/player views
+
+- [ ] Evaluate a bidding-by-position view using existing canonical bids; do not duplicate League/Bids parsing.
+- [ ] Explore player game logs, prominent positional rank/average, injury-status display, and team strength/need parity only after confirming trustworthy source coverage.
+- [ ] Keep broader first-through-fifth trend, stage/liquidity, and dedicated Bidding-navigation concepts as assistant-proposed possibilities unless John separately confirms them.
+
+## Analysis hypotheses — not production changes
+
+- [ ] Continue evaluating Middle VORP and alternative horizons only in reproducible analysis. Do not add/change the production default without stable held-out evidence and owner review.
+- [ ] Keep intrinsic value, observed market distributions, manager-adjusted forecasts, and forward predictions visually and semantically separate.
+- [ ] Historical evidence remains too sparse for strong causal or calibrated-probability claims. Report sample sizes, uncertainty, censoring, and exact/reconstructed provenance.
+
+## Permanent project guardrails
+
+- Production deploys are owner-only. “Merge” never implies deploy.
+- Never merge, enable auto-merge, or delete a PR branch without explicit owner approval for that exact PR.
+- Do not change bidding formulas merely to make a UI feature work.
+- Use canonical transaction parsing; never fabricate bids, participation, exact snapshots, or causal conclusions.
+- Use only dedicated Guillotine Supabase project `xduqpomhjdlgmtmmkfed` for project snapshot/evidence data.
+- Preserve unrelated PR semantics, accessibility, mobile behavior, caching/request behavior, and source/provenance labels.
+
+## Recently completed index
+
+Detailed evidence and superseded checklists are archived in `docs/archive/PROGRESS-through-2026-10-03.md`.
+
+- PR #17 — final Team Impact and predicted-bid wording; merged 2026-10-03.
+- PR #16 — snapshot reliability/custom scheduler auth; merged and production canaries passed 2026-10-03.
+- PR #15 — universal Player Details, Team Impact/value/history work; merged 2026-10-02 (see archive for unauthorized-merge incident and safeguards).
+- PR #11 — Max VORP default and bidding-profile baseline.
+- PR #10 — manager bidding profiles and owner-review corrections.
+- PR #9 — immutable projection-snapshot backend.
+- PR #6–#8 — compact Teams/Waivers/Hub and supporting product work.
+- PR #18 — closed unmerged 2026-10-03 after owner-intent drift; branch retained for reference only.

@@ -5,9 +5,17 @@ import type { CanonicalBidEvent, FreeAgentTeamImpact } from '../logic';
 import type { ManagerDetailData } from '../logic/managerDetails';
 import { isEligibleBuyerPrediction, orderManagerPredictions, type ManagerPredictionDisplay } from '../logic/managerPredictionDisplay';
 import { formatDisplayCurrency } from '../logic/displayCurrency';
+import { rankQuartile } from '../logic/rankingQuartiles';
 import { WaiverManagerPredictions } from './ManagerBiddingProfiles';
 
 export type PlayerProjectionState = 'loading' | 'error' | 'loaded' | 'unavailable';
+
+function rankColor(rank: number, outOf: number): string {
+  const quartile = rankQuartile(rank, outOf);
+  if (quartile === 'top') return '#10b981';
+  if (quartile === 'bottom') return '#f43f5e';
+  return '#f59e0b';
+}
 
 export interface PlayerDetailData {
   playerId: string;
@@ -81,11 +89,6 @@ export function PlayerDetailDialog({ open, onClose, data }: { open: boolean; onC
     )
   );
   const hasPrediction = supportsPrediction && predictedBid != null && orderedPredictions.length > 0;
-  const faabAfterBid = typeof data.remainingFaab === 'number'
-    && typeof data.suggestedBid === 'number'
-    && data.suggestedBid <= data.remainingFaab
-    ? data.remainingFaab - data.suggestedBid
-    : null;
   const closeDialog = useCallback(() => onClose(), [onClose]);
 
   useEffect(() => {
@@ -156,30 +159,33 @@ export function PlayerDetailDialog({ open, onClose, data }: { open: boolean; onC
               ) : hasNoTeamImpact ? (
                 <p className="mt-1 text-xs text-[#9ca3c7]">None</p>
               ) : (
-                <>
-                  <p className="mt-1 text-[10px] text-[#6b6e99]">Optimized next-week lineup · active teams only</p>
-                  <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                    <div className="min-w-0 rounded-lg bg-[#121735] p-2">
-                      <div className="text-[9px] uppercase tracking-wider text-[#6b6e99]">Overall</div>
-                      <div className="mt-1 whitespace-nowrap font-['Space_Mono'] text-[10px] font-bold text-[#a5b4fc]">{impact.overallRank.before}/{impact.overallRank.outOf} → {impact.overallRank.after}/{impact.overallRank.outOf}</div>
-                    </div>
-                    <div className="min-w-0 rounded-lg bg-[#121735] p-2">
-                      <div className="truncate text-[9px] uppercase tracking-wider text-[#6b6e99]">{impact.position}</div>
-                      <div className="mt-1 whitespace-nowrap font-['Space_Mono'] text-[10px] font-bold text-[#a5b4fc]">{impact.positionRank.before}/{impact.positionRank.outOf} → {impact.positionRank.after}/{impact.positionRank.outOf}</div>
-                    </div>
-                    <div className="min-w-0 rounded-lg bg-[#121735] p-2">
-                      <div className="text-[9px] uppercase tracking-wider text-[#6b6e99]">Lineup pts</div>
-                      <div className="mt-1 whitespace-nowrap font-['Space_Mono'] text-[10px] font-bold text-[#10b981]">{impact.lineupPoints.before.toFixed(1)} → {impact.lineupPoints.after.toFixed(1)}</div>
-                    </div>
-                  </div>
-                  <div className="mt-3 space-y-1.5 text-[10px] leading-relaxed text-[#9ca3c7]">
-                    <p><span className="text-[#6b6e99]">Projection change:</span> <span className="font-['Space_Mono'] text-[#f0f0ff]">{impactDelta != null && impactDelta > 0 ? '+' : ''}{impactDelta?.toFixed(1)} pts</span></p>
-                    <p><span className="text-[#6b6e99]">Starter change:</span> {impact.incomingPlayerStarts ? impact.displacedStarterIds.length > 0 ? `${data.name} enters; ${impact.displacedStarterIds.map((playerId) => data.getPlayerName?.(playerId) ?? playerId).join(', ')} moves out.` : `${data.name} enters the optimized lineup.` : 'Optimized starters are unchanged.'}</p>
-                    <p><span className="text-[#6b6e99]">Assumed drop:</span> {impact.assumedDropPlayerId ? `${data.getPlayerName?.(impact.assumedDropPlayerId) ?? impact.assumedDropPlayerId} · ${impact.dropReason === 'lowest-projected-non-starter' ? 'lowest projected non-starter' : 'lowest projected roster player'}` : 'None needed at the current roster size.'}</p>
-                    <p><span className="text-[#6b6e99]">FAAB:</span> {typeof data.remainingFaab === 'number' && typeof data.suggestedBid === 'number' ? data.suggestedBid <= data.remainingFaab ? `${formatDisplayCurrency(data.remainingFaab)} → ${formatDisplayCurrency(faabAfterBid)}` : `${formatDisplayCurrency(data.suggestedBid)} suggested exceeds ${formatDisplayCurrency(data.remainingFaab)} remaining` : 'Resulting balance unavailable.'}</p>
-                  </div>
-                  <p className="mt-3 border-t border-[#20264d] pt-2 text-[9px] leading-relaxed text-[#6b6e99]">The suggested bid changes FAAB only. It does not change projected points.</p>
-                </>
+                <div className="mt-2 space-y-1.5 text-xs text-[#9ca3c7]">
+                  <p
+                    aria-label={`Lineup points delta ${impactDelta != null && impactDelta > 0 ? 'plus ' : impactDelta != null && impactDelta < 0 ? 'minus ' : ''}${Math.abs(impactDelta ?? 0).toFixed(1)}`}
+                    className="font-['Space_Mono'] text-xl font-bold leading-none text-[#f0f0ff]"
+                  >
+                    {impactDelta != null && impactDelta > 0 ? '+' : ''}{impactDelta?.toFixed(1)}
+                  </p>
+                  <p
+                    aria-label={`Overall: ${impact.overallRank.before}/${impact.overallRank.outOf} to ${impact.overallRank.after}/${impact.overallRank.outOf}`}
+                    className="font-['Space_Mono']"
+                  >
+                    <span aria-hidden="true">Overall: </span>
+                    <span data-testid="team-impact-overall-before" style={{ color: rankColor(impact.overallRank.before, impact.overallRank.outOf) }}>{impact.overallRank.before}/{impact.overallRank.outOf}</span>
+                    <span aria-hidden="true"> → </span>
+                    <span data-testid="team-impact-overall-after" style={{ color: rankColor(impact.overallRank.after, impact.overallRank.outOf) }}>{impact.overallRank.after}/{impact.overallRank.outOf}</span>
+                  </p>
+                  <p
+                    aria-label={`${impact.position}: ${impact.positionRank.before}/${impact.positionRank.outOf} to ${impact.positionRank.after}/${impact.positionRank.outOf}`}
+                    className="font-['Space_Mono']"
+                  >
+                    <span aria-hidden="true">{impact.position}: </span>
+                    <span data-testid="team-impact-position-before" style={{ color: rankColor(impact.positionRank.before, impact.positionRank.outOf) }}>{impact.positionRank.before}/{impact.positionRank.outOf}</span>
+                    <span aria-hidden="true"> → </span>
+                    <span data-testid="team-impact-position-after" style={{ color: rankColor(impact.positionRank.after, impact.positionRank.outOf) }}>{impact.positionRank.after}/{impact.positionRank.outOf}</span>
+                  </p>
+                  <p className="font-['Space_Mono']">Lineup pts: {impact.lineupPoints.before.toFixed(1)} → {impact.lineupPoints.after.toFixed(1)}</p>
+                </div>
               )}
             </section>
           )}
