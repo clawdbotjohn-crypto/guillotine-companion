@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { parseProjectionSnapshotResponse } from './client';
+import { describe, expect, it, vi } from 'vitest';
+import { getWeeklyGames, parseProjectionSnapshotResponse } from './client';
 
 function validPayload() {
   return {
@@ -39,6 +39,19 @@ function validPayload() {
     }],
   };
 }
+
+describe('getWeeklyGames', () => {
+  it('loads the defensively typed weekly scores feed', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => [{ game_id: 'game-1', status: 'in_progress' }],
+    } as Response);
+
+    await expect(getWeeklyGames('2026', 5)).resolves.toEqual([{ game_id: 'game-1', status: 'in_progress' }]);
+    expect(fetchMock).toHaveBeenCalledWith('https://api.sleeper.app/v1/scores/nfl/regular/2026/5');
+    fetchMock.mockRestore();
+  });
+});
 
 describe('parseProjectionSnapshotResponse', () => {
   it('accepts a valid payload and returns typed data', () => {
