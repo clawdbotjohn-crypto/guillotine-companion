@@ -1,64 +1,50 @@
 # Guillotine Companion — Handoff
 
-**Updated:** 2026-10-06 03:42 PT
+**Updated:** 2026-10-09 PT  
 **Repo:** `clawdbotjohn-crypto/guillotine-companion`  
-**Branch/worktree:** `fix/team-impact-compact-stack` / `/home/john/guillotine-team-impact-simplify`
+**Branch/worktree:** `feat/hybrid-custom-rankings` / `/home/john/.openclaw/worktrees/gb-hybrid-custom-rankings`  
+**Base:** current `origin/main` at task start (`e6708ca503482fb3be10d3c87590d956e1d298aa`)  
+**Implementation commit:** `3cf1ce0`
 
-## Scope completed (owner-approved)
+## Implemented approved Hybrid package
 
-1. **Team Impact simplification (Player Details dialog)**
-   - For `teamImpact.status === 'available'` with non-zero impact, Team Impact now renders only a compact four-line vertical stack:
-     1) signed lineup-points delta (e.g. `+8.5`)  
-     2) `Overall: before/outOf → after/outOf`
-     3) `<position>: before/outOf → after/outOf`
-     4) `Lineup pts: before → after`
-   - Independently colors each before/after overall and position rank with the shared rank-quartile semantics; labels/arrows remain neutral.
-   - Removed the previous metric-card grid and all explanatory prose in this state (`Projection change`, `Starter change`, `Assumed drop`, `FAAB`, footer copy).
-   - Preserved unavailable/`None` and no-impact/`None` states, calculations, and accessible complete labels.
+- Final top-level **Custom** strategy, named-ranking dropdown, `+ New`, adjacent settings and selected-ranking delete controls. The selected name appears only in the dropdown; there is no visible “Custom Board” text or redundant details strip.
+- Maximum ten rankings per league-season and persisted last-used selection.
+- New-ranking flow: name, existing Player Values source, existing base strategy, multiplier, additive modifier, `$0` floor, and concrete formula/player preview.
+- Settings flow: rename/source/strategy/formula settings; ordinary Save preserves the frozen generated baseline and manual overrides. Confirmed Reset clears overrides only. Confirmed Recalculate rebuilds the frozen baseline from currently loaded data and clears overrides with explicit destructive copy.
+- Confirmed delete beside the dropdown and from settings; copy explicitly says predicted bids, bid history, source-relative data, and Team Impact are unaffected.
+- Split custom player cards: left/player region opens existing `PlayerDetailDialog`; right/value region alone edits the custom dollar value. Enter and blur commit normalized non-negative integer values before value-based resort; keyboard/mobile focus treatment is present.
+- Custom values remain distinct from predicted winning bids, completed/losing history, source-relative rank/value, and Team Impact.
 
-2. **Waivers side-rail cleanup**
-   - Removed the separate right-side `Bids` / `Hide bids` disclosure control from `WaiverPlayerCard`.
-   - Removed `predictionsOpen` local state and the duplicate inline `WaiverManagerPredictions` panel.
-   - Kept compact card click as the primary action opening `PlayerDetailDialog`.
-   - Preserved manager prediction data path into the popup (`Predicted bidding` in dialog still present).
+## Persistence semantics
 
-## PR / preview
+`src/store/customRankingStore.ts` follows the existing Zustand `persist`/localStorage convention under its own versioned key. Each board is schema-versioned and scoped by encoded `leagueId + season`. It stores a deterministic, player-ID-sorted frozen generated snapshot plus a separate override map. Week/source/roster/FAAB changes cannot mutate saved work; only explicit value edits, Reset, Recalculate, settings Save, or confirmed Delete write it. No cross-device/export/drag-reorder scope was added.
 
-- **Review PR:** https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/21
-- **Branch:** `fix/team-impact-compact-stack`
-- **Preview URL:** https://nice-moss-07ec56310-21.centralus.7.azurestaticapps.net
+## Files
+
+- `src/logic/customRankings.ts` + focused model/store tests
+- `src/store/customRankingStore.ts`, `src/store/index.ts`, `src/store/appStore.ts`
+- `src/components/CustomRankingDialogs.tsx` + component tests
+- `src/pages/WaiversPage.tsx` + focused card tests
+- `src/logic/waiverDisplay.ts`
+- `PROGRESS.md`, `HANDOFF.md`
 
 ## Validation
 
-### Focused local tests (resource-safe)
-- Rechecked memory before Node work: 1,705 MiB available, no competing heavy Node worker; Gateway remained the largest process, so no broad build/typecheck was attempted.
-- Ran serially under the 1,024 MiB heap cap and low priority:
-  - `NODE_OPTIONS=--max-old-space-size=1024 nice -n 10 npm test -- src/components/PlayerDetailDialog.test.tsx` → **12/12 passed**.
-  - `NODE_OPTIONS=--max-old-space-size=1024 nice -n 10 npm run lint -- src/components/PlayerDetailDialog.tsx src/components/PlayerDetailDialog.test.tsx` → **0 warnings/errors**.
-- `git diff --check` passed.
+Resource-safe and serial under `NODE_OPTIONS=--max-old-space-size=1024 nice -n 10` after memory checks (>1.7 GiB available):
 
-### CI
-- `build` ✅
-- `Build and Deploy` ✅
+- `npm run typecheck` — passed.
+- `npx vitest run src/logic/__tests__/customRankings.test.ts src/components/CustomRankingDialogs.test.tsx src/pages/WaiversPage.test.tsx` — **3 files, 24/24 tests passed**.
+- `npm run lint` — **0 errors**; three warnings reported across the repo run, including two pre-existing locations and one feature warning subsequently removed by replacing effect-driven input synchronization with a nullable draft model.
+- `git diff --check` — passed.
+- Bounded changed-file sensitive-token pattern scan — passed, no matches.
 
-### Hosted QA on PR preview
-- Confirmed on live preview (2026 SeaMex data path):
-  - no side `Bids` rail on Waivers cards,
-  - card tap/click opens Player Details and popup bidding remains present,
-  - Team Impact is a compact four-line stack with `Overall:`, `WR:`, and `Lineup pts:`,
-  - complete accessible labels remain present (`Overall: 7/24 to 3/24`, `WR: 1/24 to 1/24`),
-  - before/after rank values retain independent amber/green quartile colors while labels/arrows remain neutral.
+## Honest remaining review / QA
 
-## Files changed
+- Independent reviewer should inspect the full page create/settings source-switch loading transition, empty Custom state, last-used restoration after reload, ten-cap affordance, and mobile keyboard behavior.
+- Hosted QA should verify 390px and desktop layouts, create/edit/reset/recalculate/delete flows, and that Player Details still shows source metrics, bidding history/predictions, and Team Impact independently.
+- No preview URL was available at handoff time; do not wait excessively for CI.
 
-- `src/components/PlayerDetailDialog.tsx`
-- `src/components/PlayerDetailDialog.test.tsx`
-- `src/pages/WaiversPage.tsx`
-- `src/pages/WaiversPage.test.tsx`
-- `PROGRESS.md`
-- `HANDOFF.md`
+## Safety boundaries
 
-## Safety / boundaries
-
-- PR #20 untouched.
-- No merge, no auto-merge, no production deploy, no branch deletion.
+Review-only. Do **not** merge, enable auto-merge, deploy, dispatch workflows, delete the branch, or modify PR #20 without John's explicit authorization for that exact action.

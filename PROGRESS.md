@@ -1,5 +1,17 @@
 # Guillotine Companion — Current Progress
 
+## P0 — Hybrid custom rankings (review-ready, 2026-10-09)
+
+Authoritative owner scope remains the approved “Durable custom player values” / Hybrid refinement captured in this file and `docs/archive/PROGRESS-through-2026-10-03.md`.
+
+- [x] Added the final top-level `Custom` strategy with a dropdown-only named-ranking identity, adjacent `+ New`, settings, and confirmed delete controls; no visible “Custom Board” label or redundant identity strip.
+- [x] Added versioned league+season local persistence using the repository's existing Zustand `persist` convention: deterministic frozen generated player snapshots, explicit manual overrides, ten-ranking cap, and persisted last-used selection. Provider/week/roster/FAAB changes do not mutate saved values.
+- [x] Added create/settings flows using existing Player Values and strategy terminology, multiplier/modifier formula with a `$0` floor and preview, non-destructive settings saves, explicit confirmed reset/recalculation, and confirmed deletion.
+- [x] Split custom cards so the player region opens `PlayerDetailDialog` and only the value region edits the custom value; Enter/blur commits before value-based resort. Predicted bidding, bid history, source metrics, and Team Impact remain separate concepts.
+- [x] Focused tests cover creation/formula floor, ten cap, league-season isolation, last-used selection, manual edits, settings preservation, reset/recalculation, delete confirmation, left/right card interaction, and market-value separation.
+- [x] Implementation commit: `3cf1ce0`. Focused validation: typecheck passed; 24/24 focused tests passed; lint completed with 0 errors (three warnings total, two pre-existing and one subsequently removed from this feature); `git diff --check` and bounded changed-file secret scan passed.
+- [ ] Independent review and hosted preview QA remain. Review-only PR will target `main`; do not merge, deploy, auto-merge, delete the branch, or touch PR #20 without exact owner authorization.
+
 ## P0 — Add key/value colons to Team Impact rows (owner refinement, 2026-10-06)
 
 Authoritative source: Discord message [`1556958219526471684`](https://discord.com/channels/@me/1466769475880620163/1556958219526471684), John:
