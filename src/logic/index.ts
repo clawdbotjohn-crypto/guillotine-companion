@@ -16,6 +16,7 @@ export {
   buildLiveScoringModel,
   formatLiveUpdatedAt,
   getLiveFreshness,
+  getLiveDataUpdatedAt,
   getLiveRefreshInterval,
   getRemainingGameFraction,
   isWithinLiveGameWindow,

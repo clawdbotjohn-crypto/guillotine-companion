@@ -5,6 +5,7 @@ import type { EliminationResult } from './elimination';
 import type { WeeklyScoredPlayer } from './projections';
 import {
   buildLiveScoringModel,
+  getLiveDataUpdatedAt,
   getLiveFreshness,
   getLiveRefreshInterval,
   getRemainingGameFraction,
@@ -141,5 +142,13 @@ describe('live query policy and freshness', () => {
     expect(getLiveFreshness(now - 30_000, now)).toBe('fresh');
     expect(getLiveFreshness(now - 121_000, now)).toBe('stale');
     expect(getLiveFreshness(null, now)).toBe('unavailable');
+  });
+
+  it('tracks freshness from minute-polled live inputs rather than the static projection baseline', () => {
+    const matchupUpdatedAt = now - 10_000;
+    const gamesUpdatedAt = now - 20_000;
+    expect(getLiveDataUpdatedAt(matchupUpdatedAt, gamesUpdatedAt)).toBe(gamesUpdatedAt);
+    expect(getLiveFreshness(getLiveDataUpdatedAt(matchupUpdatedAt, gamesUpdatedAt), now)).toBe('fresh');
+    expect(getLiveDataUpdatedAt(matchupUpdatedAt, 0)).toBeNull();
   });
 });

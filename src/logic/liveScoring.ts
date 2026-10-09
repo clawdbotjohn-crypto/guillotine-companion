@@ -156,6 +156,22 @@ export function getLiveFreshness(updatedAt: number | null | undefined, now = Dat
   return now - updatedAt <= LIVE_FRESHNESS_MS ? 'fresh' : 'stale';
 }
 
+/**
+ * Freshness tracks the two minute-polled live inputs. Weekly projections are a
+ * baseline assumption, not a live feed, so including their cache timestamp
+ * would make a correctly refreshing live model appear stale after two minutes.
+ */
+export function getLiveDataUpdatedAt(
+  matchupUpdatedAt: number | null | undefined,
+  gamesUpdatedAt: number | null | undefined,
+): number | null {
+  if (
+    !matchupUpdatedAt || matchupUpdatedAt <= 0
+    || !gamesUpdatedAt || gamesUpdatedAt <= 0
+  ) return null;
+  return Math.min(matchupUpdatedAt, gamesUpdatedAt);
+}
+
 export function formatLiveUpdatedAt(updatedAt: number | null | undefined): string {
   if (!updatedAt || updatedAt <= 0) return 'Update time unavailable';
   return `Updated ${new Date(updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;

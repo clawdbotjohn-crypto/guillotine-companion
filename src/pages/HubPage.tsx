@@ -33,6 +33,7 @@ import {
   classifyCanonicalBidEvents,
   getActiveRosterIds,
   buildLiveScoringModel,
+  getLiveDataUpdatedAt,
   buildMaxVorpPlayerValues,
   buildModeledPositionRanks,
   buildSelectedRosterValueDisplay,
@@ -262,10 +263,9 @@ export function HubPage() {
       })
     : null;
   const liveUpdatedAt = liveModel
-    ? Math.min(
+    ? getLiveDataUpdatedAt(
         liveMatchupsQuery.dataUpdatedAt,
         weeklyGamesQuery.dataUpdatedAt,
-        weeklyProjectionQuery.dataUpdatedAt,
       )
     : null;
   const liveLoading = liveSeasonEnabled
