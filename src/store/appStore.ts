@@ -2,7 +2,8 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { DEFAULT_WAIVER_STRATEGY, WAIVER_STRATEGY_REGISTRY, type StrategyKey } from '../logic/waiverStrategies';
+import { DEFAULT_WAIVER_STRATEGY, WAIVER_STRATEGY_REGISTRY } from '../logic/waiverStrategies';
+import type { DisplayStrategyKey } from '../logic/waiverDisplay';
 
 interface AppState {
   // User info
@@ -18,7 +19,7 @@ interface AppState {
   teamName: string | null;
 
   // Strategy and UI preferences
-  activeStrategy: StrategyKey;
+  activeStrategy: DisplayStrategyKey;
   showEliminatedTeams: boolean;
 
   // Actions
@@ -40,7 +41,8 @@ export function migratePersistedAppState(persistedState: unknown): unknown {
   if (state.activeStrategy === 'exponential') {
     return { ...state, activeStrategy: 'aggressive' };
   }
-  const valid = WAIVER_STRATEGY_REGISTRY.some(({ key }) => key === state.activeStrategy);
+  const valid = state.activeStrategy === 'custom'
+    || WAIVER_STRATEGY_REGISTRY.some(({ key }) => key === state.activeStrategy);
   if (!valid) return { ...state, activeStrategy: DEFAULT_WAIVER_STRATEGY };
   return state;
 }

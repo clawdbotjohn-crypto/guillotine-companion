@@ -1,6 +1,6 @@
 // Waivers page — recommended bids per strategy, weekly context, and predicted winning bid.
 import { useMemo, useState, type ReactNode } from 'react';
-import { AlertTriangle, ShoppingCart, Info, RefreshCw, UserCheck } from 'lucide-react';
+import { AlertTriangle, ShoppingCart, Info, RefreshCw, UserCheck, Plus, Settings, Trash2 } from 'lucide-react';
 import { Button, Card, Skeleton } from '../components/ui';
 import { FaabOverBudgetWarning } from '../components/FaabOverBudgetWarning';
 import { buildManagerDetailData, type ManagerDetailData } from '../logic/managerDetails';
@@ -8,7 +8,7 @@ import { PlayerDetailDialog, type PlayerProjectionState } from '../components/Pl
 import { buildManagerPredictions, isEligibleBuyerPrediction, managerName, orderManagerPredictions, type ManagerPredictionDisplay } from '../logic/managerPredictionDisplay';
 import { formatDisplayCurrency } from '../logic/displayCurrency';
 import { ContextDisclosure } from '../components/ContextDisclosure';
-import { useAppStore, usePlayers } from '../store';
+import { getCustomRankingsForScope, getLastUsedCustomRanking, useAppStore, useCustomRankingStore, usePlayers } from '../store';
 import {
   useLeague,
   useLeagueUsers,
@@ -50,7 +50,6 @@ import {
   normalizeReplacementTeamTarget,
   sortWaiverRowsByStrategy,
   type RosteredPlayerOwner,
-  type StrategyKey,
   type WaiverPlayerRow,
 } from '../logic/waivers';
 import { getPlayerName, getPlayerPosition } from '../store/players';
@@ -59,9 +58,24 @@ import { usePlayerValues } from '../hooks/usePlayerValues';
 import {
   getWaiverStrategyExplanation,
   WAIVER_STRATEGIES,
+  type DisplayStrategyKey,
 } from '../logic/waiverDisplay';
 import { resolveBiddingBaseline } from '../logic/waiverStrategies';
 import { formatWaiverSourceMetric } from '../logic/playerValueMetrics';
+import {
+  MAX_CUSTOM_RANKINGS,
+  createCustomRanking,
+  customRankingValue,
+  recalculateCustomRanking,
+  sortCustomRankingPlayerIds,
+  type CustomRanking,
+  type CustomRankingConfig,
+} from '../logic/customRankings';
+import {
+  ConfirmDeleteCustomRankingDialog,
+  CustomRankingSettingsDialog,
+  NewCustomRankingDialog,
+} from '../components/CustomRankingDialogs';
 
 const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE'];
 
@@ -164,7 +178,7 @@ export function VorpControls({
   rankingSource,
   unavailableReason,
 }: {
-  strategy: StrategyKey;
+  strategy: DisplayStrategyKey;
   replacementTeamCount: number;
   maxReplacementTeams: number;
   onReplacementTeamChange: (teams: number) => void;
@@ -197,6 +211,8 @@ interface TeamImpactContext {
 export function WaiverPlayerCard({
   row,
   strategy,
+  customValue,
+  onCustomValueCommit,
   remainingFaab,
   nflTeam,
   age,
@@ -220,7 +236,9 @@ export function WaiverPlayerCard({
   teamImpactContext,
 }: {
   row: WaiverPlayerRow;
-  strategy: StrategyKey;
+  strategy: DisplayStrategyKey;
+  customValue?: number;
+  onCustomValueCommit?: (value: number) => void;
   remainingFaab: number | null;
   nflTeam?: string;
   age?: number | null;
@@ -244,8 +262,16 @@ export function WaiverPlayerCard({
   teamImpactContext?: TeamImpactContext;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const suggestion = row.suggestions.find((item) => item.strategy === strategy);
-  const value = suggestion?.value ?? 0;
+  const suggestion = strategy === 'custom' ? undefined : row.suggestions.find((item) => item.strategy === strategy);
+  const value = strategy === 'custom' ? (customValue ?? 0) : (suggestion?.value ?? 0);
+  const [customInput, setCustomInput] = useState<string | null>(null);
+  const displayedCustomInput = customInput ?? String(value);
+  const commitCustomValue = () => {
+    const parsed = Number(displayedCustomInput);
+    const normalized = Number.isFinite(parsed) ? Math.max(0, Math.round(parsed)) : value;
+    setCustomInput(null);
+    if (normalized !== value) onCustomValueCommit?.(normalized);
+  };
   const projectionWeek = playingWeek == null ? '—' : playingWeek;
   const weeklyProjection = projectionState === 'loading'
     ? 'Loading…'
@@ -268,7 +294,9 @@ export function WaiverPlayerCard({
   const showPrediction = hasPredictionDetails && predictedBid != null;
   const cardLabel = owner
     ? `${row.name}, ${selectedTeamOwner ? 'owned by your selected team' : 'rostered by another team'}. Open player details`
-    : `${row.name}, suggested bid ${formatDisplayCurrency(value)}. Open player details`;
+    : strategy === 'custom'
+      ? `${row.name}, custom value ${formatDisplayCurrency(value)}. Open player details`
+      : `${row.name}, suggested bid ${formatDisplayCurrency(value)}. Open player details`;
   const teamImpact = useMemo(() => {
     if (!detailsOpen || owner || !teamImpactContext) return undefined;
     return buildFreeAgentTeamImpact({
@@ -292,38 +320,67 @@ export function WaiverPlayerCard({
   return (
     <>
       <Card hover className={`p-0 mb-2 overflow-hidden ${owner ? selectedTeamOwner ? 'border-[#10b981]/70' : 'border-[#2a2d4d]' : ''}`}>
-        <div className="flex min-w-0">
-        <button
-          type="button"
-          onClick={() => setDetailsOpen(true)}
-          aria-label={cardLabel}
-          data-owner-highlight={owner ? selectedTeamOwner ? 'selected-team' : 'neutral' : undefined}
-          className="min-w-0 flex-1 min-h-20 px-3 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#818cf8]"
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="flex min-w-0 items-center gap-1.5">
-                <span className="min-w-0 truncate text-sm font-semibold text-[#f0f0ff]">{row.name}</span>
-                {owner && <span role="img" aria-label="Rostered" className={`shrink-0 ${selectedTeamOwner ? 'text-[#6ee7b7]' : 'text-[#8b8eac]'}`}><UserCheck size={14} strokeWidth={1.75} aria-hidden="true" /></span>}
+        <div className="flex min-w-0 items-stretch">
+          <button
+            type="button"
+            onClick={() => setDetailsOpen(true)}
+            aria-label={cardLabel}
+            data-owner-highlight={owner ? selectedTeamOwner ? 'selected-team' : 'neutral' : undefined}
+            className="min-w-0 flex-1 min-h-20 px-3 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#818cf8]"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <span className="min-w-0 truncate text-sm font-semibold text-[#f0f0ff]">{row.name}</span>
+                  {owner && <span role="img" aria-label="Rostered" className={`shrink-0 ${selectedTeamOwner ? 'text-[#6ee7b7]' : 'text-[#8b8eac]'}`}><UserCheck size={14} strokeWidth={1.75} aria-hidden="true" /></span>}
+                </div>
+                <div className="mt-0.5 truncate text-[10px] text-[#6b6e99]">
+                  {row.position} #{row.posRank} · {nflTeam || 'FA'}{playingWeek != null && weeklyRank != null ? ` · W${projectionWeek} #${weeklyRank}` : ''}
+                </div>
+                {weeklyMeta && <div className="mt-1 truncate text-[10px] text-[#8b8eac]">{weeklyMeta}</div>}
               </div>
-              <div className="mt-0.5 truncate text-[10px] text-[#6b6e99]">
-                {row.position} #{row.posRank} · {nflTeam || 'FA'}{playingWeek != null && weeklyRank != null ? ` · W${projectionWeek} #${weeklyRank}` : ''}
-              </div>
-              {weeklyMeta && <div className="mt-1 truncate text-[10px] text-[#8b8eac]">{weeklyMeta}</div>}
+              {strategy !== 'custom' && <div className="w-[8.75rem] shrink-0 rounded-lg bg-[#0c0f22] px-2.5 py-2 text-right" data-testid="compact-bid-summary">
+                <div data-testid="suggested-bid-row" className="flex items-baseline justify-end gap-1.5 whitespace-nowrap">
+                  <span className="text-[9px] text-[#6b6e99]">{owner ? 'Current value' : 'Suggested bid'}</span>
+                  <span className="inline-flex items-center justify-end gap-1 font-['Space_Mono'] text-base font-bold tabular-nums text-[#10b981]">
+                    {!owner && value > 0 && remainingFaab != null && value > remainingFaab && <FaabOverBudgetWarning />}
+                    <span>{formatDisplayCurrency(value)}</span>
+                  </span>
+                </div>
+                {owner && <div data-testid="rostered-owner" className="mt-0.5 truncate text-[9px] text-[#8b8eac]">{owner.ownerName}</div>}
+                {showPrediction && <div className="mt-0.5 text-[10px] text-[#a5b4fc]">Predicted bid <span className="font-['Space_Mono']">${predictedBid}</span></div>}
+              </div>}
             </div>
-            <div className="w-[8.75rem] shrink-0 rounded-lg bg-[#0c0f22] px-2.5 py-2 text-right" data-testid="compact-bid-summary">
-              <div data-testid="suggested-bid-row" className="flex items-baseline justify-end gap-1.5 whitespace-nowrap">
-                <span className="text-[9px] text-[#6b6e99]">{owner ? 'Current value' : 'Suggested bid'}</span>
-                <span className="inline-flex items-center justify-end gap-1 font-['Space_Mono'] text-base font-bold tabular-nums text-[#10b981]">
-                  {!owner && value > 0 && remainingFaab != null && value > remainingFaab && <FaabOverBudgetWarning />}
-                  <span>{formatDisplayCurrency(value)}</span>
-                </span>
-              </div>
-              {owner && <div data-testid="rostered-owner" className="mt-0.5 truncate text-[9px] text-[#8b8eac]">{owner.ownerName}</div>}
-              {showPrediction && <div className="mt-0.5 text-[10px] text-[#a5b4fc]">Predicted bid <span className="font-['Space_Mono']">${predictedBid}</span></div>}
+          </button>
+          {strategy === 'custom' && <div className="flex w-[8.75rem] shrink-0 flex-col justify-center border-l border-[#2a2e55] bg-[#0c0f22] px-2.5 py-2 text-right" data-testid="custom-value-region">
+            <label htmlFor={`custom-value-${row.playerId}`} className="text-[9px] text-[#6b6e99]">Custom value</label>
+            <div className="mt-1 flex items-center rounded-lg border border-[#34386a] bg-[#11142b] px-2 focus-within:border-[#818cf8] focus-within:ring-1 focus-within:ring-[#818cf8]">
+              <span className="font-['Space_Mono'] text-sm font-bold text-[#10b981]">$</span>
+              <input
+                id={`custom-value-${row.playerId}`}
+                aria-label={`Custom value for ${row.name}`}
+                inputMode="numeric"
+                min="0"
+                step="1"
+                type="number"
+                value={displayedCustomInput}
+                onChange={(event) => setCustomInput(event.target.value)}
+                onBlur={commitCustomValue}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    commitCustomValue();
+                  }
+                  if (event.key === 'Escape') {
+                    setCustomInput(null);
+                    event.currentTarget.blur();
+                  }
+                }}
+                className="min-h-9 min-w-0 w-full bg-transparent text-right font-['Space_Mono'] text-base font-bold tabular-nums text-[#10b981] outline-none"
+              />
             </div>
-          </div>
-        </button>
+            {showPrediction && <div className="mt-1 truncate text-[9px] text-[#a5b4fc]">Predicted bid ${predictedBid}</div>}
+          </div>}
         </div>
       </Card>
       <PlayerDetailDialog
@@ -348,7 +405,7 @@ export function WaiverPlayerCard({
           positionRank: row.posRank,
           owned: !!owner,
           ownerLabel: owner ? (selectedTeamOwner ? 'This player is on your selected roster.' : 'This player is currently rostered by another team.') : undefined,
-          suggestedBid: owner ? null : value,
+          suggestedBid: owner || strategy === 'custom' ? null : value,
           remainingFaab,
           teamImpact,
           managerPredictions: showManagerPredictions ? managerPredictions : [],
@@ -402,7 +459,13 @@ function ProjectionErrorState({ title, message, onRetry }: { title: string; mess
 }
 
 export function WaiversPage() {
-  const { leagueId, rosterId, activeStrategy: strategy, setStrategy } = useAppStore();
+  const { leagueId, leagueSeason, rosterId, activeStrategy: strategy, setStrategy } = useAppStore();
+  const customRankingState = useCustomRankingStore();
+  const [newRankingOpen, setNewRankingOpen] = useState(false);
+  const [newRankingConfig, setNewRankingConfig] = useState<CustomRankingConfig>({ name: '', baseRankingSource: 'sleeper', baseStrategy: 'max-vorp', multiplier: 1, modifier: 0 });
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsConfig, setSettingsConfig] = useState<CustomRankingConfig | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<CustomRanking | null>(null);
   const leagueQuery = useLeague(leagueId);
   const usersQuery = useLeagueUsers(leagueId);
   const rostersQuery = useRosters(leagueId);
@@ -417,6 +480,13 @@ export function WaiversPage() {
   const transactionsQuery = useAllTransactions(leagueId, 18);
   const { data: transactions } = transactionsQuery;
   const [rankingSource, setRankingSource] = useState<WaiverRankingSource>('sleeper');
+  const customSeason = league?.season ?? leagueSeason ?? '';
+  const customRankings = leagueId && customSeason
+    ? getCustomRankingsForScope(customRankingState, leagueId, customSeason)
+    : [];
+  const selectedCustomRanking = leagueId && customSeason
+    ? getLastUsedCustomRanking(customRankingState, leagueId, customSeason)
+    : undefined;
 
   const playerValuesModel = usePlayerValues({
     league,
@@ -687,11 +757,37 @@ export function WaiversPage() {
             : !sleeperRosValues || sleeperRosValues.size === 0
               ? 'Sleeper returned no usable remaining-season point projections'
               : 'Sleeper ROS projections could not fill every required lineup slot or produce a valid championship calibration';
-  const displayRows = showRosteredPlayers ? allRows : availableRows;
+  const currentRowsById = new Map(allRows.map((row) => [row.playerId, row]));
+  const customSnapshotRows = selectedCustomRanking
+    ? sortCustomRankingPlayerIds(selectedCustomRanking).map((playerId) => {
+      const current = currentRowsById.get(playerId);
+      if (current) return current;
+      const snapshot = selectedCustomRanking.players[playerId];
+      return {
+        playerId,
+        name: snapshot.name,
+        position: snapshot.position,
+        posRank: snapshot.positionRank,
+        rosPoints: 0,
+        projectedPointsPerWeek: 0,
+        sourceValue: snapshot.sourceValue,
+        sourceRank: snapshot.sourceRank,
+        starterWeeks: 0,
+        possibleStarterWeeks: 0,
+        suggestions: [],
+        predictedWinningBid: 0,
+      } satisfies WaiverPlayerRow;
+    }).filter((row) => showRosteredPlayers || !ownership.has(row.playerId))
+    : [];
+  const displayRows = strategy === 'custom'
+    ? customSnapshotRows
+    : showRosteredPlayers ? allRows : availableRows;
   const positionRows = posFilter === 'ALL'
     ? displayRows
     : displayRows.filter((row) => row.position === posFilter);
-  const filtered = sortWaiverRowsByStrategy(positionRows, strategy);
+  const filtered = strategy === 'custom'
+    ? positionRows
+    : sortWaiverRowsByStrategy(positionRows, strategy);
   const weeklyProjectionState: PlayerProjectionState = nflStateQuery.isLoading || weeklyProjectionQuery.isLoading
     ? 'loading'
     : nflStateQuery.isError || weeklyProjectionQuery.isError
@@ -726,6 +822,63 @@ export function WaiversPage() {
     positionRanks: playerPositionRanks,
     projectedPositionRanks,
   });
+  const closeSettings = () => setSettingsOpen(false);
+  const customRankingDialogs = <>
+    <NewCustomRankingDialog
+      open={newRankingOpen}
+      config={newRankingConfig}
+      rows={allRows}
+      atCap={customRankings.length >= MAX_CUSTOM_RANKINGS}
+      existingNames={customRankings.map((item) => item.name)}
+      onConfigChange={setNewRankingConfig}
+      onSourceChange={setRankingSource}
+      onClose={() => setNewRankingOpen(false)}
+      onCreate={(config) => {
+        if (!leagueId || !customSeason) return;
+        const id = globalThis.crypto?.randomUUID?.() ?? `custom-${Date.now()}`;
+        const created = createCustomRanking({ id, leagueId, season: customSeason, config, rows: allRows, now: new Date().toISOString() });
+        if (customRankingState.addBoard(created)) {
+          setStrategy('custom');
+          setNewRankingOpen(false);
+        }
+      }}
+    />
+    <CustomRankingSettingsDialog
+      board={settingsOpen ? selectedCustomRanking ?? null : null}
+      config={settingsConfig}
+      rows={allRows}
+      onConfigChange={setSettingsConfig}
+      onSourceChange={setRankingSource}
+      onClose={closeSettings}
+      onSave={(config) => {
+        if (!leagueId || !selectedCustomRanking) return;
+        customRankingState.updateBoardSettings(leagueId, customSeason, selectedCustomRanking.id, config);
+        closeSettings();
+      }}
+      onReset={() => {
+        if (!leagueId || !selectedCustomRanking) return;
+        customRankingState.clearOverrides(leagueId, customSeason, selectedCustomRanking.id);
+        closeSettings();
+      }}
+      onRecalculate={(config) => {
+        if (!selectedCustomRanking) return;
+        customRankingState.replaceBoard(recalculateCustomRanking(selectedCustomRanking, config, allRows, new Date().toISOString()));
+        closeSettings();
+      }}
+      onDelete={() => {
+        setDeleteTarget(selectedCustomRanking ?? null);
+        closeSettings();
+      }}
+    />
+    <ConfirmDeleteCustomRankingDialog
+      board={deleteTarget}
+      onClose={() => setDeleteTarget(null)}
+      onConfirm={() => {
+        if (deleteTarget && leagueId) customRankingState.deleteBoard(leagueId, customSeason, deleteTarget.id);
+        setDeleteTarget(null);
+      }}
+    />
+  </>;
 
   return (
     <div className="px-6 py-6 pb-24 max-w-lg mx-auto">
@@ -752,7 +905,10 @@ export function WaiversPage() {
         {WAIVER_STRATEGIES.map((s) => (
           <button
             key={s.key}
-            onClick={() => setStrategy(s.key)}
+            onClick={() => {
+              setStrategy(s.key);
+              if (s.key === 'custom' && selectedCustomRanking) setRankingSource(selectedCustomRanking.baseRankingSource);
+            }}
             className={`min-h-11 flex-1 whitespace-nowrap py-2 px-2 text-[10px] font-semibold uppercase tracking-wider rounded-md transition-all
               ${strategy === s.key
                 ? 'bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] text-white'
@@ -763,6 +919,35 @@ export function WaiversPage() {
           </button>
         ))}
       </div>
+
+      {strategy === 'custom' && <div className="mb-3 flex items-center gap-2">
+        <label htmlFor="custom-ranking-select" className="sr-only">Custom ranking</label>
+        <select
+          id="custom-ranking-select"
+          aria-label="Custom ranking"
+          value={selectedCustomRanking?.id ?? ''}
+          disabled={customRankings.length === 0}
+          onChange={(event) => {
+            const board = customRankings.find((item) => item.id === event.target.value);
+            if (!board || !leagueId || !customSeason) return;
+            customRankingState.selectBoard(leagueId, customSeason, board.id);
+            setRankingSource(board.baseRankingSource);
+          }}
+          className="min-h-11 min-w-0 flex-1 rounded-lg border border-[#2a2e55] bg-[#0e1025] px-3 py-2.5 text-xs text-[#f0f0ff] outline-none focus:border-[#6366f1] focus:ring-1 focus:ring-[#6366f1]"
+        >
+          {customRankings.length === 0 && <option value="">No custom rankings</option>}
+          {customRankings.map((board) => <option key={board.id} value={board.id}>{board.name}</option>)}
+        </select>
+        <button type="button" disabled={customRankings.length >= MAX_CUSTOM_RANKINGS} onClick={() => {
+          setNewRankingConfig({ name: '', baseRankingSource: rankingSource, baseStrategy: 'max-vorp', multiplier: 1, modifier: 0 });
+          setNewRankingOpen(true);
+        }} className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-lg border border-[#34386a] px-3 text-xs font-semibold text-[#c7d2fe] disabled:opacity-40"><Plus size={15} /> New</button>
+        <button type="button" aria-label="Custom ranking settings" disabled={!selectedCustomRanking} onClick={() => {
+          if (selectedCustomRanking) setSettingsConfig({ name: selectedCustomRanking.name, baseRankingSource: selectedCustomRanking.baseRankingSource, baseStrategy: selectedCustomRanking.baseStrategy, multiplier: selectedCustomRanking.multiplier, modifier: selectedCustomRanking.modifier });
+          setSettingsOpen(true);
+        }} className="min-h-11 min-w-11 rounded-lg border border-[#2a2e55] text-[#a5b4fc] disabled:opacity-40"><Settings className="mx-auto" size={16} /></button>
+        <button type="button" aria-label="Delete selected custom ranking" disabled={!selectedCustomRanking} onClick={() => setDeleteTarget(selectedCustomRanking ?? null)} className="min-h-11 min-w-11 rounded-lg border border-[#2a2e55] text-[#fda4af] disabled:opacity-40"><Trash2 className="mx-auto" size={16} /></button>
+      </div>}
 
       {/* Position filter */}
       <div className="flex items-center justify-between gap-3 mb-3">
@@ -805,13 +990,15 @@ export function WaiversPage() {
           <Card hover={false} className="p-6 text-center">
             <ShoppingCart className="w-8 h-8 text-[#2a2e55] mx-auto mb-3" />
             <p className="text-[#6b6e99] text-sm">
-              No {showRosteredPlayers ? 'players' : 'available free agents'} matched to {sourceInfo.shortLabel} values.
+              {strategy === 'custom' && customRankings.length === 0
+                ? 'Create a custom ranking to set your own player values.'
+                : `No ${showRosteredPlayers ? 'players' : 'available free agents'} matched to ${strategy === 'custom' ? 'this custom ranking' : `${sourceInfo.shortLabel} values`}.`}
             </p>
           </Card>
         )}
         {filtered.map((row) => {
-          const sug = row.suggestions.find((suggestion) => suggestion.strategy === strategy);
-          if (!sug) return null;
+          const sug = strategy === 'custom' ? undefined : row.suggestions.find((suggestion) => suggestion.strategy === strategy);
+          if (strategy !== 'custom' && !sug) return null;
           const player = playersQuery.data?.get(row.playerId);
           const weekly = weeklyContext.get(row.playerId);
           const byeWeek = getTeamByeWeek(league!.season, player?.team);
@@ -838,6 +1025,8 @@ export function WaiversPage() {
               key={row.playerId}
               row={row}
               strategy={strategy}
+              customValue={selectedCustomRanking ? customRankingValue(selectedCustomRanking, row.playerId) : undefined}
+              onCustomValueCommit={selectedCustomRanking && leagueId ? (value) => customRankingState.setOverride(leagueId, customSeason, selectedCustomRanking.id, row.playerId, value) : undefined}
               remainingFaab={remainingFaab}
               nflTeam={player?.team}
               weeklyPoints={weekly?.points}
@@ -862,6 +1051,7 @@ export function WaiversPage() {
           );
         })}
       </div>
+      {customRankingDialogs}
     </div>
   );
 }
