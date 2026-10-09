@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import {
   MAX_CUSTOM_RANKINGS,
   customRankingScopeKey,
+  migrateCustomRankingPersistedState,
   normalizeCustomValue,
   type CustomRanking,
   type CustomRankingConfig,
@@ -75,8 +76,7 @@ export const useCustomRankingStore = create<CustomRankingState>()(
           (item) => item.id !== boardId && normalizedName(item.name) === normalizedName(name),
         );
         if (!name || duplicate) return {};
-        // A normal settings save is deliberately rename-only. Formula metadata changes only
-        // together with regenerated values through the confirmed recalculation path.
+        // Name-only saves do not regenerate the frozen baseline or disturb manual values.
         return updateScopedBoard(state, leagueId, season, boardId, (board) => ({
           ...board,
           name,
@@ -103,11 +103,14 @@ export const useCustomRankingStore = create<CustomRankingState>()(
         leagueId,
         season,
         boardId,
-        (board) => board.players[playerId] ? {
-          ...board,
-          overrides: { ...board.overrides, [playerId]: normalizeCustomValue(value) },
-          updatedAt: new Date().toISOString(),
-        } : board,
+        (board) => {
+          if (!board.players[playerId]) return board;
+          const normalized = normalizeCustomValue(value);
+          const overrides = { ...board.overrides };
+          if (normalized === board.players[playerId].baselineValue) delete overrides[playerId];
+          else overrides[playerId] = normalized;
+          return { ...board, overrides, updatedAt: new Date().toISOString() };
+        },
       )),
 
       clearOverrides: (leagueId, season, boardId) => set((state) => updateScopedBoard(
@@ -134,7 +137,8 @@ export const useCustomRankingStore = create<CustomRankingState>()(
     }),
     {
       name: 'guillotine-companion-custom-rankings',
-      version: 1,
+      version: 2,
+      migrate: (persistedState) => migrateCustomRankingPersistedState(persistedState),
       partialize: (state) => ({
         boardsByScope: state.boardsByScope,
         lastUsedByScope: state.lastUsedByScope,

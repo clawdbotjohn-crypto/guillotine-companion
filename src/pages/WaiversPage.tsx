@@ -1,5 +1,5 @@
 // Waivers page — recommended bids per strategy, weekly context, and predicted winning bid.
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AlertTriangle, ShoppingCart, Info, RefreshCw, UserCheck, Plus, Settings, Trash2 } from 'lucide-react';
 import { Button, Card, Skeleton } from '../components/ui';
 import { FaabOverBudgetWarning } from '../components/FaabOverBudgetWarning';
@@ -65,8 +65,11 @@ import { formatWaiverSourceMetric } from '../logic/playerValueMetrics';
 import {
   MAX_CUSTOM_RANKINGS,
   createCustomRanking,
+  createDefaultCustomRankingConfig,
+  customRankingConfigFromBoard,
+  customRankingGeneratedSettingsChanged,
   customRankingValue,
-  recalculateCustomRanking,
+  regenerateCustomRanking,
   sortCustomRankingPlayerIds,
   type CustomRanking,
   type CustomRankingConfig,
@@ -465,9 +468,11 @@ export function WaiversPage() {
   const { leagueId, leagueSeason, rosterId, activeStrategy: strategy, setStrategy } = useAppStore();
   const customRankingState = useCustomRankingStore();
   const [newRankingOpen, setNewRankingOpen] = useState(false);
-  const [newRankingConfig, setNewRankingConfig] = useState<CustomRankingConfig>({ name: '', baseRankingSource: 'sleeper', baseStrategy: 'max-vorp', multiplier: 1, modifier: 0 });
+  const [newRankingConfig, setNewRankingConfig] = useState<CustomRankingConfig>(() => createDefaultCustomRankingConfig());
+  const newRankingSourceOriginRef = useRef<WaiverRankingSource | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsConfig, setSettingsConfig] = useState<CustomRankingConfig | null>(null);
+  const settingsSourceOriginRef = useRef<WaiverRankingSource | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CustomRanking | null>(null);
   const leagueQuery = useLeague(leagueId);
   const usersQuery = useLeagueUsers(leagueId);
@@ -490,6 +495,18 @@ export function WaiversPage() {
   const selectedCustomRanking = leagueId && customSeason
     ? getLastUsedCustomRanking(customRankingState, leagueId, customSeason)
     : undefined;
+
+  const closeNewRankingDialog = () => {
+    setNewRankingOpen(false);
+    if (newRankingSourceOriginRef.current) setRankingSource(newRankingSourceOriginRef.current);
+    newRankingSourceOriginRef.current = null;
+  };
+  const closeSettingsDialog = () => {
+    setSettingsOpen(false);
+    setSettingsConfig(null);
+    if (settingsSourceOriginRef.current) setRankingSource(settingsSourceOriginRef.current);
+    settingsSourceOriginRef.current = null;
+  };
 
   const playerValuesModel = usePlayerValues({
     league,
@@ -656,6 +673,30 @@ export function WaiversPage() {
     normalizedReplacementTarget,
   ]);
 
+  const sourceInfo = RANKING_SOURCES.find((source) => source.key === rankingSource)!;
+  const sourceError = playersQuery.error
+    || playerValuesModel.error
+    || (rankingSource === 'sleeper' ? nflStateQuery.error : null);
+  const dialogSourceUnavailable = !!sourceError
+    || (seasonValues != null && seasonValues.size === 0)
+    || (rankingSource === 'sleeper' && !!league && !!nflStateQuery.data && league.season !== nflStateQuery.data.season)
+    || (rankingSource === 'sleeper' && projectionStartWeek != null && projectionStartWeek > 18);
+  useEffect(() => {
+    if (!dialogSourceUnavailable || (!newRankingOpen && !settingsOpen)) return;
+    const newRankingSourceOrigin = newRankingSourceOriginRef.current;
+    const settingsSourceOrigin = settingsSourceOriginRef.current;
+    newRankingSourceOriginRef.current = null;
+    settingsSourceOriginRef.current = null;
+    queueMicrotask(() => {
+      if (newRankingOpen) setNewRankingOpen(false);
+      if (settingsOpen) {
+        setSettingsOpen(false);
+        setSettingsConfig(null);
+      }
+      setRankingSource(settingsSourceOrigin ?? newRankingSourceOrigin ?? rankingSource);
+    });
+  }, [dialogSourceUnavailable, newRankingOpen, rankingSource, settingsOpen]);
+
   if (!leagueId) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -664,10 +705,6 @@ export function WaiversPage() {
     );
   }
 
-  const sourceInfo = RANKING_SOURCES.find((source) => source.key === rankingSource)!;
-  const sourceError = playersQuery.error
-    || playerValuesModel.error
-    || (rankingSource === 'sleeper' ? nflStateQuery.error : null);
   const sourceShell = (content: ReactNode) => (
     <div className="px-6 py-6 pb-24 max-w-lg mx-auto">
       <h1 className="font-['Orbitron'] text-lg font-bold uppercase tracking-wider text-[#f0f0ff] mb-4">
@@ -825,7 +862,6 @@ export function WaiversPage() {
     positionRanks: playerPositionRanks,
     projectedPositionRanks,
   });
-  const closeSettings = () => setSettingsOpen(false);
   const customRankingDialogs = <>
     <NewCustomRankingDialog
       open={newRankingOpen}
@@ -835,13 +871,15 @@ export function WaiversPage() {
       existingNames={customRankings.map((item) => item.name)}
       onConfigChange={setNewRankingConfig}
       onSourceChange={setRankingSource}
-      onClose={() => setNewRankingOpen(false)}
+      onClose={closeNewRankingDialog}
       onCreate={(config) => {
-        if (!leagueId || !customSeason) return;
+        if (!leagueId || !customSeason || rankingSource !== config.baseRankingSource) return;
         const id = globalThis.crypto?.randomUUID?.() ?? `custom-${Date.now()}`;
         const created = createCustomRanking({ id, leagueId, season: customSeason, config, rows: allRows, now: new Date().toISOString() });
         if (customRankingState.addBoard(created)) {
           setStrategy('custom');
+          newRankingSourceOriginRef.current = null;
+          setRankingSource(config.baseRankingSource);
           setNewRankingOpen(false);
         }
       }}
@@ -853,25 +891,47 @@ export function WaiversPage() {
       existingNames={customRankings.filter((item) => item.id !== selectedCustomRanking?.id).map((item) => item.name)}
       onConfigChange={setSettingsConfig}
       onSourceChange={setRankingSource}
-      onClose={closeSettings}
-      onSave={(config) => {
+      onClose={closeSettingsDialog}
+      onSave={(config, preserveOverrides) => {
         if (!leagueId || !selectedCustomRanking) return;
-        customRankingState.updateBoardSettings(leagueId, customSeason, selectedCustomRanking.id, config);
-        closeSettings();
+        const generatedSettingsChanged = customRankingGeneratedSettingsChanged(selectedCustomRanking, config);
+        if (generatedSettingsChanged) {
+          if (rankingSource !== config.baseRankingSource) return;
+          customRankingState.replaceBoard(regenerateCustomRanking(
+            selectedCustomRanking,
+            config,
+            allRows,
+            new Date().toISOString(),
+            preserveOverrides,
+          ));
+        } else {
+          customRankingState.updateBoardSettings(leagueId, customSeason, selectedCustomRanking.id, config);
+        }
+        const sourceAfterSave = generatedSettingsChanged
+          ? config.baseRankingSource
+          : settingsSourceOriginRef.current ?? rankingSource;
+        settingsSourceOriginRef.current = null;
+        setRankingSource(sourceAfterSave);
+        setSettingsOpen(false);
+        setSettingsConfig(null);
       }}
-      onReset={() => {
-        if (!leagueId || !selectedCustomRanking) return;
-        customRankingState.clearOverrides(leagueId, customSeason, selectedCustomRanking.id);
-        closeSettings();
-      }}
-      onRecalculate={(config) => {
-        if (!selectedCustomRanking) return;
-        customRankingState.replaceBoard(recalculateCustomRanking(selectedCustomRanking, config, allRows, new Date().toISOString()));
-        closeSettings();
+      onReset={(config) => {
+        if (!selectedCustomRanking || rankingSource !== config.baseRankingSource) return;
+        customRankingState.replaceBoard(regenerateCustomRanking(
+          selectedCustomRanking,
+          config,
+          allRows,
+          new Date().toISOString(),
+          false,
+        ));
+        settingsSourceOriginRef.current = null;
+        setRankingSource(config.baseRankingSource);
+        setSettingsOpen(false);
+        setSettingsConfig(null);
       }}
       onDelete={() => {
         setDeleteTarget(selectedCustomRanking ?? null);
-        closeSettings();
+        closeSettingsDialog();
       }}
     />
     <ConfirmDeleteCustomRankingDialog
@@ -943,11 +1003,15 @@ export function WaiversPage() {
           {customRankings.map((board) => <option key={board.id} value={board.id}>{board.name}</option>)}
         </select>
         <button type="button" disabled={customRankings.length >= MAX_CUSTOM_RANKINGS} onClick={() => {
-          setNewRankingConfig({ name: '', baseRankingSource: rankingSource, baseStrategy: 'max-vorp', multiplier: 1, modifier: 0 });
+          newRankingSourceOriginRef.current = rankingSource;
+          setNewRankingConfig(createDefaultCustomRankingConfig(rankingSource));
           setNewRankingOpen(true);
         }} className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-lg border border-[#34386a] px-3 text-xs font-semibold text-[#c7d2fe] disabled:opacity-40"><Plus size={15} /> New</button>
         <button type="button" aria-label="Custom ranking settings" disabled={!selectedCustomRanking} onClick={() => {
-          if (selectedCustomRanking) setSettingsConfig({ name: selectedCustomRanking.name, baseRankingSource: selectedCustomRanking.baseRankingSource, baseStrategy: selectedCustomRanking.baseStrategy, multiplier: selectedCustomRanking.multiplier, modifier: selectedCustomRanking.modifier });
+          if (!selectedCustomRanking) return;
+          settingsSourceOriginRef.current = rankingSource;
+          setRankingSource(selectedCustomRanking.baseRankingSource);
+          setSettingsConfig(customRankingConfigFromBoard(selectedCustomRanking));
           setSettingsOpen(true);
         }} className="min-h-11 min-w-11 rounded-lg border border-[#2a2e55] text-[#a5b4fc] disabled:opacity-40"><Settings className="mx-auto" size={16} /></button>
         <button type="button" aria-label="Delete selected custom ranking" disabled={!selectedCustomRanking} onClick={() => setDeleteTarget(selectedCustomRanking ?? null)} className="min-h-11 min-w-11 rounded-lg border border-[#2a2e55] text-[#fda4af] disabled:opacity-40"><Trash2 className="mx-auto" size={16} /></button>

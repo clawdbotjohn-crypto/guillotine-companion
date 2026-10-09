@@ -3,9 +3,13 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   MAX_CUSTOM_RANKINGS,
   applyCustomRankingFormula,
+  applyPositionValueCurve,
   createCustomRanking,
+  createDefaultCustomRankingConfig,
+  customRankingGeneratedSettingsChanged,
   customRankingValue,
-  recalculateCustomRanking,
+  migrateCustomRankingPersistedState,
+  regenerateCustomRanking,
   type CustomRankingConfig,
 } from '../customRankings';
 import type { WaiverPlayerRow } from '../waivers';
@@ -32,7 +36,10 @@ const rows: WaiverPlayerRow[] = [
   },
 ];
 const config: CustomRankingConfig = {
-  name: ' My Board ', baseRankingSource: 'sleeper', baseStrategy: 'max-vorp', multiplier: 2, modifier: -15,
+  ...createDefaultCustomRankingConfig('sleeper'),
+  name: ' My Board ',
+  multiplier: 2,
+  modifier: -15,
 };
 
 function board(id: string, leagueId = 'league-a', season = '2026') {
@@ -45,45 +52,68 @@ describe('custom ranking model', () => {
     useCustomRankingStore.setState({ boardsByScope: {}, lastUsedByScope: {} });
   });
 
-  it('creates a deterministic frozen baseline with a $0 floor', () => {
+  it('creates a deterministic built-in baseline with a negative additive modifier and $0 floor', () => {
     const created = createCustomRanking({ id: 'board-1', leagueId: 'league-a', season: '2026', config, rows, now: '2026-10-09T00:00:00.000Z' });
     expect(created.name).toBe('My Board');
-    expect(created.schemaVersion).toBe(1);
+    expect(created.schemaVersion).toBe(2);
+    expect(created.mode).toBe('built-in');
     expect(created.players.p1.baselineValue).toBe(65);
     expect(created.players.p2.baselineValue).toBe(0);
     expect(applyCustomRankingFormula(2, 3, -20)).toBe(0);
   });
 
-  it('keeps manual overrides explicit and preserves them when settings alone are saved', () => {
+  it('builds deterministic per-position curves, applies the global multiplier, and clamps at zero', () => {
+    const curveConfig: CustomRankingConfig = {
+      ...config,
+      mode: 'position-curve',
+      multiplier: 0.5,
+      positionCurves: {
+        ...config.positionCurves,
+        RB: { maxValue: 250, step: 25 },
+        WR: { maxValue: 100, step: 30 },
+      },
+    };
+    const created = createCustomRanking({ id: 'curve', leagueId: 'league-a', season: '2026', config: curveConfig, rows: [...rows].reverse(), now: '2026-10-09T00:00:00.000Z' });
+    expect(Object.keys(created.players)).toEqual(['p1', 'p2']);
+    expect(created.players.p1.baselineValue).toBe(125);
+    expect(created.players.p2.baselineValue).toBe(35);
+    expect(applyPositionValueCurve(20, { maxValue: 50, step: 10 }, 1)).toBe(0);
+  });
+
+  it('does not treat a name-only edit as generated-value change', () => {
+    const created = board('one');
+    expect(customRankingGeneratedSettingsChanged(created, { ...config, name: 'Renamed' })).toBe(false);
+    expect(customRankingGeneratedSettingsChanged(created, { ...config, multiplier: 3 })).toBe(true);
+    expect(customRankingGeneratedSettingsChanged(created, { ...config, baseRankingSource: 'fantasypros' })).toBe(true);
+    expect(customRankingGeneratedSettingsChanged(created, { ...config, mode: 'position-curve' })).toBe(true);
+  });
+
+  it('keeps explicit overrides on confirmed regeneration only when requested', () => {
+    const original = { ...board('one'), overrides: { p1: 91 } };
+    const changed = { ...config, baseStrategy: 'safe' as const, multiplier: 1, modifier: 3 };
+    const preserved = regenerateCustomRanking(original, changed, rows, '2026-10-10T00:00:00.000Z', true);
+    expect(preserved.players.p1.baselineValue).toBe(23);
+    expect(preserved.overrides).toEqual({ p1: 91 });
+    expect(customRankingValue(preserved, 'p1')).toBe(91);
+
+    const cleared = regenerateCustomRanking(original, changed, rows, '2026-10-10T00:00:00.000Z', false);
+    expect(cleared.overrides).toEqual({});
+    expect(customRankingValue(cleared, 'p1')).toBe(23);
+  });
+
+  it('saves a rename without changing settings or manual values, and only stores actual overrides', () => {
     const store = useCustomRankingStore.getState();
     store.addBoard(board('one'));
     store.setOverride('league-a', '2026', 'one', 'p1', 91);
     store.updateBoardSettings('league-a', '2026', 'one', { ...config, name: 'Renamed', multiplier: 4 });
-    const updated = getLastUsedCustomRanking(useCustomRankingStore.getState(), 'league-a', '2026')!;
+    let updated = getLastUsedCustomRanking(useCustomRankingStore.getState(), 'league-a', '2026')!;
     expect(updated.name).toBe('Renamed');
     expect(updated.multiplier).toBe(2);
-    expect(updated.modifier).toBe(-15); // formula metadata still describes the frozen baseline
-    expect(updated.players.p1.baselineValue).toBe(65);
     expect(customRankingValue(updated, 'p1')).toBe(91);
-  });
 
-  it('only clears manual work through explicit reset or recalculation', () => {
-    const original = { ...board('one'), overrides: { p1: 91 } };
-    useCustomRankingStore.getState().addBoard(original);
-    useCustomRankingStore.getState().clearOverrides('league-a', '2026', 'one');
-    expect(customRankingValue(getLastUsedCustomRanking(useCustomRankingStore.getState(), 'league-a', '2026')!, 'p1')).toBe(65);
-
-    useCustomRankingStore.getState().setOverride('league-a', '2026', 'one', 'p1', 99);
-    const recalculated = recalculateCustomRanking(
-      getLastUsedCustomRanking(useCustomRankingStore.getState(), 'league-a', '2026')!,
-      { ...config, baseStrategy: 'safe', multiplier: 1, modifier: 3 },
-      rows,
-      '2026-10-10T00:00:00.000Z',
-    );
-    useCustomRankingStore.getState().replaceBoard(recalculated);
-    const result = getLastUsedCustomRanking(useCustomRankingStore.getState(), 'league-a', '2026')!;
-    expect(result.overrides).toEqual({});
-    expect(result.players.p1.baselineValue).toBe(23);
+    store.setOverride('league-a', '2026', 'one', 'p1', updated.players.p1.baselineValue);
+    updated = getLastUsedCustomRanking(useCustomRankingStore.getState(), 'league-a', '2026')!;
+    expect(updated.overrides).toEqual({});
   });
 
   it('enforces ten per league-season while isolating leagues and seasons', () => {
@@ -106,6 +136,7 @@ describe('custom ranking model', () => {
     useCustomRankingStore.getState().deleteBoard('league-a', '2026', 'one');
     expect(getLastUsedCustomRanking(useCustomRankingStore.getState(), 'league-a', '2026')?.id).toBe('two');
   });
+
   it('defensively rejects duplicate names on create, rename, and replacement', () => {
     const first = board('one');
     const second = board('two');
@@ -118,19 +149,27 @@ describe('custom ranking model', () => {
     expect(getCustomRankingsForScope(useCustomRankingStore.getState(), 'league-a', '2026').find(({ id }) => id === 'two')?.name).toBe('Board two');
   });
 
-  it('rehydrates versioned browser storage including the last-used board', async () => {
-    const one = board('one');
-    const two = board('two');
+  it('migrates v1 storage without changing frozen rankings or overrides', async () => {
+    const current = { ...board('one'), overrides: { p1: 37 } };
+    const { mode: _mode, positionCurves: _curves, ...v1Board } = current;
+    const migrated = migrateCustomRankingPersistedState({
+      boardsByScope: { 'league-a::2026': [{ ...v1Board, schemaVersion: 1 }] },
+      lastUsedByScope: { 'league-a::2026': 'one' },
+    });
+    expect(migrated.boardsByScope['league-a::2026'][0]).toMatchObject({
+      schemaVersion: 2,
+      mode: 'built-in',
+      overrides: { p1: 37 },
+      players: current.players,
+    });
+
     localStorage.setItem('guillotine-companion-custom-rankings', JSON.stringify({
-      state: {
-        boardsByScope: { 'league-a::2026': [one, two] },
-        lastUsedByScope: { 'league-a::2026': 'two' },
-      },
+      state: { boardsByScope: { 'league-a::2026': [{ ...v1Board, schemaVersion: 1 }] }, lastUsedByScope: { 'league-a::2026': 'one' } },
       version: 1,
     }));
     await useCustomRankingStore.persist.rehydrate();
-    expect(getCustomRankingsForScope(useCustomRankingStore.getState(), 'league-a', '2026')).toHaveLength(2);
-    expect(getLastUsedCustomRanking(useCustomRankingStore.getState(), 'league-a', '2026')?.id).toBe('two');
+    const rehydrated = getLastUsedCustomRanking(useCustomRankingStore.getState(), 'league-a', '2026')!;
+    expect(rehydrated.schemaVersion).toBe(2);
+    expect(customRankingValue(rehydrated, 'p1')).toBe(37);
   });
-
 });
