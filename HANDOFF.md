@@ -1,9 +1,9 @@
 # Guillotine Companion — Handoff
 
-**Updated:** 2026-10-09 PT  
-**Repo:** `clawdbotjohn-crypto/guillotine-companion`  
-**Branch/worktree:** `feat/hybrid-custom-rankings` / `/home/john/.openclaw/worktrees/gb-hybrid-custom-rankings`  
-**Base:** current `origin/main` at task start (`e6708ca503482fb3be10d3c87590d956e1d298aa`)  
+**Updated:** 2026-10-09 PT
+**Repo:** `clawdbotjohn-crypto/guillotine-companion`
+**Branch/worktree:** `feat/hybrid-custom-rankings` / `/home/john/.openclaw/worktrees/gb-hybrid-custom-rankings`
+**Base:** current `origin/main` at task start (`e6708ca503482fb3be10d3c87590d956e1d298aa`)
 **Implementation commit:** `3cf1ce0`
 
 ## Implemented approved Hybrid package
