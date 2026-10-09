@@ -33,8 +33,8 @@ function DialogFrame({ title, onClose, children }: { title: string; onClose: () 
     return () => { document.removeEventListener('keydown', onKeyDown); previous?.focus(); };
   }, [title]);
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-4" role="presentation">
-      <section ref={dialogRef} role="dialog" aria-modal="true" aria-label={title} className="max-h-[92vh] w-full overflow-y-auto rounded-t-2xl border border-[#2a2e55] bg-[#11142b] p-5 shadow-2xl sm:max-w-md sm:rounded-2xl">
+    <div data-testid="custom-ranking-dialog-backdrop" className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-4" role="presentation">
+      <section ref={dialogRef} role="dialog" aria-modal="true" aria-label={title} className="max-h-[calc(100dvh-1rem)] w-full overflow-y-auto overscroll-contain rounded-t-2xl border border-[#2a2e55] bg-[#11142b] p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl sm:max-h-[92vh] sm:max-w-md sm:rounded-2xl sm:pb-5">
         <header className="mb-5 flex items-center justify-between gap-3">
           <h2 className="font-['Orbitron'] text-sm font-bold uppercase tracking-wider text-[#f0f0ff]">{title}</h2>
           <button type="button" aria-label={`Close ${title}`} onClick={onClose} className="min-h-11 min-w-11 rounded-lg text-[#8b8eac] hover:bg-[#1a1e3a] hover:text-white"><X className="mx-auto" size={18} /></button>

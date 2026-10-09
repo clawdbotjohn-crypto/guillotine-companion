@@ -29,6 +29,11 @@
 - `src/logic/waiverDisplay.ts`
 - `PROGRESS.md`, `HANDOFF.md`
 
+## Mobile QA follow-up (PR #23)
+
+- Fixed the 390×844 Custom Ranking Settings dialog overlap: its backdrop now stacks above the fixed bottom navigation, while the mobile sheet uses dynamic-viewport height, independent scrolling, overscroll containment, and safe-area bottom padding so lower actions remain reachable.
+- Focused dialog regression coverage asserts the modal stacking, scroll, dynamic-height, and safe-area contracts.
+
 ## Validation
 
 Resource-safe and serial under capped `NODE_OPTIONS`/`nice` after memory checks:

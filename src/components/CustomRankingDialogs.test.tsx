@@ -20,6 +20,11 @@ describe('custom ranking dialogs', () => {
     const onConfigChange = vi.fn();
     render(<NewCustomRankingDialog open config={config} rows={[row]} atCap={false} existingNames={[]} onConfigChange={onConfigChange} onSourceChange={vi.fn()} onCreate={onCreate} onClose={vi.fn()} />);
     const dialog = screen.getByRole('dialog', { name: 'New custom ranking' });
+    const backdrop = screen.getByTestId('custom-ranking-dialog-backdrop');
+    expect(backdrop.className).toContain('z-[60]');
+    expect(dialog.className).toContain('100dvh');
+    expect(dialog.className).toContain('overflow-y-auto');
+    expect(dialog.className).toContain('safe-area-inset-bottom');
     expect(within(dialog).getByLabelText('Formula preview').textContent).toContain('max($0');
     expect(within(dialog).getByLabelText('Formula preview').textContent).toContain('$40 → $75');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create ranking' }));
