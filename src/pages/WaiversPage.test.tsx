@@ -138,8 +138,15 @@ describe('waiver controls', () => {
     fireEvent.click(input);
     expect(screen.queryByRole('dialog', { name: 'Test Runner' })).toBeNull();
     fireEvent.change(input, { target: { value: '88' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(onCommit).not.toHaveBeenCalled();
+    expect(input.value).toBe('73');
+    fireEvent.change(input, { target: { value: '88' } });
+    fireEvent.blur(input);
     expect(onCommit).toHaveBeenCalledWith(88);
+    fireEvent.change(input, { target: { value: '99' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onCommit).toHaveBeenCalledWith(99);
 
     fireEvent.click(screen.getByRole('button', { name: /Test Runner, custom value \$73/i }));
     const dialog = screen.getByRole('dialog', { name: 'Test Runner' });

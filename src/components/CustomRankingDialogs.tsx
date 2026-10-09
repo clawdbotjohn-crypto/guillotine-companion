@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 import { Button } from './ui';
 import { RANKING_SOURCES, type WaiverRankingSource } from '../logic/rankingSources';
@@ -10,9 +10,31 @@ const fieldClass = 'min-h-11 w-full rounded-lg border border-[#2a2e55] bg-[#0e10
 const labelClass = 'mb-1.5 block text-[10px] uppercase tracking-wider text-[#8b8eac]';
 
 function DialogFrame({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  const dialogRef = useRef<HTMLElement>(null);
+  const closeRef = useRef(onClose);
+  useEffect(() => { closeRef.current = onClose; }, [onClose]);
+  useEffect(() => {
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const dialog = dialogRef.current;
+    const focusable = () => Array.from(dialog?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])') ?? []);
+    (dialog?.querySelector<HTMLElement>('[data-dialog-initial-focus]') ?? focusable()[0])?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); return; }
+      if (event.key !== 'Tab') return;
+      const items = focusable();
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (!dialog?.contains(document.activeElement)) { event.preventDefault(); first.focus(); }
+      else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => { document.removeEventListener('keydown', onKeyDown); previous?.focus(); };
+  }, [title]);
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-4" role="presentation">
-      <section role="dialog" aria-modal="true" aria-label={title} className="max-h-[92vh] w-full overflow-y-auto rounded-t-2xl border border-[#2a2e55] bg-[#11142b] p-5 shadow-2xl sm:max-w-md sm:rounded-2xl">
+      <section ref={dialogRef} role="dialog" aria-modal="true" aria-label={title} className="max-h-[92vh] w-full overflow-y-auto rounded-t-2xl border border-[#2a2e55] bg-[#11142b] p-5 shadow-2xl sm:max-w-md sm:rounded-2xl">
         <header className="mb-5 flex items-center justify-between gap-3">
           <h2 className="font-['Orbitron'] text-sm font-bold uppercase tracking-wider text-[#f0f0ff]">{title}</h2>
           <button type="button" aria-label={`Close ${title}`} onClick={onClose} className="min-h-11 min-w-11 rounded-lg text-[#8b8eac] hover:bg-[#1a1e3a] hover:text-white"><X className="mx-auto" size={18} /></button>
@@ -29,7 +51,7 @@ function RankingFields({ config, onChange, rows }: { config: CustomRankingConfig
   const preview = applyCustomRankingFormula(sampleBase, config.multiplier, config.modifier);
   return (
     <div className="space-y-4">
-      <label><span className={labelClass}>Name</span><input className={fieldClass} value={config.name} maxLength={48} autoFocus onChange={(event) => onChange({ ...config, name: event.target.value })} /></label>
+      <label><span className={labelClass}>Name</span><input className={fieldClass} value={config.name} maxLength={48} data-dialog-initial-focus onChange={(event) => onChange({ ...config, name: event.target.value })} /></label>
       <label><span className={labelClass}>Player values</span><select className={fieldClass} value={config.baseRankingSource} onChange={(event) => onChange({ ...config, baseRankingSource: event.target.value as WaiverRankingSource })}>{RANKING_SOURCES.map((source) => <option key={source.key} value={source.key}>{source.label}</option>)}</select></label>
       <label><span className={labelClass}>Base strategy</span><select className={fieldClass} value={config.baseStrategy} onChange={(event) => onChange({ ...config, baseStrategy: event.target.value as StrategyKey })}>{WAIVER_STRATEGY_REGISTRY.map((strategy) => <option key={strategy.key} value={strategy.key}>{strategy.label}</option>)}</select></label>
       <div className="grid grid-cols-2 gap-3">
@@ -72,10 +94,11 @@ export function NewCustomRankingDialog({ open, config, rows, atCap, existingName
   </DialogFrame>;
 }
 
-export function CustomRankingSettingsDialog({ board, config, rows, onConfigChange, onSourceChange, onSave, onReset, onRecalculate, onDelete, onClose }: {
+export function CustomRankingSettingsDialog({ board, config, rows, existingNames, onConfigChange, onSourceChange, onSave, onReset, onRecalculate, onDelete, onClose }: {
   board: CustomRanking | null;
   config: CustomRankingConfig | null;
   rows: readonly WaiverPlayerRow[];
+  existingNames: readonly string[];
   onConfigChange: (config: CustomRankingConfig) => void;
   onSourceChange: (source: WaiverRankingSource) => void;
   onSave: (config: CustomRankingConfig) => void;
@@ -91,18 +114,26 @@ export function CustomRankingSettingsDialog({ board, config, rows, onConfigChang
     onConfigChange(next);
     if (next.baseRankingSource !== config.baseRankingSource) onSourceChange(next.baseRankingSource);
   };
-  const valid = config.name.trim().length > 0 && Number.isFinite(config.multiplier) && config.multiplier >= 0 && Number.isFinite(config.modifier);
+  const duplicate = existingNames.some((name) => name.trim().toLocaleLowerCase() === config.name.trim().toLocaleLowerCase());
+  const valid = config.name.trim().length > 0 && !duplicate && Number.isFinite(config.multiplier) && config.multiplier >= 0 && Number.isFinite(config.modifier);
+  const formulaChanged = config.baseRankingSource !== board.baseRankingSource
+    || config.baseStrategy !== board.baseStrategy
+    || config.multiplier !== board.multiplier
+    || config.modifier !== board.modifier;
   if (confirm) {
     const recalculating = confirm === 'recalculate';
     return <DialogFrame title={recalculating ? 'Confirm recalculation' : 'Confirm reset'} onClose={() => setConfirm(null)}>
       <div className="flex gap-3 rounded-xl border border-[rgba(245,158,11,0.35)] bg-[rgba(245,158,11,0.08)] p-4 text-sm text-[#fbbf24]"><AlertTriangle className="shrink-0" size={20} /><p>{recalculating ? 'Recalculate replaces the frozen generated baseline with current source/strategy data and permanently removes every manual override.' : 'Reset permanently removes every manual override and returns all players to this ranking’s frozen generated baseline.'}</p></div>
-      <div className="mt-5 flex justify-end gap-2"><Button variant="ghost" onClick={() => setConfirm(null)}>Keep my values</Button><Button onClick={() => recalculating ? onRecalculate(config) : onReset()}>{recalculating ? 'Recalculate and clear' : 'Reset values'}</Button></div>
+      <div className="mt-5 flex justify-end gap-2"><Button data-dialog-initial-focus variant="ghost" onClick={() => setConfirm(null)}>Keep my values</Button><Button onClick={() => recalculating ? onRecalculate(config) : onReset()}>{recalculating ? 'Recalculate and clear' : 'Reset values'}</Button></div>
     </DialogFrame>;
   }
   return <DialogFrame title="Custom ranking settings" onClose={onClose}>
     <RankingFields config={config} onChange={change} rows={rows} />
-    <p className="mt-3 text-[11px] leading-relaxed text-[#8b8eac]">Saving settings keeps the frozen generated values and all manual overrides. Only Recalculate applies the source/formula again.</p>
-    <div className="mt-5 flex flex-wrap gap-2"><Button variant="ghost" onClick={() => setConfirm('reset')}>Reset values</Button><Button variant="ghost" disabled={!valid || rows.length === 0} onClick={() => setConfirm('recalculate')}>Recalculate</Button><Button variant="ghost" onClick={onDelete}>Delete ranking</Button><span className="flex-1" /><Button disabled={!valid} onClick={() => onSave(config)}>Save settings</Button></div>
+    <p className="mt-3 text-[11px] leading-relaxed text-[#8b8eac]">Save name is non-destructive and keeps the current formula, frozen values, and manual overrides. Formula changes are applied only by confirmed Recalculate, which replaces values and clears overrides.</p>
+    <p className="mt-2 text-[11px] text-[#8b8eac]">Stored only in this browser on this device.</p>
+    {duplicate && <p className="mt-3 text-xs text-[#fbbf24]">Use a unique name in this league season.</p>}
+    {formulaChanged && <p className="mt-3 text-xs text-[#fbbf24]">Formula changes are not a normal save. Use Recalculate to apply them, or restore the current formula to save only the name.</p>}
+    <div className="mt-5 flex flex-wrap gap-2"><Button variant="ghost" onClick={() => setConfirm('reset')}>Reset values</Button><Button variant="ghost" disabled={!valid || rows.length === 0} onClick={() => setConfirm('recalculate')}>Recalculate</Button><Button variant="ghost" onClick={onDelete}>Delete ranking</Button><span className="flex-1" /><Button disabled={!valid || formulaChanged} onClick={() => onSave(config)}>Save name</Button></div>
   </DialogFrame>;
 }
 

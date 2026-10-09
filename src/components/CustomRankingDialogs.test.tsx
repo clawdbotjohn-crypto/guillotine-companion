@@ -38,7 +38,7 @@ describe('custom ranking dialogs', () => {
   it('spells out and confirms reset and recalculation before destructive callbacks', () => {
     const onReset = vi.fn();
     const onRecalculate = vi.fn();
-    const props = { board, config, rows: [row], onConfigChange: vi.fn(), onSourceChange: vi.fn(), onSave: vi.fn(), onReset, onRecalculate, onDelete: vi.fn(), onClose: vi.fn() };
+    const props = { board, config, rows: [row], existingNames: [], onConfigChange: vi.fn(), onSourceChange: vi.fn(), onSave: vi.fn(), onReset, onRecalculate, onDelete: vi.fn(), onClose: vi.fn() };
     const { rerender } = render(<CustomRankingSettingsDialog {...props} />);
     fireEvent.click(screen.getByRole('button', { name: 'Reset values' }));
     expect(onReset).not.toHaveBeenCalled();
@@ -64,4 +64,33 @@ describe('custom ranking dialogs', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete ranking' }));
     expect(onConfirm).toHaveBeenCalledTimes(1);
   });
+
+  it('requires formula changes to use confirmed recalculation and rejects duplicate renames', () => {
+    const changed = { ...config, name: ' Other Board ', multiplier: 3 };
+    render(<CustomRankingSettingsDialog board={board} config={changed} rows={[row]} existingNames={['other board']} onConfigChange={vi.fn()} onSourceChange={vi.fn()} onSave={vi.fn()} onReset={vi.fn()} onRecalculate={vi.fn()} onDelete={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.getByText(/unique name/i)).toBeTruthy();
+    expect(screen.getByText(/Formula changes are not a normal save/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Save name' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Recalculate' }).hasAttribute('disabled')).toBe(true);
+  });
+
+  it('closes on Escape, contains Tab focus, and restores focus to the opener', () => {
+    const onClose = vi.fn();
+    const opener = document.createElement('button');
+    document.body.append(opener);
+    opener.focus();
+    const { unmount } = render(<NewCustomRankingDialog open config={config} rows={[row]} atCap={false} existingNames={[]} onConfigChange={vi.fn()} onSourceChange={vi.fn()} onCreate={vi.fn()} onClose={onClose} />);
+    const name = screen.getByDisplayValue('My Values');
+    expect(document.activeElement).toBe(name);
+    const close = screen.getByRole('button', { name: 'Close New custom ranking' });
+    close.focus();
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Create ranking' }));
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    unmount();
+    expect(document.activeElement).toBe(opener);
+    opener.remove();
+  });
+
 });

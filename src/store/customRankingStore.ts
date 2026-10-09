@@ -8,6 +8,10 @@ import {
   type CustomRankingConfig,
 } from '../logic/customRankings';
 
+function normalizedName(name: string): string {
+  return name.trim().toLocaleLowerCase();
+}
+
 interface CustomRankingState {
   boardsByScope: Record<string, CustomRanking[]>;
   lastUsedByScope: Record<string, string>;
@@ -49,7 +53,9 @@ export const useCustomRankingStore = create<CustomRankingState>()(
       addBoard: (board) => {
         const key = customRankingScopeKey(board.leagueId, board.season);
         const boards = get().boardsByScope[key] ?? [];
-        if (boards.length >= MAX_CUSTOM_RANKINGS || boards.some((item) => item.id === board.id)) return false;
+        if (boards.length >= MAX_CUSTOM_RANKINGS
+          || !normalizedName(board.name)
+          || boards.some((item) => item.id === board.id || normalizedName(item.name) === normalizedName(board.name))) return false;
         set((state) => ({
           boardsByScope: { ...state.boardsByScope, [key]: [...boards, board] },
           lastUsedByScope: { ...state.lastUsedByScope, [key]: board.id },
@@ -63,29 +69,34 @@ export const useCustomRankingStore = create<CustomRankingState>()(
         return { lastUsedByScope: { ...state.lastUsedByScope, [key]: boardId } };
       }),
 
-      updateBoardSettings: (leagueId, season, boardId, config) => set((state) => updateScopedBoard(
-        state,
-        leagueId,
-        season,
-        boardId,
-        (board) => ({
+      updateBoardSettings: (leagueId, season, boardId, config) => set((state) => {
+        const name = config.name.trim();
+        const duplicate = scopeBoards(state, leagueId, season).some(
+          (item) => item.id !== boardId && normalizedName(item.name) === normalizedName(name),
+        );
+        if (!name || duplicate) return {};
+        // A normal settings save is deliberately rename-only. Formula metadata changes only
+        // together with regenerated values through the confirmed recalculation path.
+        return updateScopedBoard(state, leagueId, season, boardId, (board) => ({
           ...board,
-          name: config.name.trim(),
-          baseRankingSource: config.baseRankingSource,
-          baseStrategy: config.baseStrategy,
-          multiplier: config.multiplier,
-          modifier: config.modifier,
+          name,
           updatedAt: new Date().toISOString(),
-        }),
-      )),
+        }));
+      }),
 
-      replaceBoard: (replacement) => set((state) => updateScopedBoard(
-        state,
-        replacement.leagueId,
-        replacement.season,
-        replacement.id,
-        () => replacement,
-      )),
+      replaceBoard: (replacement) => set((state) => {
+        const duplicate = scopeBoards(state, replacement.leagueId, replacement.season).some(
+          (item) => item.id !== replacement.id && normalizedName(item.name) === normalizedName(replacement.name),
+        );
+        if (!normalizedName(replacement.name) || duplicate) return {};
+        return updateScopedBoard(
+          state,
+          replacement.leagueId,
+          replacement.season,
+          replacement.id,
+          () => replacement,
+        );
+      }),
 
       setOverride: (leagueId, season, boardId, playerId, value) => set((state) => updateScopedBoard(
         state,

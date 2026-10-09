@@ -61,7 +61,8 @@ describe('custom ranking model', () => {
     store.updateBoardSettings('league-a', '2026', 'one', { ...config, name: 'Renamed', multiplier: 4 });
     const updated = getLastUsedCustomRanking(useCustomRankingStore.getState(), 'league-a', '2026')!;
     expect(updated.name).toBe('Renamed');
-    expect(updated.multiplier).toBe(4);
+    expect(updated.multiplier).toBe(2);
+    expect(updated.modifier).toBe(-15); // formula metadata still describes the frozen baseline
     expect(updated.players.p1.baselineValue).toBe(65);
     expect(customRankingValue(updated, 'p1')).toBe(91);
   });
@@ -105,4 +106,31 @@ describe('custom ranking model', () => {
     useCustomRankingStore.getState().deleteBoard('league-a', '2026', 'one');
     expect(getLastUsedCustomRanking(useCustomRankingStore.getState(), 'league-a', '2026')?.id).toBe('two');
   });
+  it('defensively rejects duplicate names on create, rename, and replacement', () => {
+    const first = board('one');
+    const second = board('two');
+    useCustomRankingStore.getState().addBoard(first);
+    useCustomRankingStore.getState().addBoard(second);
+    expect(useCustomRankingStore.getState().addBoard({ ...board('three'), name: '  BOARD ONE  ' })).toBe(false);
+    useCustomRankingStore.getState().updateBoardSettings('league-a', '2026', 'two', { ...config, name: ' board ONE ' });
+    expect(getCustomRankingsForScope(useCustomRankingStore.getState(), 'league-a', '2026').find(({ id }) => id === 'two')?.name).toBe('Board two');
+    useCustomRankingStore.getState().replaceBoard({ ...second, name: 'BOARD ONE' });
+    expect(getCustomRankingsForScope(useCustomRankingStore.getState(), 'league-a', '2026').find(({ id }) => id === 'two')?.name).toBe('Board two');
+  });
+
+  it('rehydrates versioned browser storage including the last-used board', async () => {
+    const one = board('one');
+    const two = board('two');
+    localStorage.setItem('guillotine-companion-custom-rankings', JSON.stringify({
+      state: {
+        boardsByScope: { 'league-a::2026': [one, two] },
+        lastUsedByScope: { 'league-a::2026': 'two' },
+      },
+      version: 1,
+    }));
+    await useCustomRankingStore.persist.rehydrate();
+    expect(getCustomRankingsForScope(useCustomRankingStore.getState(), 'league-a', '2026')).toHaveLength(2);
+    expect(getLastUsedCustomRanking(useCustomRankingStore.getState(), 'league-a', '2026')?.id).toBe('two');
+  });
+
 });

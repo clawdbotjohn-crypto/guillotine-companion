@@ -1,5 +1,5 @@
 // Waivers page — recommended bids per strategy, weekly context, and predicted winning bid.
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { AlertTriangle, ShoppingCart, Info, RefreshCw, UserCheck, Plus, Settings, Trash2 } from 'lucide-react';
 import { Button, Card, Skeleton } from '../components/ui';
 import { FaabOverBudgetWarning } from '../components/FaabOverBudgetWarning';
@@ -265,8 +265,10 @@ export function WaiverPlayerCard({
   const suggestion = strategy === 'custom' ? undefined : row.suggestions.find((item) => item.strategy === strategy);
   const value = strategy === 'custom' ? (customValue ?? 0) : (suggestion?.value ?? 0);
   const [customInput, setCustomInput] = useState<string | null>(null);
+  const cancelCustomEditRef = useRef(false);
   const displayedCustomInput = customInput ?? String(value);
   const commitCustomValue = () => {
+    if (cancelCustomEditRef.current) { cancelCustomEditRef.current = false; setCustomInput(null); return; }
     const parsed = Number(displayedCustomInput);
     const normalized = Number.isFinite(parsed) ? Math.max(0, Math.round(parsed)) : value;
     setCustomInput(null);
@@ -364,7 +366,7 @@ export function WaiverPlayerCard({
                 step="1"
                 type="number"
                 value={displayedCustomInput}
-                onChange={(event) => setCustomInput(event.target.value)}
+                onChange={(event) => { cancelCustomEditRef.current = false; setCustomInput(event.target.value); }}
                 onBlur={commitCustomValue}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') {
@@ -372,6 +374,7 @@ export function WaiverPlayerCard({
                     commitCustomValue();
                   }
                   if (event.key === 'Escape') {
+                    cancelCustomEditRef.current = true;
                     setCustomInput(null);
                     event.currentTarget.blur();
                   }
@@ -847,6 +850,7 @@ export function WaiversPage() {
       board={settingsOpen ? selectedCustomRanking ?? null : null}
       config={settingsConfig}
       rows={allRows}
+      existingNames={customRankings.filter((item) => item.id !== selectedCustomRanking?.id).map((item) => item.name)}
       onConfigChange={setSettingsConfig}
       onSourceChange={setRankingSource}
       onClose={closeSettings}
