@@ -1,17 +1,42 @@
 # Guillotine Companion — Current Progress
 
+## P0 — PR #23 custom-ranking settings follow-up (completed 2026-10-09)
+
+**Owner source:** Discord `1558198907257888838` and `1558198918486167552` (hosted PR #23 preview review, including two mobile screenshots).
+
+- [x] Make multiplier/modifier inputs mobile-editable with transient empty/`-` states, natural zero replacement, negative additive values, and commit-time parsing.
+- [x] Add label/action spacing and vertically center dialogs on desktop and 390×844 mobile.
+- [x] Simplify settings copy/actions: exact `Preview`, no `$0 floor` or trailing prose, no Recalculate, `Save` as the single update action.
+- [x] Add Built-in ranking system and Position-based value curve modes (QB/RB/WR/TE max + step, global multiplier, deterministic baselines, `$0` clamp).
+- [x] Add schema-v2 league/season persistence with backward migration for existing v1 saved rankings.
+- [x] Make Reset regenerate from current settings and clear manual overrides with confirmation.
+- [x] Make Save confirmation conditional on generated-value changes; show override count and default-checked preserve option; support unchecked clearing.
+- [x] Preserve name-only Save without value confirmation.
+- [x] Guard ranking-source changes so cancel/error restores the prior source and regeneration cannot snapshot rows from a mismatched provider.
+- [x] Add focused logic/dialog/page tests (34 passing), changed-file Oxlint (0 errors; one pre-existing component warning), diff/secret checks, desktop/mobile browser QA, and screenshots.
+- [x] Complete independent final diff review; no blocking findings after ranking-source guard and preview-formula corrections.
+- [ ] Verify pushed PR head, CI checks, and hosted preview after the review commit reaches GitHub.
+
+**Implementation commit:** `507a596` (`feat: refine custom ranking settings`)
+
+**QA screenshots:**
+- `artifacts/pr23-refinements-qa/desktop-create-built-in-1440x900.png`
+- `artifacts/pr23-refinements-qa/mobile-create-position-390x844.png`
+- `artifacts/pr23-refinements-qa/mobile-save-confirm-preserve-checked-390x844.png`
+- `artifacts/pr23-refinements-qa/mobile-reset-confirm-390x844.png`
+
 ## P0 — Hybrid custom rankings (review-ready, 2026-10-09)
 
 Authoritative owner scope remains the approved “Durable custom player values” / Hybrid refinement captured in this file and `docs/archive/PROGRESS-through-2026-10-03.md`.
 
 - [x] Added the final top-level `Custom` strategy with a dropdown-only named-ranking identity, adjacent `+ New`, settings, and confirmed delete controls; no visible “Custom Board” label or redundant identity strip.
 - [x] Added versioned league+season browser-local persistence using the repository's existing Zustand `persist` convention: deterministic frozen generated player snapshots, explicit manual overrides, ten-ranking cap, and persisted last-used selection. Provider/week/roster/FAAB changes do not mutate saved values. First-PR scope is intentionally this browser/device only; cross-device sync and import/export are deferred.
-- [x] Added create/settings flows using existing Player Values and strategy terminology, multiplier/modifier formula with a `$0` floor and preview, rename-only non-destructive saves, and explicit confirmed recalculation that atomically updates formula metadata/generated values and clears overrides. Duplicate trimmed/case-insensitive names are rejected in UI and store; reset/delete remain confirmed.
+- [x] Initial create/settings baseline shipped on the branch; its formula/copy/action behavior is superseded by the completed PR #23 owner follow-up above.
 - [x] Split custom cards so the player region opens `PlayerDetailDialog` and only the value region edits the custom value; Enter/blur commits before value-based resort while Escape cancels. Custom-ranking dialogs close on Escape, contain focus, focus an initial control, and restore opener focus. Predicted bidding, bid history, source metrics, and Team Impact remain separate concepts.
 - [x] Focused tests cover creation/formula floor, ten cap, league-season isolation, real localStorage rehydration/last-used selection, manual edits, metadata-safe settings/recalculation, duplicate-name defense, Escape/Enter/blur editing, dialog keyboard/focus behavior, delete confirmation, and market-value separation. Review-fix run: 28/28 focused tests passed.
 - [x] Implementation baseline: `3cf1ce0`; independent-review fixes are at the branch tip. Review-fix validation: 28/28 focused tests and changed-file Oxlint passed with 0 errors; `git diff --check` and bounded secret scan passed. Baseline typecheck passed; repeat typecheck was deferred to CI because host availability (~1.2 GiB) was below the repository's 1.5 GiB safety floor.
 - [x] PR #23 mobile QA follow-up: at 390×844 the Custom Ranking Settings backdrop now stacks above the fixed bottom navigation, and the dialog has dynamic-viewport scroll containment plus safe-area bottom padding so lower actions remain reachable. Focused dialog tests pass 6/6; changed-file lint has 0 errors (one pre-existing React warning).
-- [ ] Independent review and hosted preview QA remain. Review-only PR will target `main`; do not merge, deploy, auto-merge, delete the branch, or touch PR #20 without exact owner authorization.
+- [x] Independent local review and desktop/mobile QA completed with no blocking findings. Pushed CI/hosted-preview verification remains; PR stays review-only and must not be merged, deployed, auto-merged, branch-deleted, or mixed with PR #20 without exact owner authorization.
 
 ## P0 — Add key/value colons to Team Impact rows (owner refinement, 2026-10-06)
 

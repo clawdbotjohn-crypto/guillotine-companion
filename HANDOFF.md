@@ -1,55 +1,72 @@
-# Guillotine Companion — Handoff
+# HANDOFF — Guillotine Companion PR #23 custom-ranking refinements
 
-**Updated:** 2026-10-09 PT
-**Repo:** `clawdbotjohn-crypto/guillotine-companion`
-**Branch/worktree:** `feat/hybrid-custom-rankings` / `/home/john/.openclaw/worktrees/gb-hybrid-custom-rankings`
-**Base:** current `origin/main` at task start (`e6708ca503482fb3be10d3c87590d956e1d298aa`)
-**Implementation baseline:** `3cf1ce0` (review fixes are at the branch tip)
+**Date:** 2026-10-09
 
-## Implemented approved Hybrid package
+**Branch:** `feat/hybrid-custom-rankings`
 
-- Final top-level **Custom** strategy, named-ranking dropdown, `+ New`, adjacent settings and selected-ranking delete controls. The selected name appears only in the dropdown; there is no visible “Custom Board” text or redundant details strip.
-- Maximum ten rankings per league-season and persisted last-used selection.
-- New-ranking flow: name, existing Player Values source, existing base strategy, multiplier, additive modifier, `$0` floor, and concrete formula/player preview.
-- Settings flow: ordinary **Save name** is rename-only and preserves formula metadata, frozen values, and manual overrides. Formula changes cannot be saved as stale metadata; they require explicit confirmed Recalculate, which atomically rebuilds the baseline, updates metadata, and clears overrides. Trimmed/case-insensitive duplicate names are rejected in both UI and store. Confirmed Reset clears overrides only.
-- Confirmed delete beside the dropdown and from settings; copy explicitly says predicted bids, bid history, source-relative data, and Team Impact are unaffected.
-- Split custom player cards: left/player region opens existing `PlayerDetailDialog`; right/value region alone edits the custom dollar value. Enter and blur commit normalized non-negative integer values before value-based resort; Escape cancels without committing. Dialogs support Escape close, practical Tab containment, initial focus, and opener-focus restoration.
-- Custom values remain distinct from predicted winning bids, completed/losing history, source-relative rank/value, and Team Impact.
+**PR:** https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/23
 
-## Persistence semantics
+**Implementation commit:** `507a596` (`feat: refine custom ranking settings`)
 
-`src/store/customRankingStore.ts` follows the existing Zustand `persist`/localStorage convention under its own versioned key. Each board is schema-versioned and scoped by encoded `leagueId + season`. It stores a deterministic, player-ID-sorted frozen generated snapshot plus a separate override map. Week/source/roster/FAAB changes cannot mutate saved work; only explicit value edits, Reset, confirmed Recalculate, rename, or confirmed Delete write it. The UI states that data is stored only in this browser on this device. This first PR intentionally does not include backend/auth, cross-device sync, or import/export; those are deferred rather than implied.
+**Gate:** Review only. Do not merge, enable auto-merge, delete the branch, deploy production, dispatch workflows, or mutate production data.
 
-## Files
+## Why this ran
 
-- `src/logic/customRankings.ts` + focused model/store tests
-- `src/store/customRankingStore.ts`, `src/store/index.ts`, `src/store/appStore.ts`
-- `src/components/CustomRankingDialogs.tsx` + component tests
-- `src/pages/WaiversPage.tsx` + focused card tests
-- `src/logic/waiverDisplay.ts`
-- `PROGRESS.md`, `HANDOFF.md`
+John reviewed the hosted PR #23 preview and requested the custom-ranking refinements captured from Discord messages `1558198907257888838` and `1558198918486167552` at the top of the authoritative workspace `PROGRESS.md`. This continuation implements only that owner feedback.
 
-## Mobile QA follow-up (PR #23)
+## Delivered
 
-- Fixed the 390×844 Custom Ranking Settings dialog overlap: its backdrop now stacks above the fixed bottom navigation, while the mobile sheet uses dynamic-viewport height, independent scrolling, overscroll containment, and safe-area bottom padding so lower actions remain reachable.
-- Focused dialog regression coverage asserts the modal stacking, scroll, dynamic-height, and safe-area contracts.
+- Numeric inputs retain transient empty/`-` states, select the initial zero for natural replacement, allow negative additive modifiers on mobile, and commit parsing on blur.
+- Dialogs are vertically centered at desktop and 390×844; label/action spacing is increased.
+- Settings now use exact `Preview` copy, omit `$0 floor`/trailing prose, remove Recalculate, and use a single `Save` settings action.
+- Added two construction modes:
+  - Built-in ranking system: ranking source + strategy + multiplier + additive modifier.
+  - Position-based value curve: QB/RB/WR/TE max and rank step plus global multiplier.
+- Both modes clamp generated values to `$0`, retain deterministic frozen baselines, and support explicit per-player overrides.
+- Persistence/store schema is now v2 with migration defaults that keep existing v1 rankings valid.
+- Reset regenerates from the currently selected settings and clears overrides after confirmation.
+- Save confirms only when generated settings change, reports manual override count, defaults `Preserve edited player values` on, and supports unchecked clearing. Name-only Save remains confirmation-free.
+- Ranking-source staging is guarded: settings open against the board source, cancel/error restores the prior source, and create/save/reset cannot snapshot rows from a mismatched provider.
 
-## Validation
+## Focused verification
 
-Resource-safe and serial under capped `NODE_OPTIONS`/`nice` after memory checks:
+- `NODE_OPTIONS=--max-old-space-size=1024 nice -n 10 npm test -- --run src/logic/__tests__/customRankings.test.ts src/components/CustomRankingDialogs.test.tsx src/pages/WaiversPage.test.tsx`
+  - **3 files, 34 tests passed** (9 logic + 10 dialogs + 15 page/control tests).
+- Changed-file Oxlint:
+  - **0 errors**.
+  - One existing `react(set-state-in-effect)` warning remains in `CustomRankingSettingsDialog` for resetting confirmation state when the board changes.
+- `git diff --check`: passed.
+- Bounded secret scan of changed text files: no matches.
+- Full build/typecheck was intentionally left to CI; focused validation was used under the Pi resource policy while gateway RSS was about 1.6 GB.
 
-- Baseline `npm run typecheck` passed. It was not repeated after review fixes because available RAM was ~1.2 GiB (below the repository's 1.5 GiB safety floor); focused Vitest transformation and changed-file Oxlint validation passed, with CI as the full typecheck gate.
-- `npx vitest run src/logic/__tests__/customRankings.test.ts src/components/CustomRankingDialogs.test.tsx src/pages/WaiversPage.test.tsx` — **3 files, 28/28 tests passed** after review fixes.
-- Changed-file `oxlint` — **0 errors**; one pre-existing React warning remains for clearing confirmation state when the selected board changes.
-- `git diff --check` — passed.
-- Bounded changed-file sensitive-token pattern scan — passed, no matches.
+## Browser QA
 
-## Honest remaining review / QA
+Local Vite QA at desktop 1440×900 and mobile 390×844 exercised:
 
-- Remaining low-risk QA: inspect the full-page source-switch loading transition, empty Custom state, ten-cap affordance, and mobile virtual-keyboard behavior. Automated coverage now exercises actual localStorage rehydration/last-used selection and the reviewed interaction regressions.
-- Hosted QA should verify 390px and desktop layouts, create/edit/reset/recalculate/delete flows, and that Player Details still shows source metrics, bidding history/predictions, and Team Impact independently.
-- No preview URL was available at handoff time; do not wait excessively for CI.
+- Built-in create flow and exact concise Preview copy.
+- Clearing modifier `0`, holding empty and `-`, committing `-20`, and replacing zero without `020`.
+- Position-curve mode and per-position controls.
+- Settings Save confirmation with one manual edit, default-checked preservation, checked preservation, and unchecked clearing.
+- Name-only Save without the value-change confirmation.
+- Reset confirmation and override clearing.
+- Source-error rollback to the prior source without regenerating from mismatched rows.
+- Dialog centering, mobile scroll containment, and action spacing.
 
-## Safety boundaries
+Screenshots committed with the implementation:
 
-Review-only. Do **not** merge, enable auto-merge, deploy, dispatch workflows, delete the branch, or modify PR #20 without John's explicit authorization for that exact action.
+- `artifacts/pr23-refinements-qa/desktop-create-built-in-1440x900.png`
+- `artifacts/pr23-refinements-qa/mobile-create-position-390x844.png`
+- `artifacts/pr23-refinements-qa/mobile-save-confirm-preserve-checked-390x844.png`
+- `artifacts/pr23-refinements-qa/mobile-reset-confirm-390x844.png`
+
+Browser QA touched only local browser storage. No production data or deployment configuration was touched.
+
+## Independent review
+
+The first independent review found one blocking risk: a selected ranking source could diverge from the rows used to regenerate a board. That was fixed with source-origin restoration, provider equality guards, and unavailable-source rollback. It also identified ambiguous position formula copy, which was corrected to show `rank − 1` math. A focused re-review found **no blocking findings**.
+
+## Remaining after this handoff
+
+1. Commit this `PROGRESS.md`/`HANDOFF.md` update and push the explicit review commits to the existing PR #23 branch.
+2. Verify the exact remote PR head, CI checks, and hosted preview when available.
+3. John reviews PR #23. The PR remains unmerged and production remains untouched.
