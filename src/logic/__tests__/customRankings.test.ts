@@ -3,9 +3,12 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   MAX_CUSTOM_RANKINGS,
   applyCustomRankingFormula,
+  applyFrozenCustomRankingSnapshot,
   applyPositionValueCurve,
+  buildPositionCurveOrdinals,
   createCustomRanking,
   createDefaultCustomRankingConfig,
+  createDefaultPositionValueCurves,
   customRankingGeneratedSettingsChanged,
   customRankingValue,
   migrateCustomRankingPersistedState,
@@ -57,8 +60,8 @@ describe('custom ranking model', () => {
     expect(created.name).toBe('My Board');
     expect(created.schemaVersion).toBe(2);
     expect(created.mode).toBe('built-in');
-    expect(created.players.p1.baselineValue).toBe(65);
-    expect(created.players.p2.baselineValue).toBe(0);
+    expect(created.players.p1).toMatchObject({ positionRank: 1, baselineValue: 65 });
+    expect(created.players.p2).toMatchObject({ positionRank: 2, baselineValue: 0 });
     expect(applyCustomRankingFormula(2, 3, -20)).toBe(0);
   });
 
@@ -75,9 +78,96 @@ describe('custom ranking model', () => {
     };
     const created = createCustomRanking({ id: 'curve', leagueId: 'league-a', season: '2026', config: curveConfig, rows: [...rows].reverse(), now: '2026-10-09T00:00:00.000Z' });
     expect(Object.keys(created.players)).toEqual(['p1', 'p2']);
-    expect(created.players.p1.baselineValue).toBe(125);
-    expect(created.players.p2.baselineValue).toBe(35);
+    expect(created.players.p1).toMatchObject({ positionRank: 1, baselineValue: 125 });
+    expect(created.players.p2).toMatchObject({ positionRank: 1, baselineValue: 50 });
     expect(applyPositionValueCurve(20, { maxValue: 50, step: 10 }, 1)).toBe(0);
+  });
+
+  it('keeps a Cade-like rank-0 QB behind valid source ranks instead of granting the maximum', () => {
+    const qbRows: WaiverPlayerRow[] = [
+      { ...rows[0], playerId: 'allen', name: 'Josh Allen', position: 'QB', posRank: 1, sourceRank: 1, sourceValue: 100 },
+      { ...rows[0], playerId: 'purdy', name: 'Brock Purdy', position: 'QB', posRank: 2, sourceRank: 3, sourceValue: 90 },
+      { ...rows[0], playerId: 'cade', name: 'Cade Klubnik', position: 'QB', posRank: 0, sourceRank: 200, sourceValue: 1 },
+    ];
+    const curveConfig: CustomRankingConfig = {
+      ...createDefaultCustomRankingConfig('fantasycalc', 500),
+      name: 'QB curve',
+      mode: 'position-curve',
+    };
+    const created = createCustomRanking({ id: 'qb-curve', leagueId: 'league-a', season: '2026', config: curveConfig, rows: qbRows, now: '2026-10-09T00:00:00.000Z' });
+
+    expect(created.players.allen).toMatchObject({ positionRank: 1, baselineValue: 85 });
+    expect(created.players.purdy).toMatchObject({ positionRank: 2, baselineValue: 80 });
+    expect(created.players.cade).toMatchObject({ positionRank: 3, baselineValue: 75 });
+    expect(created.players.cade.baselineValue).not.toBe(created.players.allen.baselineValue);
+    expect(applyFrozenCustomRankingSnapshot(
+      { ...qbRows[2], posRank: 0, sourceValue: 999, sourceRank: 0 },
+      created.players.cade,
+    )).toMatchObject({ posRank: 3, sourceValue: 1, sourceRank: 200 });
+  });
+
+  it('assigns stable unique ordinals for duplicate, zero, missing, and nonfinite ranks', () => {
+    const qb = (playerId: string, name: string, posRank: number, sourceRank: number | undefined, sourceValue: number): WaiverPlayerRow => ({
+      ...rows[0], playerId, name, position: 'QB', posRank, sourceRank, sourceValue,
+    });
+    const mixed = [
+      qb('rank-1-b', 'Rank One B', 1, 5, 95),
+      qb('missing', 'Missing', Number.POSITIVE_INFINITY, undefined, 10),
+      qb('zero', 'Zero', 0, 4, 20),
+      qb('rank-2', 'Rank Two', 2, 2, 90),
+      qb('rank-1-a', 'Rank One A', 1, 1, 100),
+      qb('nan', 'Not A Number', Number.NaN, 3, 30),
+    ];
+    const expected = {
+      'rank-1-a': 1,
+      'rank-1-b': 2,
+      'rank-2': 3,
+      nan: 4,
+      zero: 5,
+      missing: 6,
+    };
+
+    expect(Object.fromEntries(buildPositionCurveOrdinals(mixed))).toEqual(expected);
+    expect(Object.fromEntries(buildPositionCurveOrdinals([...mixed].reverse()))).toEqual(expected);
+    expect(new Set(buildPositionCurveOrdinals(mixed).values()).size).toBe(mixed.length);
+  });
+
+  it('fails safe for invalid direct ranks and keeps the curve floor at $0', () => {
+    const curve = { maxValue: 85, step: 5 };
+    for (const rank of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(applyPositionValueCurve(rank, curve, 1)).toBe(0);
+    }
+    expect(applyPositionValueCurve(18, curve, 1)).toBe(0);
+  });
+
+  it('scales default curves from initial FAAB with nearest-dollar rounding and safe fallback', () => {
+    expect(createDefaultPositionValueCurves(500)).toEqual({
+      QB: { maxValue: 85, step: 5 },
+      RB: { maxValue: 135, step: 5 },
+      WR: { maxValue: 135, step: 5 },
+      TE: { maxValue: 45, step: 5 },
+    });
+    expect(createDefaultPositionValueCurves(1000)).toEqual({
+      QB: { maxValue: 170, step: 10 },
+      RB: { maxValue: 270, step: 10 },
+      WR: { maxValue: 270, step: 10 },
+      TE: { maxValue: 90, step: 10 },
+    });
+    expect(createDefaultPositionValueCurves(333)).toEqual({
+      QB: { maxValue: 57, step: 3 },
+      RB: { maxValue: 90, step: 3 },
+      WR: { maxValue: 90, step: 3 },
+      TE: { maxValue: 30, step: 3 },
+    });
+    expect(createDefaultPositionValueCurves(0)).toEqual({
+      QB: { maxValue: 0, step: 0 },
+      RB: { maxValue: 0, step: 0 },
+      WR: { maxValue: 0, step: 0 },
+      TE: { maxValue: 0, step: 0 },
+    });
+    for (const invalid of [undefined, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(createDefaultPositionValueCurves(invalid)).toEqual(createDefaultPositionValueCurves(1000));
+    }
   });
 
   it('does not treat a name-only edit as generated-value change', () => {
@@ -147,6 +237,33 @@ describe('custom ranking model', () => {
     expect(getCustomRankingsForScope(useCustomRankingStore.getState(), 'league-a', '2026').find(({ id }) => id === 'two')?.name).toBe('Board two');
     useCustomRankingStore.getState().replaceBoard({ ...second, name: 'BOARD ONE' });
     expect(getCustomRankingsForScope(useCustomRankingStore.getState(), 'league-a', '2026').find(({ id }) => id === 'two')?.name).toBe('Board two');
+  });
+
+  it('preserves existing schema-v2 curve settings, frozen players, and overrides during hydration', () => {
+    const curveConfig: CustomRankingConfig = {
+      ...createDefaultCustomRankingConfig('sleeper', 500),
+      name: 'Frozen curve',
+      mode: 'position-curve',
+      positionCurves: {
+        QB: { maxValue: 91, step: 7 },
+        RB: { maxValue: 141, step: 6 },
+        WR: { maxValue: 139, step: 4 },
+        TE: { maxValue: 49, step: 3 },
+      },
+    };
+    const current = {
+      ...createCustomRanking({ id: 'curve-v2', leagueId: 'league-a', season: '2026', config: curveConfig, rows, now: '2026-10-09T00:00:00.000Z' }),
+      overrides: { p1: 37 },
+    };
+    const migrated = migrateCustomRankingPersistedState({
+      boardsByScope: { 'league-a::2026': [current] },
+      lastUsedByScope: { 'league-a::2026': 'curve-v2' },
+    }).boardsByScope['league-a::2026'][0];
+
+    expect(migrated).toEqual(current);
+    expect(migrated.positionCurves).not.toBe(current.positionCurves);
+    expect(migrated.players).toEqual(current.players);
+    expect(migrated.overrides).toEqual({ p1: 37 });
   });
 
   it('migrates v1 storage without changing frozen rankings or overrides', async () => {

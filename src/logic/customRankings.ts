@@ -16,12 +16,32 @@ export interface PositionValueCurve {
 
 export type PositionValueCurves = Record<CustomRankingPosition, PositionValueCurve>;
 
-export const DEFAULT_POSITION_VALUE_CURVES: PositionValueCurves = {
-  QB: { maxValue: 85, step: 10 },
-  RB: { maxValue: 250, step: 25 },
-  WR: { maxValue: 225, step: 20 },
-  TE: { maxValue: 100, step: 10 },
+export const DEFAULT_INITIAL_LEAGUE_FAAB = 1000;
+
+const POSITION_CURVE_PERCENTAGES: Record<CustomRankingPosition, { maxValue: number; step: number }> = {
+  QB: { maxValue: 0.17, step: 0.01 },
+  RB: { maxValue: 0.27, step: 0.01 },
+  WR: { maxValue: 0.27, step: 0.01 },
+  TE: { maxValue: 0.09, step: 0.01 },
 };
+
+/** Build whole-dollar defaults from initial league FAAB; $1,000 is only the invalid/missing fallback. */
+export function createDefaultPositionValueCurves(initialLeagueBudget?: number): PositionValueCurves {
+  const budget = typeof initialLeagueBudget === 'number'
+    && Number.isFinite(initialLeagueBudget)
+    && initialLeagueBudget >= 0
+    ? initialLeagueBudget
+    : DEFAULT_INITIAL_LEAGUE_FAAB;
+  return Object.fromEntries(CUSTOM_RANKING_POSITIONS.map((position) => {
+    const percentages = POSITION_CURVE_PERCENTAGES[position];
+    return [position, {
+      maxValue: Math.max(0, Math.round(budget * percentages.maxValue)),
+      step: Math.max(0, Math.round(budget * percentages.step)),
+    }];
+  })) as PositionValueCurves;
+}
+
+export const DEFAULT_POSITION_VALUE_CURVES: PositionValueCurves = createDefaultPositionValueCurves();
 
 export interface CustomRankingPlayerSnapshot {
   playerId: string;
@@ -61,15 +81,13 @@ export interface CustomRankingConfig {
   positionCurves: PositionValueCurves;
 }
 
-export function cloneDefaultPositionValueCurves(): PositionValueCurves {
-  return Object.fromEntries(CUSTOM_RANKING_POSITIONS.map((position) => [
-    position,
-    { ...DEFAULT_POSITION_VALUE_CURVES[position] },
-  ])) as PositionValueCurves;
+export function cloneDefaultPositionValueCurves(initialLeagueBudget?: number): PositionValueCurves {
+  return createDefaultPositionValueCurves(initialLeagueBudget);
 }
 
 export function createDefaultCustomRankingConfig(
   baseRankingSource: WaiverRankingSource = 'sleeper',
+  initialLeagueBudget?: number,
 ): CustomRankingConfig {
   return {
     name: '',
@@ -78,7 +96,7 @@ export function createDefaultCustomRankingConfig(
     baseStrategy: 'max-vorp',
     multiplier: 1,
     modifier: 0,
-    positionCurves: cloneDefaultPositionValueCurves(),
+    positionCurves: cloneDefaultPositionValueCurves(initialLeagueBudget),
   };
 }
 
@@ -112,7 +130,8 @@ export function applyPositionValueCurve(
   curve: PositionValueCurve,
   multiplier: number,
 ): number {
-  const rank = Number.isFinite(positionRank) ? Math.max(1, Math.floor(positionRank)) : 1;
+  const rank = Number.isFinite(positionRank) ? Math.floor(positionRank) : 0;
+  if (rank < 1) return 0;
   return normalizeCustomValue((curve.maxValue - ((rank - 1) * curve.step)) * multiplier);
 }
 
@@ -138,21 +157,86 @@ export function getGeneratedCustomValue(row: WaiverPlayerRow, config: CustomRank
   );
 }
 
+function positiveWholeRank(value: number | undefined): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  const rank = Math.floor(value);
+  return rank >= 1 ? rank : null;
+}
+
+function finiteSourceValue(value: number): number {
+  return Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY;
+}
+
+/**
+ * Freeze a unique 1..N ordinal for every supported row in each position. Valid selected-source
+ * position ranks stay first. Duplicate ranks are intentionally untied, and missing/zero ranks go
+ * last using source rank/value/name/ID tie-breaks so input iteration order can never affect value.
+ */
+export function buildPositionCurveOrdinals(
+  rows: readonly WaiverPlayerRow[],
+): Map<string, number> {
+  const ordinals = new Map<string, number>();
+  for (const position of CUSTOM_RANKING_POSITIONS) {
+    const positionRows = rows.filter((row) => row.position === position);
+    positionRows.sort((a, b) => {
+      const positionRankA = positiveWholeRank(a.posRank);
+      const positionRankB = positiveWholeRank(b.posRank);
+      if (positionRankA != null || positionRankB != null) {
+        if (positionRankA == null) return 1;
+        if (positionRankB == null) return -1;
+        if (positionRankA !== positionRankB) return positionRankA - positionRankB;
+      }
+
+      const sourceRankA = positiveWholeRank(a.sourceRank);
+      const sourceRankB = positiveWholeRank(b.sourceRank);
+      if (sourceRankA != null || sourceRankB != null) {
+        if (sourceRankA == null) return 1;
+        if (sourceRankB == null) return -1;
+        if (sourceRankA !== sourceRankB) return sourceRankA - sourceRankB;
+      }
+
+      return finiteSourceValue(b.sourceValue) - finiteSourceValue(a.sourceValue)
+        || a.name.localeCompare(b.name)
+        || a.playerId.localeCompare(b.playerId);
+    });
+    positionRows.forEach((row, index) => ordinals.set(row.playerId, index + 1));
+  }
+  return ordinals;
+}
+
 export function buildCustomRankingPlayers(
   rows: readonly WaiverPlayerRow[],
   config: CustomRankingConfig,
 ): Record<string, CustomRankingPlayerSnapshot> {
+  const positionOrdinals = config.mode === 'position-curve'
+    ? buildPositionCurveOrdinals(rows)
+    : null;
   return Object.fromEntries([...rows]
     .sort((a, b) => a.playerId.localeCompare(b.playerId))
-    .map((row) => [row.playerId, {
-      playerId: row.playerId,
-      name: row.name,
-      position: row.position,
-      positionRank: row.posRank,
-      sourceValue: row.sourceValue,
-      ...(row.sourceRank == null ? {} : { sourceRank: row.sourceRank }),
-      baselineValue: getGeneratedCustomValue(row, config),
-    }]));
+    .map((row) => {
+      const positionRank = positionOrdinals?.get(row.playerId) ?? row.posRank;
+      return [row.playerId, {
+        playerId: row.playerId,
+        name: row.name,
+        position: row.position,
+        positionRank,
+        sourceValue: row.sourceValue,
+        ...(row.sourceRank == null ? {} : { sourceRank: row.sourceRank }),
+        baselineValue: getGeneratedCustomValue({ ...row, posRank: positionRank }, config),
+      }];
+    }));
+}
+
+export function applyFrozenCustomRankingSnapshot(
+  current: WaiverPlayerRow,
+  snapshot: CustomRankingPlayerSnapshot,
+): WaiverPlayerRow {
+  return {
+    ...current,
+    posRank: snapshot.positionRank,
+    sourceValue: snapshot.sourceValue,
+    sourceRank: snapshot.sourceRank,
+  };
 }
 
 export function customRankingValue(board: CustomRanking, playerId: string): number {

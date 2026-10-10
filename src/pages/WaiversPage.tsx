@@ -64,6 +64,7 @@ import { resolveBiddingBaseline } from '../logic/waiverStrategies';
 import { formatWaiverSourceMetric } from '../logic/playerValueMetrics';
 import {
   MAX_CUSTOM_RANKINGS,
+  applyFrozenCustomRankingSnapshot,
   createCustomRanking,
   createDefaultCustomRankingConfig,
   customRankingConfigFromBoard,
@@ -801,7 +802,9 @@ export function WaiversPage() {
   const customSnapshotRows = selectedCustomRanking
     ? sortCustomRankingPlayerIds(selectedCustomRanking).map((playerId) => {
       const current = currentRowsById.get(playerId);
-      if (current) return current;
+      if (current) return selectedCustomRanking.mode === 'position-curve'
+        ? applyFrozenCustomRankingSnapshot(current, selectedCustomRanking.players[playerId])
+        : current;
       const snapshot = selectedCustomRanking.players[playerId];
       return {
         playerId,
@@ -1004,7 +1007,7 @@ export function WaiversPage() {
         </select>
         <button type="button" disabled={customRankings.length >= MAX_CUSTOM_RANKINGS} onClick={() => {
           newRankingSourceOriginRef.current = rankingSource;
-          setNewRankingConfig(createDefaultCustomRankingConfig(rankingSource));
+          setNewRankingConfig(createDefaultCustomRankingConfig(rankingSource, ctx.budget));
           setNewRankingOpen(true);
         }} className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-lg border border-[#34386a] px-3 text-xs font-semibold text-[#c7d2fe] disabled:opacity-40"><Plus size={15} /> New</button>
         <button type="button" aria-label="Custom ranking settings" disabled={!selectedCustomRanking} onClick={() => {

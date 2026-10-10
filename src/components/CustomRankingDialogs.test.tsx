@@ -90,6 +90,36 @@ describe('custom ranking dialogs', () => {
     expect(screen.getByLabelText('Ranking preview').textContent).toContain('rank − 1');
   });
 
+  it('receives $500 league-scaled defaults and preserves them when source changes before create', () => {
+    const onConfigChange = vi.fn();
+    const budgetConfig: CustomRankingConfig = {
+      ...createDefaultCustomRankingConfig('sleeper', 500),
+      name: 'Budget values',
+      mode: 'position-curve',
+    };
+    render(<NewCustomRankingDialog open config={budgetConfig} rows={[row]} atCap={false} existingNames={[]} onConfigChange={onConfigChange} onSourceChange={vi.fn()} onCreate={vi.fn()} onClose={vi.fn()} />);
+
+    expect((screen.getByLabelText('QB maximum') as HTMLInputElement).value).toBe('85');
+    expect((screen.getByLabelText('QB step') as HTMLInputElement).value).toBe('5');
+    expect((screen.getByLabelText('RB maximum') as HTMLInputElement).value).toBe('135');
+    expect((screen.getByLabelText('WR maximum') as HTMLInputElement).value).toBe('135');
+    expect((screen.getByLabelText('TE maximum') as HTMLInputElement).value).toBe('45');
+    expect((screen.getByLabelText('Global multiplier') as HTMLInputElement).value).toBe('1');
+
+    fireEvent.change(screen.getByLabelText('Player values'), { target: { value: 'fantasypros' } });
+    expect(onConfigChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      baseRankingSource: 'fantasypros',
+      positionCurves: budgetConfig.positionCurves,
+      multiplier: 1,
+    }));
+  });
+
+  it('tells existing curve boards that frozen ranks only regenerate on explicit reset', () => {
+    const curveConfig: CustomRankingConfig = { ...config, mode: 'position-curve' };
+    render(<CustomRankingSettingsDialog {...settingsProps} board={{ ...board, mode: 'position-curve' }} config={curveConfig} />);
+    expect(screen.getByText(/Saved position ranks and values stay frozen/i).textContent).toContain('Use Reset values');
+  });
+
   it('blocks the eleventh ranking and duplicate names', () => {
     const { rerender } = render(<NewCustomRankingDialog open config={config} rows={[row]} atCap existingNames={[]} onConfigChange={vi.fn()} onSourceChange={vi.fn()} onCreate={vi.fn()} onClose={vi.fn()} />);
     expect(screen.getByRole('button', { name: 'Create ranking' }).hasAttribute('disabled')).toBe(true);

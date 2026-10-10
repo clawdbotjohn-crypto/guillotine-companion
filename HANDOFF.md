@@ -1,4 +1,4 @@
-# HANDOFF — Guillotine Companion PR #23 custom-ranking refinements
+# HANDOFF — Guillotine Companion PR #23 rank/default correction
 
 **Date:** 2026-10-09
 
@@ -6,67 +6,61 @@
 
 **PR:** https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/23
 
-**Implementation commit:** `507a596` (`feat: refine custom ranking settings`)
+**Starting head:** `7990c17961b15cb1cd0a1959401f58a468ce9998`
 
 **Gate:** Review only. Do not merge, enable auto-merge, delete the branch, deploy production, dispatch workflows, or mutate production data.
 
 ## Why this ran
 
-John reviewed the hosted PR #23 preview and requested the custom-ranking refinements captured from Discord messages `1558198907257888838` and `1558198918486167552` at the top of the authoritative workspace `PROGRESS.md`. This continuation implements only that owner feedback.
+John tested the hosted PR #23 preview and reported that Josh Allen displayed `QB #1 / $85` while an unranked Cade Klubnik displayed `QB #0 / $85`. He also requested that new position-curve defaults scale from the league's initial FAAB. The authoritative request is Discord `1558305184642240572` and the top P0 in the workspace project `PROGRESS.md`.
+
+## Root cause
+
+`buildWaiverBoard()` legitimately leaves players outside the positive replacement-model ranking as `posRank = 0`. Custom position curves reused that lineup/replacement rank directly, and `applyPositionValueCurve()` clamped every finite value to at least 1. Rank 0 was therefore promoted to rank 1 and awarded the position maximum.
 
 ## Delivered
 
-- Numeric inputs retain transient empty/`-` states, select the initial zero for natural replacement, allow negative additive modifiers on mobile, and commit parsing on blur.
-- Dialogs are vertically centered at desktop and 390×844; label/action spacing is increased.
-- Settings now use exact `Preview` copy, omit `$0 floor`/trailing prose, remove Recalculate, and use a single `Save` settings action.
-- Added two construction modes:
-  - Built-in ranking system: ranking source + strategy + multiplier + additive modifier.
-  - Position-based value curve: QB/RB/WR/TE max and rank step plus global multiplier.
-- Both modes clamp generated values to `$0`, retain deterministic frozen baselines, and support explicit per-player overrides.
-- Persistence/store schema is now v2 with migration defaults that keep existing v1 rankings valid.
-- Reset regenerates from the currently selected settings and clears overrides after confirmation.
-- Save confirms only when generated settings change, reports manual override count, defaults `Preserve edited player values` on, and supports unchecked clearing. Name-only Save remains confirmation-free.
-- Ranking-source staging is guarded: settings open against the board source, cancel/error restores the prior source, and create/save/reset cannot snapshot rows from a mismatched provider.
+- Added a custom-board-only deterministic position ordinal pass for position-curve mode:
+  - unique 1..N ordinals within QB/RB/WR/TE;
+  - valid positive selected-source position order first;
+  - duplicate ranks untied with stable source-rank/value/name/player-ID tie-breaks;
+  - missing/zero/nonfinite ranks after valid ranks;
+  - stable under reversed input iteration order.
+- Built-in custom-ranking generation remains unchanged.
+- Position-curve snapshots store the corrected ordinal; the custom board displays frozen snapshot rank/source values.
+- Invalid direct rank input (0, negative, NaN, infinity) now fails safe to `$0`; normal curves still floor at `$0`.
+- Existing schema-v2 boards and manual overrides are not migrated or silently regenerated. Existing buggy frozen boards require explicit Reset, or a generated-setting change plus Save. The settings dialog now explains this.
+- New ranking dialogs derive defaults from initial `LeagueContext.budget`, never remaining roster FAAB:
+  - QB max 17%; RB max 27%; WR max 27%; TE max 9%; all steps 1%.
+  - `$500`: QB `85/5`, RB `135/5`, WR `135/5`, TE `45/5`.
+  - `$1,000`: QB `170/10`, RB `270/10`, WR `270/10`, TE `90/10`.
+  - nearest whole-dollar rounding (`$333` => 57/3, 90/3, 90/3, 30/3).
+  - missing/nonfinite/negative budget falls back to `$1,000`; `$0` is valid and produces zero defaults.
+  - multiplier stays user-controlled and defaults to 1.
+- Changing source before creation preserves the already computed league-budget defaults. Existing-board settings continue loading their saved curves.
 
-## Focused verification
+## Verification before push
 
-- `NODE_OPTIONS=--max-old-space-size=1024 nice -n 10 npm test -- --run src/logic/__tests__/customRankings.test.ts src/components/CustomRankingDialogs.test.tsx src/pages/WaiversPage.test.tsx`
-  - **3 files, 34 tests passed** (9 logic + 10 dialogs + 15 page/control tests).
-- Changed-file Oxlint:
-  - **0 errors**.
-  - One existing `react(set-state-in-effect)` warning remains in `CustomRankingSettingsDialog` for resetting confirmation state when the board changes.
+- Focused regression/logic/dialog suite: **66/66 passed**.
+- Ranking-source + WaiversPage neighbor suite: **19/19 passed**.
+- Final affected suite rerun: **40/40 passed**.
+- Changed-file Oxlint: **0 errors**; one pre-existing `react(set-state-in-effect)` warning remains in `CustomRankingSettingsDialog`.
 - `git diff --check`: passed.
-- Bounded secret scan of changed text files: no matches.
-- Full build/typecheck was intentionally left to CI; focused validation was used under the Pi resource policy while gateway RSS was about 1.6 GB.
-
-## Browser QA
-
-Local Vite QA at desktop 1440×900 and mobile 390×844 exercised:
-
-- Built-in create flow and exact concise Preview copy.
-- Clearing modifier `0`, holding empty and `-`, committing `-20`, and replacing zero without `020`.
-- Position-curve mode and per-position controls.
-- Settings Save confirmation with one manual edit, default-checked preservation, checked preservation, and unchecked clearing.
-- Name-only Save without the value-change confirmation.
-- Reset confirmation and override clearing.
-- Source-error rollback to the prior source without regenerating from mismatched rows.
-- Dialog centering, mobile scroll containment, and action spacing.
-
-Screenshots committed with the implementation:
-
-- `artifacts/pr23-refinements-qa/desktop-create-built-in-1440x900.png`
-- `artifacts/pr23-refinements-qa/mobile-create-position-390x844.png`
-- `artifacts/pr23-refinements-qa/mobile-save-confirm-preserve-checked-390x844.png`
-- `artifacts/pr23-refinements-qa/mobile-reset-confirm-390x844.png`
-
-Browser QA touched only local browser storage. No production data or deployment configuration was touched.
+- Bounded changed-line secret scan: no matches.
+- Full build/typecheck intentionally left to capped GitHub CI under the 4 GB Pi resource policy.
 
 ## Independent review
 
-The first independent review found one blocking risk: a selected ranking source could diverge from the rows used to regenerate a board. That was fixed with source-origin restoration, provider equality guards, and unavailable-source rollback. It also identified ambiguous position formula copy, which was corrected to show `rank − 1` math. A focused re-review found **no blocking findings**.
+Independent rank-semantics/budget-propagation review found **no blocking or material findings**. It identified one optional low-risk gap: explicit proof that migration leaves an existing schema-v2 curve board's settings, frozen player snapshots, and manual overrides unchanged. That regression test was added and the final custom-ranking suite passed 14/14.
 
-## Remaining after this handoff
+## Hosted browser QA
 
-1. Commit this `PROGRESS.md`/`HANDOFF.md` update and push the explicit review commits to the existing PR #23 branch.
-2. Verify the exact remote PR head, CI checks, and hosted preview when available.
-3. John reviews PR #23. The PR remains unmerged and production remains untouched.
+Pending push, CI preview deployment, desktop QA, and 390×844 mobile QA. Store new evidence under the existing untracked `artifacts/pr23-qa/` directory without deleting prior artifacts.
+
+## Remaining
+
+1. Apply any independent-review findings.
+2. Commit explicit source/test/docs paths and push only to the existing PR #23 branch.
+3. Verify exact remote head, open/mergeable/check state, and exact hosted preview URL.
+4. Exercise hosted desktop/mobile position ordering, `$500` new-dialog defaults, frozen settings, and capture screenshot paths.
+5. Leave PR #23 unmerged and production untouched.

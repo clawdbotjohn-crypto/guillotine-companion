@@ -1,5 +1,20 @@
 # Guillotine Companion — Current Progress
 
+## P0 — PR #23 rank-0 curve bug + FAAB-scaled defaults (implemented 2026-10-09)
+
+**Owner source:** Discord `1558305184642240572`; authoritative acceptance criteria remain in the workspace project copy of this file.
+
+- [x] Root cause confirmed: selected-source rows with zero/ineligible replacement-model points received `posRank = 0`; the curve evaluator clamped rank 0 to rank 1 and awarded the position maximum.
+- [x] Position-curve boards now freeze a deterministic unique 1..N ordinal per QB/RB/WR/TE. Valid positive selected-source position order stays first; duplicate ranks are untied deterministically; zero/missing/nonfinite rows follow using source rank/value/name/player-ID tie-breaks. Built-in generation behavior is unchanged.
+- [x] Invalid direct curve rank input now fails safe to `$0` instead of becoming rank 1. Custom curve display uses the frozen snapshot rank/source values.
+- [x] New-board defaults use initial league FAAB with nearest-dollar rounding: QB 17% max, RB 27%, WR 27%, TE 9%, and 1% step for every position. `$500` => `85/5, 135/5, 135/5, 45/5`; `$1,000` => `170/10, 270/10, 270/10, 90/10`. Missing/nonfinite/negative budgets fall back to `$1,000`; `$0` remains a valid all-zero budget. Multiplier remains `1`.
+- [x] Existing schema-v2 boards, settings, and overrides are not migrated or silently regenerated. Settings explains that Reset—or changing generated settings and saving—explicitly rebuilds frozen values.
+- [x] Focused validation: 66 tests passed across custom-ranking logic/dialog/waiver logic, plus 19 ranking-source/page tests; follow-up affected tests passed 40/40. Changed-file Oxlint has 0 errors and one pre-existing `react(set-state-in-effect)` warning. `git diff --check` and bounded secret scan passed.
+- [x] Independent review found no blocker/material issue. Its only low-risk gap—explicit schema-v2 frozen-board migration coverage—was added and passed (14/14 custom-ranking tests on final rerun).
+- [ ] Push exact implementation head, verify CI/preview, and complete desktop + 390×844 hosted QA.
+
+**Gate:** PR #23 remains review-only. Do not merge, auto-merge, delete the branch, deploy production, dispatch workflows, or mutate production data.
+
 ## P0 — PR #23 custom-ranking settings follow-up (completed 2026-10-09)
 
 **Owner source:** Discord `1558198907257888838` and `1558198918486167552` (hosted PR #23 preview review, including two mobile screenshots).

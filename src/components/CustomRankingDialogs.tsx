@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 import { Button } from './ui';
 import { RANKING_SOURCES, type WaiverRankingSource } from '../logic/rankingSources';
@@ -7,6 +7,7 @@ import {
   CUSTOM_RANKING_POSITIONS,
   applyCustomRankingFormula,
   applyPositionValueCurve,
+  buildPositionCurveOrdinals,
   customRankingGeneratedSettingsChanged,
   getBuiltInStrategyValue,
   type CustomRanking,
@@ -147,6 +148,8 @@ function RankingFields({
   sourceChanged?: boolean;
 }) {
   const sample = rows[0];
+  const positionOrdinals = useMemo(() => buildPositionCurveOrdinals(rows), [rows]);
+  const samplePositionRank = sample ? positionOrdinals.get(sample.playerId) ?? 0 : 0;
   const sampleBase = sample ? getBuiltInStrategyValue(sample, config.baseStrategy) : 0;
   const samplePosition = sample && CUSTOM_RANKING_POSITIONS.includes(sample.position as CustomRankingPosition)
     ? sample.position as CustomRankingPosition
@@ -155,7 +158,7 @@ function RankingFields({
     ? config.mode === 'built-in'
       ? applyCustomRankingFormula(sampleBase, config.multiplier, config.modifier)
       : samplePosition
-        ? applyPositionValueCurve(sample.posRank, config.positionCurves[samplePosition], config.multiplier)
+        ? applyPositionValueCurve(samplePositionRank, config.positionCurves[samplePosition], config.multiplier)
         : 0
     : 0;
   return (
@@ -200,7 +203,7 @@ function RankingFields({
         {config.mode === 'built-in'
           ? <div className="mt-1 font-['Space_Mono'] text-xs text-[#c7d2fe]">max($0, ${config.multiplier} × base {config.modifier < 0 ? '−' : '+'} ${Math.abs(config.modifier)})</div>
           : samplePosition && <div className="mt-1 font-['Space_Mono'] text-xs text-[#c7d2fe]">max($0, ({samplePosition} max − ((rank − 1) × {samplePosition} step)) × {config.multiplier})</div>}
-        {sample && <div className="mt-2 text-xs text-[#8b8eac]">{sample.name}: {config.mode === 'built-in' ? `$${sampleBase}` : `${sample.position}${sample.posRank}`} → <strong className="text-[#10b981]">${preview}</strong></div>}
+        {sample && <div className="mt-2 text-xs text-[#8b8eac]">{sample.name}: {config.mode === 'built-in' ? `$${sampleBase}` : `${sample.position}${samplePositionRank}`} → <strong className="text-[#10b981]">${preview}</strong></div>}
       </div>
     </div>
   );
@@ -282,6 +285,7 @@ export function CustomRankingSettingsDialog({ board, config, rows, existingNames
 
   return <DialogFrame title="Custom ranking settings" onClose={onClose}>
     <RankingFields config={config} onChange={change} rows={rows} sourceChanged={config.baseRankingSource !== board.baseRankingSource} />
+    {board.mode === 'position-curve' && <p className="mt-4 rounded-lg border border-[#2a2e55] bg-[#0b0e20] p-3 text-xs leading-relaxed text-[#8b8eac]">Saved position ranks and values stay frozen. Use Reset values—or change a generated setting and Save—to rebuild them from the current source ordering.</p>}
     {duplicate && <p className="mt-4 text-xs text-[#fbbf24]">Use a unique name in this league season.</p>}
     <div className="mt-7 grid gap-3 sm:grid-cols-2">
       <Button variant="ghost" disabled={!valid || rows.length === 0} onClick={() => setConfirm('reset')}>Reset values</Button>
