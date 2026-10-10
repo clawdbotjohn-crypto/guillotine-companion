@@ -53,14 +53,26 @@ John tested the hosted PR #23 preview and reported that Josh Allen displayed `QB
 
 Independent rank-semantics/budget-propagation review found **no blocking or material findings**. It identified one optional low-risk gap: explicit proof that migration leaves an existing schema-v2 curve board's settings, frozen player snapshots, and manual overrides unchanged. That regression test was added and the final custom-ranking suite passed 14/14.
 
-## Hosted browser QA
+## Push, CI, and hosted browser QA
 
-Pending push, CI preview deployment, desktop QA, and 390×844 mobile QA. Store new evidence under the existing untracked `artifacts/pr23-qa/` directory without deleting prior artifacts.
+- Implementation head: `8eb3e1af8a1167ccf685f6c3c4e65d961665c2d7`.
+- Preview: https://nice-moss-07ec56310-23.centralus.7.azurestaticapps.net
+- GitHub CI `build`: passed (lint, typecheck, frontend tests, function tests, and build).
+- Azure `Build and Deploy`: passed.
+- PR after implementation push: OPEN, CLEAN, MERGEABLE.
+- Hosted desktop and 390×844 mobile QA passed in the real `$500` SeaMex league:
+  - New position-curve dialog showed QB `85/5`, RB `135/5`, WR `135/5`, TE `45/5`, multiplier `1`.
+  - Switching the not-yet-created dialog from Sleeper to FantasyCalc preserved those defaults.
+  - Generated FantasyCalc list showed Josh Allen `QB #1 / $85`, Lamar Jackson `QB #2 / $80`, and Brock Purdy `QB #3 / $75`, then unique descending ordinals/values through the `$0` floor.
+  - The saved board/settings survived reload. A manual Josh override to `$84` also survived reload while Lamar/Brock stayed `$80/$75`.
+  - The settings dialog retained the exact saved curves and displayed the frozen/reset explanation.
+  - Cade Klubnik was absent from the live FantasyCalc source, so the exact rank-0/Cade behavior is proven by the deterministic focused regression test rather than fabricated live evidence.
+- New evidence (preserved in the existing untracked QA directory):
+  - `artifacts/pr23-qa/13-hosted-desktop-500-defaults.png`
+  - `artifacts/pr23-qa/14-hosted-desktop-qb-ordinals.jpg`
+  - `artifacts/pr23-qa/15-hosted-mobile-qb-ordinals.jpg`
+  - `artifacts/pr23-qa/16-hosted-mobile-frozen-settings.jpg`
 
 ## Remaining
 
-1. Apply any independent-review findings.
-2. Commit explicit source/test/docs paths and push only to the existing PR #23 branch.
-3. Verify exact remote head, open/mergeable/check state, and exact hosted preview URL.
-4. Exercise hosted desktop/mobile position ordering, `$500` new-dialog defaults, frozen settings, and capture screenshot paths.
-5. Leave PR #23 unmerged and production untouched.
+No implementation work remains. This handoff/QA documentation is the only follow-up commit after the verified implementation head; use the PR's current head for the final exact SHA. Leave PR #23 unmerged and production untouched pending John's review.

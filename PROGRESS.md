@@ -11,7 +11,9 @@
 - [x] Existing schema-v2 boards, settings, and overrides are not migrated or silently regenerated. Settings explains that Reset—or changing generated settings and saving—explicitly rebuilds frozen values.
 - [x] Focused validation: 66 tests passed across custom-ranking logic/dialog/waiver logic, plus 19 ranking-source/page tests; follow-up affected tests passed 40/40. Changed-file Oxlint has 0 errors and one pre-existing `react(set-state-in-effect)` warning. `git diff --check` and bounded secret scan passed.
 - [x] Independent review found no blocker/material issue. Its only low-risk gap—explicit schema-v2 frozen-board migration coverage—was added and passed (14/14 custom-ranking tests on final rerun).
-- [ ] Push exact implementation head, verify CI/preview, and complete desktop + 390×844 hosted QA.
+- [x] Implementation head `8eb3e1af8a1167ccf685f6c3c4e65d961665c2d7` pushed to PR #23; CI build and Azure preview deploy passed; PR remained OPEN/CLEAN/MERGEABLE.
+- [x] Hosted preview QA passed at `https://nice-moss-07ec56310-23.centralus.7.azurestaticapps.net`: source change preserved the `$500` defaults; generated FantasyCalc QB list showed Josh Allen `QB #1/$85`, Lamar Jackson `QB #2/$80`, and Brock Purdy `QB #3/$75`; settings and a manual `$84` override survived reload. Cade was absent from live source data, so his exact rank-0 case is proven by the deterministic focused regression instead of fabricated browser evidence.
+- [x] Desktop/mobile evidence: `artifacts/pr23-qa/13-hosted-desktop-500-defaults.png`, `14-hosted-desktop-qb-ordinals.jpg`, `15-hosted-mobile-qb-ordinals.jpg`, `16-hosted-mobile-frozen-settings.jpg` (preserved as existing untracked QA artifacts).
 
 **Gate:** PR #23 remains review-only. Do not merge, auto-merge, delete the branch, deploy production, dispatch workflows, or mutate production data.
 
