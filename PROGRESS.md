@@ -1,5 +1,20 @@
 # Guillotine Companion — Current Progress
 
+## P0 — PR #23 mobile custom-ranking follow-up (implemented + hosted QA 2026-10-10)
+
+**Owner source:** Discord `1558416398890565642`; John called these “TF2” items, but the screenshots and prior correction identify Guillotine Companion PR #23.
+
+- [x] Shift the split-card divider right so mobile uses a `7.75rem` custom-value region and desktop retains `8.75rem`, giving player details more room without shrinking the currency editor below a true touch target. Hosted 390×844 QA measured a 210px player region, 124px value region, 44px input/46px editor group, and no page-level horizontal overflow.
+- [x] Save regenerated settings directly when zero real manual overrides exist; do not render a zero-count confirmation or preservation checkbox. Only current-player overrides that differ from their baseline count. Hosted QA verified zero-override direct save and no misleading copy.
+- [x] When overrides exist, show the actual singular/plural count and default-check `Preserve edited player values`; hosted QA verified preserved and unchecked/cleared outcomes.
+- [x] Propagate the selected custom ranking value into Player Details as explicit `customValue`. Hosted desktop/mobile QA showed source-native `ROS pts 290`, `Custom value $34`, and market `Predicted $0` as separate fields without fabricating unavailable Team Impact/history data.
+- [x] Preserve split interaction semantics: the left player region opens details while the right value editor focuses/edits without opening the popup.
+- [x] Focused regressions cover zero/stale versus one/multiple real overrides, default-checked preservation, preserve/clear callbacks, popup custom-value propagation, responsive split classes, and the 44px input target. Final focused set passed 56/56; capped local build passed; changed-file Oxlint had 0 errors and one pre-existing React effect warning; diff/secret checks passed.
+- [x] Implementation commits `8390000` and `3a15ef4` pushed to existing PR #23. CI and Azure preview deploy passed at implementation head. Hosted preview: `https://nice-moss-07ec56310-23.centralus.7.azurestaticapps.net`.
+- [x] Privacy-safe desktop/mobile evidence remains untracked under `artifacts/pr23-qa/2026-10-10-mobile-follow-up/`.
+
+**Gate:** PR #23 remains review-only. Do not merge, auto-merge, delete the branch, deploy production, dispatch workflows, or mutate production data.
+
 ## P0 — PR #23 rank-0 curve bug + FAAB-scaled defaults (implemented 2026-10-09)
 
 **Owner source:** Discord `1558305184642240572`; authoritative acceptance criteria remain in the workspace project copy of this file.

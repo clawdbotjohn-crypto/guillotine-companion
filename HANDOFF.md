@@ -1,78 +1,82 @@
-# HANDOFF — Guillotine Companion PR #23 rank/default correction
+# HANDOFF — Guillotine Companion PR #23 mobile custom-ranking follow-up
 
-**Date:** 2026-10-09
+## Status
 
-**Branch:** `feat/hybrid-custom-rankings`
+Owner follow-up from Discord `1558416398890565642` is implemented, tested, pushed, and hosted-QA complete on the existing PR #23 branch/worktree.
 
-**PR:** https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/23
+- Worktree: `/home/john/.openclaw/worktrees/gb-hybrid-custom-rankings`
+- Branch: `feat/hybrid-custom-rankings`
+- PR: https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/23
+- Hosted preview: https://nice-moss-07ec56310-23.centralus.7.azurestaticapps.net
+- Implementation commits: `8390000` (`fix custom ranking mobile follow-up`) and `3a15ef4` (`preserve mobile value touch target`)
+- PR remains OPEN, review-only, and unmerged. No production deploy or manual workflow dispatch occurred.
 
-**Starting head:** `7990c17961b15cb1cd0a1959401f58a468ce9998`
+## Root causes and fixes
 
-**Gate:** Review only. Do not merge, enable auto-merge, delete the branch, deploy production, dispatch workflows, or mutate production data.
+1. **Divider too far left on mobile**
+   - Root cause: the custom-value rail used a fixed `8.75rem` width at every viewport.
+   - Fix: mobile rail is `7.75rem`, returning 16px to player/name details; `sm:` and larger retain `8.75rem`.
+   - The value input was also only 36px high (38px bordered group), so final hosted QA raised it to a true 44px input/46px editor group rather than sacrificing touch usability.
 
-## Why this ran
+2. **Zero-edit preservation confirmation**
+   - Root cause: Save opened confirmation for every generated-setting change, even when `board.overrides` had no applicable manual edit.
+   - Fix: count only overrides for current players whose normalized value differs from the frozen baseline. With count 0, Save regenerates directly. With count >=1, confirmation uses the actual singular/plural count and keeps preservation checked by default.
 
-John tested the hosted PR #23 preview and reported that Josh Allen displayed `QB #1 / $85` while an unranked Cade Klubnik displayed `QB #0 / $85`. He also requested that new position-curve defaults scale from the league's initial FAAB. The authoritative request is Discord `1558305184642240572` and the top P0 in the workspace project `PROGRESS.md`.
+3. **Custom valuation unavailable in Player Details**
+   - Root cause: custom cards deliberately passed `suggestedBid: null` to avoid conflating custom and market concepts, but no separate custom valuation was propagated; the generic Suggested field therefore rendered `Unavailable`.
+   - Fix: `PlayerDetailData` now has explicit `customValue`. Custom cards pass the selected board value; the popup renders `Custom value` separately from market `Predicted`, source-native rank/value, Team Impact, manager predictions, and bidding history.
 
-## Root cause
+## Files changed
 
-`buildWaiverBoard()` legitimately leaves players outside the positive replacement-model ranking as `posRank = 0`. Custom position curves reused that lineup/replacement rank directly, and `applyPositionValueCurve()` clamped every finite value to at least 1. Rank 0 was therefore promoted to rank 1 and awarded the position maximum.
+- `src/pages/WaiversPage.tsx`
+- `src/pages/WaiversPage.test.tsx`
+- `src/components/CustomRankingDialogs.tsx`
+- `src/components/CustomRankingDialogs.test.tsx`
+- `src/components/PlayerDetailDialog.tsx`
+- `PROGRESS.md`
+- `HANDOFF.md`
 
-## Delivered
+Untracked QA evidence was intentionally preserved under `artifacts/pr23-qa/2026-10-10-mobile-follow-up/` and was not staged wholesale.
 
-- Added a custom-board-only deterministic position ordinal pass for position-curve mode:
-  - unique 1..N ordinals within QB/RB/WR/TE;
-  - valid positive selected-source position order first;
-  - duplicate ranks untied with stable source-rank/value/name/player-ID tie-breaks;
-  - missing/zero/nonfinite ranks after valid ranks;
-  - stable under reversed input iteration order.
-- Built-in custom-ranking generation remains unchanged.
-- Position-curve snapshots store the corrected ordinal; the custom board displays frozen snapshot rank/source values.
-- Invalid direct rank input (0, negative, NaN, infinity) now fails safe to `$0`; normal curves still floor at `$0`.
-- Existing schema-v2 boards and manual overrides are not migrated or silently regenerated. Existing buggy frozen boards require explicit Reset, or a generated-setting change plus Save. The settings dialog now explains this.
-- New ranking dialogs derive defaults from initial `LeagueContext.budget`, never remaining roster FAAB:
-  - QB max 17%; RB max 27%; WR max 27%; TE max 9%; all steps 1%.
-  - `$500`: QB `85/5`, RB `135/5`, WR `135/5`, TE `45/5`.
-  - `$1,000`: QB `170/10`, RB `270/10`, WR `270/10`, TE `90/10`.
-  - nearest whole-dollar rounding (`$333` => 57/3, 90/3, 90/3, 30/3).
-  - missing/nonfinite/negative budget falls back to `$1,000`; `$0` is valid and produces zero defaults.
-  - multiplier stays user-controlled and defaults to 1.
-- Changing source before creation preserves the already computed league-budget defaults. Existing-board settings continue loading their saved curves.
+## Validation
 
-## Verification before push
+Passed locally:
 
-- Focused regression/logic/dialog suite: **66/66 passed**.
-- Ranking-source + WaiversPage neighbor suite: **19/19 passed**.
-- Final affected suite rerun: **40/40 passed**.
-- Changed-file Oxlint: **0 errors**; one pre-existing `react(set-state-in-effect)` warning remains in `CustomRankingSettingsDialog`.
-- `git diff --check`: passed.
-- Bounded changed-line secret scan: no matches.
-- Full build/typecheck intentionally left to capped GitHub CI under the 4 GB Pi resource policy.
+- Focused Vitest: **56/56** across:
+  - `src/components/CustomRankingDialogs.test.tsx`
+  - `src/pages/WaiversPage.test.tsx`
+  - `src/components/PlayerDetailDialog.test.tsx`
+  - `src/logic/__tests__/customRankings.test.ts`
+- Follow-up WaiversPage test after the touch-target correction: **15/15**.
+- Capped serial `npm run build` with `NODE_OPTIONS=--max-old-space-size=1024 nice -n 10`.
+- Changed-file Oxlint: **0 errors**; one pre-existing `react(set-state-in-effect)` warning in `CustomRankingDialogs.tsx` when linting the wider changed set.
+- `git diff --check` and bounded added-line secret scan.
 
-## Independent review
+Implementation-head GitHub checks passed:
 
-Independent rank-semantics/budget-propagation review found **no blocking or material findings**. It identified one optional low-risk gap: explicit proof that migration leaves an existing schema-v2 curve board's settings, frozen player snapshots, and manual overrides unchanged. That regression test was added and the final custom-ranking suite passed 14/14.
+- CI run `38094475186`: success (lint, typecheck, frontend tests, managed Functions tests, build, artifact).
+- Azure preview run `38094475177`: success.
 
-## Push, CI, and hosted browser QA
+## Hosted QA
 
-- Implementation head: `8eb3e1af8a1167ccf685f6c3c4e65d961665c2d7`.
-- Preview: https://nice-moss-07ec56310-23.centralus.7.azurestaticapps.net
-- GitHub CI `build`: passed (lint, typecheck, frontend tests, function tests, and build).
-- Azure `Build and Deploy`: passed.
-- PR after implementation push: OPEN, CLEAN, MERGEABLE.
-- Hosted desktop and 390×844 mobile QA passed in the real `$500` SeaMex league:
-  - New position-curve dialog showed QB `85/5`, RB `135/5`, WR `135/5`, TE `45/5`, multiplier `1`.
-  - Switching the not-yet-created dialog from Sleeper to FantasyCalc preserved those defaults.
-  - Generated FantasyCalc list showed Josh Allen `QB #1 / $85`, Lamar Jackson `QB #2 / $80`, and Brock Purdy `QB #3 / $75`, then unique descending ordinals/values through the `$0` floor.
-  - The saved board/settings survived reload. A manual Josh override to `$84` also survived reload while Lamar/Brock stayed `$80/$75`.
-  - The settings dialog retained the exact saved curves and displayed the frozen/reset explanation.
-  - Cade Klubnik was absent from the live FantasyCalc source, so the exact rank-0/Cade behavior is proven by the deterministic focused regression test rather than fabricated live evidence.
-- New evidence (preserved in the existing untracked QA directory):
-  - `artifacts/pr23-qa/13-hosted-desktop-500-defaults.png`
-  - `artifacts/pr23-qa/14-hosted-desktop-qb-ordinals.jpg`
-  - `artifacts/pr23-qa/15-hosted-mobile-qb-ordinals.jpg`
-  - `artifacts/pr23-qa/16-hosted-mobile-frozen-settings.jpg`
+Real SeaMex Guillotine 2026 league / `PR23 QA` custom ranking:
 
-## Remaining
+- Desktop: responsive value rail retained; left/right card actions remained distinct; popup showed source-native value, `Custom value $34`, and market `Predicted $0` separately.
+- Mobile 390×844 measurements: viewport/document width 390px (no page-level horizontal overflow), card 334px, player region 210px, value region 124px, input 44px, editor group 46px.
+- One override: confirmation showed `1 player value has been edited.` and preservation checked by default; preserving retained the override after regeneration.
+- Unchecked preservation cleared the override.
+- Zero overrides: settings regenerated directly with no confirmation, no zero-count copy, and no preservation checkbox.
+- Left side opened Player Details; right editor focused without opening a dialog.
 
-No implementation work remains. This handoff/QA documentation is the only follow-up commit after the verified implementation head; use the PR's current head for the final exact SHA. Leave PR #23 unmerged and production untouched pending John's review.
+Evidence:
+
+- `artifacts/pr23-qa/2026-10-10-mobile-follow-up/desktop-custom-cards.jpg`
+- `artifacts/pr23-qa/2026-10-10-mobile-follow-up/desktop-custom-popup.jpg`
+- `artifacts/pr23-qa/2026-10-10-mobile-follow-up/mobile-390-custom-cards.jpg`
+- `artifacts/pr23-qa/2026-10-10-mobile-follow-up/mobile-390-custom-popup.jpg`
+- `artifacts/pr23-qa/2026-10-10-mobile-follow-up/mobile-390-one-override-confirmation.jpg`
+- `artifacts/pr23-qa/2026-10-10-mobile-follow-up/qa-notes.md`
+
+## Safety gate
+
+PR #23 remains unmerged. Do not merge, enable auto-merge, delete the branch, deploy production, or dispatch deployment workflows without John's explicit authorization for that exact action.
