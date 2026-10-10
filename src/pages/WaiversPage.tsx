@@ -383,7 +383,7 @@ export function WaiverPlayerCard({
                     event.currentTarget.blur();
                   }
                 }}
-                className="min-h-9 min-w-0 w-full bg-transparent text-right font-['Space_Mono'] text-base font-bold tabular-nums text-[#10b981] outline-none"
+                className="min-h-11 min-w-0 w-full bg-transparent text-right font-['Space_Mono'] text-base font-bold tabular-nums text-[#10b981] outline-none"
               />
             </div>
             {showPrediction && <div className="mt-1 truncate text-[9px] text-[#a5b4fc]">Predicted bid ${predictedBid}</div>}

@@ -136,6 +136,7 @@ describe('waiver controls', () => {
     expect(valueRegion.className).toContain('sm:w-[8.75rem]');
     expect(playerRegion.className).toContain('min-w-0');
     expect(playerRegion.className).toContain('flex-1');
+    expect(screen.getByRole('spinbutton', { name: 'Custom value for Test Runner' }).className).toContain('min-h-11');
     expect(within(valueRegion).getByText('Custom value')).toBeTruthy();
     expect(within(valueRegion).getByText('Predicted bid $40')).toBeTruthy();
     expect(within(valueRegion).queryByText('ROS pts')).toBeNull();
