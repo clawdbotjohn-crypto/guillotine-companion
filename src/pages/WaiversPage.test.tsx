@@ -120,6 +120,53 @@ describe('waiver controls', () => {
     expect(value.parentElement?.className).not.toContain('text-[#f59e0b]');
   });
 
+  it('splits custom cards so player details and value editing are separate, accessible interactions', () => {
+    const onCommit = vi.fn();
+    const prediction: ManagerPredictionDisplay = {
+      rosterId: 1, managerName: 'Market Manager', predictedBid: 40, currentFaab: 100,
+      cappedByFaab: false, likelihood: 'Likely',
+      profile: { managerRosterId: 1, managerMultiplier: 1, style: 'standard', confidence: 'low', usableEvidenceCount: 1, baselineStrategyId: 'max-vorp', baselineStrategyVersion: 'max-vorp-v1', evidence: [] },
+    };
+    render(<WaiverPlayerCard {...cardProps} strategy="custom" customValue={73} onCustomValueCommit={onCommit} managerPredictions={[prediction]} showManagerPredictions sourceLabel="Sleeper ROS" rankingSource="sleeper" />);
+    const input = screen.getByLabelText('Custom value for Test Runner') as HTMLInputElement;
+    expect(input.value).toBe('73');
+    const valueRegion = screen.getByTestId('custom-value-region');
+    const playerRegion = screen.getByRole('button', { name: /Test Runner, custom value \$73/i });
+    expect(valueRegion.className).toContain('w-[7.75rem]');
+    expect(valueRegion.className).toContain('sm:w-[8.75rem]');
+    expect(playerRegion.className).toContain('min-w-0');
+    expect(playerRegion.className).toContain('flex-1');
+    expect(screen.getByRole('spinbutton', { name: 'Custom value for Test Runner' }).className).toContain('min-h-11');
+    expect(within(valueRegion).getByText('Custom value')).toBeTruthy();
+    expect(within(valueRegion).getByText('Predicted bid $40')).toBeTruthy();
+    expect(within(valueRegion).queryByText('ROS pts')).toBeNull();
+
+    fireEvent.click(input);
+    expect(screen.queryByRole('dialog', { name: 'Test Runner' })).toBeNull();
+    fireEvent.change(input, { target: { value: '88' } });
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(onCommit).not.toHaveBeenCalled();
+    expect(input.value).toBe('73');
+    fireEvent.change(input, { target: { value: '88' } });
+    fireEvent.blur(input);
+    expect(onCommit).toHaveBeenCalledWith(88);
+    fireEvent.change(input, { target: { value: '99' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onCommit).toHaveBeenCalledWith(99);
+
+    fireEvent.click(playerRegion);
+    const dialog = screen.getByRole('dialog', { name: 'Test Runner' });
+    expect(within(dialog).getByText('ROS pts')).toBeTruthy();
+    expect(within(dialog).getByText('180')).toBeTruthy();
+    expect(within(dialog).getByText('Custom value')).toBeTruthy();
+    expect(within(within(dialog).getByText('Custom value').parentElement!).getByText('$73')).toBeTruthy();
+    const acquisitionContext = within(dialog).getByRole('region', { name: 'Acquisition context' });
+    expect(within(acquisitionContext).getByText('Predicted')).toBeTruthy();
+    expect(within(acquisitionContext).getByText('$40')).toBeTruthy();
+    expect(within(dialog).getByText('Predicted bidding')).toBeTruthy();
+    expect(within(dialog).getByText('Market Manager')).toBeTruthy();
+  });
+
   it('uses the upcoming playing week directly and treats a loaded missing projection as 0', () => {
     render(<WaiverPlayerCard
       {...cardProps}
@@ -233,6 +280,7 @@ describe('waiver controls', () => {
       'Safe',
       'Aggressive',
       'VoRP',
+      'Custom',
     ]);
     expect(WAIVER_STRATEGIES.find(({ key }) => key === 'vorp')?.label).toBe('VoRP');
     expect(WAIVER_STRATEGY_EXPLANATIONS['max-vorp']).toContain('highest positive');
