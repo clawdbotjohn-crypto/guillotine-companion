@@ -140,9 +140,45 @@ describe('custom ranking dialogs', () => {
     expect(onSave).toHaveBeenCalledWith(renamed, true);
   });
 
+  it('regenerates directly when generated settings change without any real manual overrides', () => {
+    const onSave = vi.fn();
+    const changed = { ...config, multiplier: 3 };
+    render(<CustomRankingSettingsDialog {...settingsProps} board={{ ...board, overrides: {} }} config={changed} onSave={onSave} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(screen.queryByRole('dialog', { name: 'Confirm value changes' })).toBeNull();
+    expect(screen.queryByText(/0 player values have been edited/i)).toBeNull();
+    expect(screen.queryByRole('checkbox', { name: 'Preserve edited player values' })).toBeNull();
+    expect(onSave).toHaveBeenCalledWith(changed, true);
+  });
+
+  it('ignores orphaned or baseline-equal entries when deciding whether preservation applies', () => {
+    const onSave = vi.fn();
+    const changed = { ...config, multiplier: 3 };
+    const staleOverrides = { missing: 99, p1: board.players.p1.baselineValue };
+    render(<CustomRankingSettingsDialog {...settingsProps} board={{ ...board, overrides: staleOverrides }} config={changed} onSave={onSave} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(screen.queryByRole('dialog', { name: 'Confirm value changes' })).toBeNull();
+    expect(onSave).toHaveBeenCalledWith(changed, true);
+  });
+
+  it('uses the singular edited count and preserves one real override by default', () => {
+    const onSave = vi.fn();
+    const changed = { ...config, multiplier: 3 };
+    render(<CustomRankingSettingsDialog {...settingsProps} board={{ ...board, overrides: { p1: 37 } }} config={changed} onSave={onSave} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(screen.getByText('1 player value has been edited.')).toBeTruthy();
+    expect((screen.getByRole('checkbox', { name: 'Preserve edited player values' }) as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    expect(onSave).toHaveBeenCalledWith(changed, true);
+  });
+
   it('confirms generated setting changes, counts overrides, and preserves them by default', () => {
     const onSave = vi.fn();
-    const boardWithOverrides = { ...board, overrides: { p1: 37, p2: 12 } };
+    const boardWithOverrides = {
+      ...board,
+      players: { ...board.players, p2: { ...board.players.p1, playerId: 'p2', name: 'Second Player' } },
+      overrides: { p1: 37, p2: 12 },
+    };
     const changed = { ...config, multiplier: 3 };
     render(<CustomRankingSettingsDialog {...settingsProps} board={boardWithOverrides} config={changed} onSave={onSave} />);
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));

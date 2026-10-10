@@ -131,6 +131,11 @@ describe('waiver controls', () => {
     const input = screen.getByLabelText('Custom value for Test Runner') as HTMLInputElement;
     expect(input.value).toBe('73');
     const valueRegion = screen.getByTestId('custom-value-region');
+    const playerRegion = screen.getByRole('button', { name: /Test Runner, custom value \$73/i });
+    expect(valueRegion.className).toContain('w-[7.75rem]');
+    expect(valueRegion.className).toContain('sm:w-[8.75rem]');
+    expect(playerRegion.className).toContain('min-w-0');
+    expect(playerRegion.className).toContain('flex-1');
     expect(within(valueRegion).getByText('Custom value')).toBeTruthy();
     expect(within(valueRegion).getByText('Predicted bid $40')).toBeTruthy();
     expect(within(valueRegion).queryByText('ROS pts')).toBeNull();
@@ -148,11 +153,17 @@ describe('waiver controls', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(onCommit).toHaveBeenCalledWith(99);
 
-    fireEvent.click(screen.getByRole('button', { name: /Test Runner, custom value \$73/i }));
+    fireEvent.click(playerRegion);
     const dialog = screen.getByRole('dialog', { name: 'Test Runner' });
     expect(within(dialog).getByText('ROS pts')).toBeTruthy();
+    expect(within(dialog).getByText('180')).toBeTruthy();
+    expect(within(dialog).getByText('Custom value')).toBeTruthy();
+    expect(within(within(dialog).getByText('Custom value').parentElement!).getByText('$73')).toBeTruthy();
+    const acquisitionContext = within(dialog).getByRole('region', { name: 'Acquisition context' });
+    expect(within(acquisitionContext).getByText('Predicted')).toBeTruthy();
+    expect(within(acquisitionContext).getByText('$40')).toBeTruthy();
     expect(within(dialog).getByText('Predicted bidding')).toBeTruthy();
-    expect(within(dialog).queryByText('Custom value')).toBeNull();
+    expect(within(dialog).getByText('Market Manager')).toBeTruthy();
   });
 
   it('uses the upcoming playing week directly and treats a loaded missing projection as 0', () => {

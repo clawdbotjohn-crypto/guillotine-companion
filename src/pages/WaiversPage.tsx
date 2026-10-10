@@ -358,7 +358,7 @@ export function WaiverPlayerCard({
               </div>}
             </div>
           </button>
-          {strategy === 'custom' && <div className="flex w-[8.75rem] shrink-0 flex-col justify-center border-l border-[#2a2e55] bg-[#0c0f22] px-2.5 py-2 text-right" data-testid="custom-value-region">
+          {strategy === 'custom' && <div className="flex w-[7.75rem] shrink-0 flex-col justify-center border-l border-[#2a2e55] bg-[#0c0f22] px-2.5 py-2 text-right sm:w-[8.75rem]" data-testid="custom-value-region">
             <label htmlFor={`custom-value-${row.playerId}`} className="text-[9px] text-[#6b6e99]">Custom value</label>
             <div className="mt-1 flex items-center rounded-lg border border-[#34386a] bg-[#11142b] px-2 focus-within:border-[#818cf8] focus-within:ring-1 focus-within:ring-[#818cf8]">
               <span className="font-['Space_Mono'] text-sm font-bold text-[#10b981]">$</span>
@@ -413,6 +413,7 @@ export function WaiverPlayerCard({
           owned: !!owner,
           ownerLabel: owner ? (selectedTeamOwner ? 'This player is on your selected roster.' : 'This player is currently rostered by another team.') : undefined,
           suggestedBid: owner || strategy === 'custom' ? null : value,
+          customValue: !owner && strategy === 'custom' ? value : undefined,
           remainingFaab,
           teamImpact,
           managerPredictions: showManagerPredictions ? managerPredictions : [],

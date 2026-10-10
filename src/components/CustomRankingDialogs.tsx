@@ -10,6 +10,7 @@ import {
   buildPositionCurveOrdinals,
   customRankingGeneratedSettingsChanged,
   getBuiltInStrategyValue,
+  normalizeCustomValue,
   type CustomRanking,
   type CustomRankingConfig,
   type CustomRankingPosition,
@@ -262,7 +263,10 @@ export function CustomRankingSettingsDialog({ board, config, rows, existingNames
   const duplicate = existingNames.some((name) => name.trim().toLocaleLowerCase() === config.name.trim().toLocaleLowerCase());
   const valid = config.name.trim().length > 0 && !duplicate && modeIsValid(config);
   const generatedSettingsChanged = customRankingGeneratedSettingsChanged(board, config);
-  const overrideCount = Object.keys(board.overrides).length;
+  const overrideCount = Object.entries(board.overrides).filter(([playerId, value]) => {
+    const player = board.players[playerId];
+    return player != null && normalizeCustomValue(value) !== player.baselineValue;
+  }).length;
 
   if (confirm === 'reset') {
     return <DialogFrame title="Confirm reset" onClose={() => setConfirm(null)}>
@@ -289,7 +293,7 @@ export function CustomRankingSettingsDialog({ board, config, rows, existingNames
     {duplicate && <p className="mt-4 text-xs text-[#fbbf24]">Use a unique name in this league season.</p>}
     <div className="mt-7 grid gap-3 sm:grid-cols-2">
       <Button variant="ghost" disabled={!valid || rows.length === 0} onClick={() => setConfirm('reset')}>Reset values</Button>
-      <Button disabled={!valid || (generatedSettingsChanged && rows.length === 0)} onClick={() => generatedSettingsChanged ? setConfirm('save') : onSave(config, true)}>Save</Button>
+      <Button disabled={!valid || (generatedSettingsChanged && rows.length === 0)} onClick={() => generatedSettingsChanged && overrideCount > 0 ? setConfirm('save') : onSave(config, true)}>Save</Button>
     </div>
     <div className="mt-5 border-t border-[#2a2e55] pt-5">
       <Button className="w-full" variant="ghost" onClick={onDelete}>Delete ranking</Button>

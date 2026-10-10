@@ -38,6 +38,8 @@ export interface PlayerDetailData {
   owned: boolean;
   ownerLabel?: string;
   suggestedBid?: number | null;
+  /** Selected custom-ranking valuation, kept separate from market/source metrics. */
+  customValue?: number | null;
   remainingFaab?: number | null;
   teamImpact?: FreeAgentTeamImpact;
   managerPredictions?: ManagerPredictionDisplay[];
@@ -60,7 +62,10 @@ export function PlayerDetailDialog({ open, onClose, data }: { open: boolean; onC
   const winningGroups = groupedHistory.map((events) => events.filter((event) => event.outcome === 'won')).filter((events) => events.length > 0);
   const otherBidGroups = groupedHistory.map((events) => events.filter((event) => event.outcome === 'legitimate-loss')).filter((events) => events.length > 0);
   const orderedPredictions = orderManagerPredictions(data.managerPredictions ?? []);
-  const supportsPrediction = !data.owned && typeof data.suggestedBid === 'number' && Number.isFinite(data.suggestedBid) && data.suggestedBid > 0;
+  const hasCustomValue = typeof data.customValue === 'number' && Number.isFinite(data.customValue);
+  const acquisitionValue = hasCustomValue ? data.customValue : data.suggestedBid;
+  const acquisitionValueLabel = hasCustomValue ? 'Custom value' : 'Suggested';
+  const supportsPrediction = !data.owned && typeof acquisitionValue === 'number' && Number.isFinite(acquisitionValue) && acquisitionValue > 0;
   const predictedBid = orderedPredictions.find((prediction) => (
     isEligibleBuyerPrediction(prediction)
     && Number.isFinite(prediction.predictedBid)
@@ -79,7 +84,7 @@ export function PlayerDetailDialog({ open, onClose, data }: { open: boolean; onC
     ? impact.lineupPoints.after - impact.lineupPoints.before
     : null;
   const hasNoTeamImpact = impact?.status === 'available' && (
-    data.suggestedBid === 0
+    acquisitionValue === 0
     || (
       !impact.incomingPlayerStarts
       && impact.displacedStarterIds.length === 0
@@ -148,7 +153,7 @@ export function PlayerDetailDialog({ open, onClose, data }: { open: boolean; onC
           </section>
 
           {!data.owned && <section className="rounded-lg border border-[#20264d] p-3" aria-label="Acquisition context">
-            <div className="grid grid-cols-2 gap-2"><div><div className="text-[10px] uppercase tracking-wider text-[#6b6e99]">Suggested</div><strong className="mt-1 block font-['Space_Mono'] text-lg text-[#f59e0b]">{formatDisplayCurrency(data.suggestedBid, 'Unavailable')}</strong></div><div><div className="text-[10px] uppercase tracking-wider text-[#6b6e99]">Predicted</div><strong className="mt-1 block font-['Space_Mono'] text-lg text-[#a5b4fc]">{formatDisplayCurrency(predictedBid, '$0')}</strong></div></div>
+            <div className="grid grid-cols-2 gap-2"><div><div className="text-[10px] uppercase tracking-wider text-[#6b6e99]">{acquisitionValueLabel}</div><strong className="mt-1 block font-['Space_Mono'] text-lg text-[#f59e0b]">{formatDisplayCurrency(acquisitionValue, 'Unavailable')}</strong></div><div><div className="text-[10px] uppercase tracking-wider text-[#6b6e99]">Predicted</div><strong className="mt-1 block font-['Space_Mono'] text-lg text-[#a5b4fc]">{formatDisplayCurrency(predictedBid, '$0')}</strong></div></div>
           </section>}
 
           {!data.owned && impact && (
