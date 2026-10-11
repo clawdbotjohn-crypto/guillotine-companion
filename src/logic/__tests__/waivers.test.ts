@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { League, Roster } from '../../api/types';
 import type { EliminationResult } from '../elimination';
 import type { RosPlayerProjection } from '../projections';
+import { createDefaultCustomRankingConfig } from '../customRankings';
 import {
   buildMaxVorpCalibration,
   buildOptimizedStarterPool,
@@ -113,6 +114,19 @@ describe('buildLeagueContext', () => {
 
     expect(result.teamsRemaining).toBe(28);
     expect(result.budget).toBe(500);
+
+    const roster: Roster = {
+      roster_id: 7,
+      owner_id: 'owner-7',
+      players: [],
+      starters: [],
+      settings: { wins: 0, losses: 0, fpts: 0, waiver_budget_used: 425 },
+    };
+    expect(calculateRemainingFaab(result.budget, roster)).toBe(75);
+    expect(createDefaultCustomRankingConfig('sleeper', result.budget).positionCurves).toMatchObject({
+      QB: { maxValue: 85, step: 5 },
+      RB: { maxValue: 135, step: 5 },
+    });
   });
 });
 

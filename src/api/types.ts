@@ -2,6 +2,7 @@
 
 export interface League {
   league_id: string;
+  sport?: string;
   name: string;
   total_rosters: number;
   settings: Record<string, number>;
@@ -105,6 +106,7 @@ export interface PlayerInfo {
 
 export interface UserLeague {
   league_id: string;
+  sport?: string;
   name: string;
   total_rosters: number;
   settings: Record<string, number>;

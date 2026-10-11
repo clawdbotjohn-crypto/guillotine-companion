@@ -16,8 +16,8 @@ const teams = new Map<number, TeamInfo>([
 ]);
 
 const bids: BidInfo[] = [
-  { week: 1, rosterId: 1, playerId: 'wr-1', playerName: 'Jordan Addison', position: 'WR', amount: 50, status: 'complete' },
-  { week: 1, rosterId: 1, playerId: 'te-1', playerName: 'Tucker Kraft', position: 'TE', amount: 90, status: 'complete' },
+  { week: 1, rosterId: 1, playerId: 'wr-1', playerName: 'Jordan Addison', position: 'WR', amount: 50, status: 'complete', createdAt: 1_000 },
+  { week: 1, rosterId: 1, playerId: 'te-1', playerName: 'Tucker Kraft', position: 'TE', amount: 90, status: 'complete', createdAt: 2_000 },
 ];
 
 function renderGrid(positions?: string[]) {

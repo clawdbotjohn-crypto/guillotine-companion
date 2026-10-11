@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#06060f">
+  <title>Guillotine Companion — Custom Board UX Review</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Exo+2:wght@400;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css?v=4">
+</head>
+<body>
+  <aside class="review-panel" aria-label="Prototype controls">
+    <div class="eyebrow">Design review</div>
+    <h1>Custom value boards</h1>
+    <p>Switch alternatives and inspect decision states. Product controls inside the mock are also interactive.</p>
+    <div class="review-group">
+      <span class="review-label">Alternative</span>
+      <div class="segmented" role="group" aria-label="Alternative">
+        <button data-alt="option3">Option 3</button>
+        <button data-alt="hybrid">Hybrid</button>
+      </div>
+    </div>
+    <div class="review-group">
+      <label class="review-label" for="statePicker">State</label>
+      <select id="statePicker">
+        <option value="browse">Browse / selected board</option>
+        <option value="edit">Edit + slot reorder</option>
+        <option value="create">Create board</option>
+        <option value="delete">Delete confirmation</option>
+        <option value="unsaved">Unsaved changes</option>
+        <option value="empty">Empty state</option>
+        <option value="max10">Maximum 10 boards</option>
+      </select>
+    </div>
+    <div class="review-notes" id="reviewNotes"></div>
+    <p class="review-foot">Keyboard: Tab through controls; in Edit, use the arrow buttons as the accessible reorder alternative.</p>
+  </aside>
+
+  <div id="prototype" aria-live="polite"></div>
+  <script src="prototype.js?v=3"></script>
+</body>
+</html>

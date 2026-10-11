@@ -100,7 +100,7 @@ export function LeaguePickerPage() {
             <Trophy className="w-8 h-8 text-[#4a4d77] mx-auto mb-3" />
             <p className="text-[#6b6e99] text-sm mb-1">No guillotine leagues found</p>
             <p className="text-[#4a4d77] text-xs">
-              Only leagues with no playoffs (guillotine format) are shown.
+              Only native Sleeper Guillotine leagues are shown.
               Try a different username or paste a league ID directly.
             </p>
             <button
