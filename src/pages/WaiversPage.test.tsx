@@ -158,8 +158,8 @@ describe('waiver controls', () => {
     const dialog = screen.getByRole('dialog', { name: 'Test Runner' });
     expect(within(dialog).getByText('ROS pts')).toBeTruthy();
     expect(within(dialog).getByText('180')).toBeTruthy();
-    expect(within(dialog).getByText('Custom value')).toBeTruthy();
-    expect(within(within(dialog).getByText('Custom value').parentElement!).getByText('$73')).toBeTruthy();
+    expect(within(dialog).getByText('Suggested')).toBeTruthy();
+    expect(within(within(dialog).getByText('Suggested').parentElement!).getByText('$73')).toBeTruthy();
     const acquisitionContext = within(dialog).getByRole('region', { name: 'Acquisition context' });
     expect(within(acquisitionContext).getByText('Predicted')).toBeTruthy();
     expect(within(acquisitionContext).getByText('$40')).toBeTruthy();

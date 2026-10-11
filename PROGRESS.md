@@ -1,5 +1,19 @@
 # Guillotine Companion — Current Progress
 
+## P0 — PR #23 restore standard Suggested field in custom-ranking player dialog (implemented 2026-10-10)
+
+**Owner source:** Discord `1558719548516081726`.
+
+> “For GB it looks like we changed the wording of the suggested bid so it doesn't match the same wording as other player dialogs? If so that's not what I asked for. It was just missing the field from other dialogs. Let me know if I'm missing something there. But if not it should be a quick fix.”
+
+- [x] Confirmed the mobile-follow-up diff unnecessarily changed the shared player-detail label from `Suggested` to a custom-only `Custom value` label. John was not missing another intended distinction.
+- [x] Restored the same `Suggested` field wording/location used by every other available-player dialog and populated it with the selected custom ranking value instead of `Unavailable`.
+- [x] Removed the custom-only `PlayerDetailData.customValue` path. Market `Predicted`, predicted-bidding details, source metrics, bid history, and Team Impact remain separate and unchanged.
+- [x] Updated focused regression coverage; `WaiversPage` plus `PlayerDetailDialog` passed 27/27, changed-file Oxlint passed with zero warnings/errors, and `git diff --check` passed.
+- [ ] Push the narrow correction to PR #23, wait for preview checks, and verify the hosted custom-ranking dialog shows standard `Suggested` wording/value on desktop/mobile.
+
+**Gate:** PR #23 remains review-only. Do not merge, auto-merge, delete the branch, deploy production, dispatch workflows, or mutate production data.
+
 ## P0 — PR #23 mobile custom-ranking follow-up (implemented + hosted QA 2026-10-10)
 
 **Owner source:** Discord `1558416398890565642`; John called these “TF2” items, but the screenshots and prior correction identify Guillotine Companion PR #23.
@@ -7,7 +21,7 @@
 - [x] Shift the split-card divider right so mobile uses a `7.75rem` custom-value region and desktop retains `8.75rem`, giving player details more room without shrinking the currency editor below a true touch target. Hosted 390×844 QA measured a 210px player region, 124px value region, 44px input/46px editor group, and no page-level horizontal overflow.
 - [x] Save regenerated settings directly when zero real manual overrides exist; do not render a zero-count confirmation or preservation checkbox. Only current-player overrides that differ from their baseline count. Hosted QA verified zero-override direct save and no misleading copy.
 - [x] When overrides exist, show the actual singular/plural count and default-check `Preserve edited player values`; hosted QA verified preserved and unchecked/cleared outcomes.
-- [x] Propagate the selected custom ranking value into Player Details as explicit `customValue`. Hosted desktop/mobile QA showed source-native `ROS pts 290`, `Custom value $34`, and market `Predicted $0` as separate fields without fabricating unavailable Team Impact/history data.
+- [x] Propagate the selected custom ranking value into Player Details instead of showing `Unavailable`. The first follow-up implementation used a custom-only `Custom value` label; owner correction `1558719548516081726` supersedes that wording and restores the shared `Suggested` field while preserving market `Predicted` and source metrics separately.
 - [x] Preserve split interaction semantics: the left player region opens details while the right value editor focuses/edits without opening the popup.
 - [x] Focused regressions cover zero/stale versus one/multiple real overrides, default-checked preservation, preserve/clear callbacks, popup custom-value propagation, responsive split classes, and the 44px input target. Final focused set passed 56/56; capped local build passed; changed-file Oxlint had 0 errors and one pre-existing React effect warning; diff/secret checks passed.
 - [x] Implementation commits `8390000` and `3a15ef4` pushed to existing PR #23. CI and Azure preview deploy passed at implementation head. Hosted preview: `https://nice-moss-07ec56310-23.centralus.7.azurestaticapps.net`.
