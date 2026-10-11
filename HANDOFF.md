@@ -1,64 +1,82 @@
-# Guillotine Companion — Handoff
+# HANDOFF — Guillotine Companion PR #23 mobile custom-ranking follow-up
 
-**Updated:** 2026-10-06 03:42 PT
-**Repo:** `clawdbotjohn-crypto/guillotine-companion`  
-**Branch/worktree:** `fix/team-impact-compact-stack` / `/home/john/guillotine-team-impact-simplify`
+## Status
 
-## Scope completed (owner-approved)
+Owner follow-up from Discord `1558416398890565642` is implemented, tested, pushed, and hosted-QA complete on the existing PR #23 branch/worktree.
 
-1. **Team Impact simplification (Player Details dialog)**
-   - For `teamImpact.status === 'available'` with non-zero impact, Team Impact now renders only a compact four-line vertical stack:
-     1) signed lineup-points delta (e.g. `+8.5`)  
-     2) `Overall: before/outOf → after/outOf`
-     3) `<position>: before/outOf → after/outOf`
-     4) `Lineup pts: before → after`
-   - Independently colors each before/after overall and position rank with the shared rank-quartile semantics; labels/arrows remain neutral.
-   - Removed the previous metric-card grid and all explanatory prose in this state (`Projection change`, `Starter change`, `Assumed drop`, `FAAB`, footer copy).
-   - Preserved unavailable/`None` and no-impact/`None` states, calculations, and accessible complete labels.
+- Worktree: `/home/john/.openclaw/worktrees/gb-hybrid-custom-rankings`
+- Branch: `feat/hybrid-custom-rankings`
+- PR: https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/23
+- Hosted preview: https://nice-moss-07ec56310-23.centralus.7.azurestaticapps.net
+- Implementation commits: `8390000` (`fix custom ranking mobile follow-up`) and `3a15ef4` (`preserve mobile value touch target`)
+- PR remains OPEN, review-only, and unmerged. No production deploy or manual workflow dispatch occurred.
 
-2. **Waivers side-rail cleanup**
-   - Removed the separate right-side `Bids` / `Hide bids` disclosure control from `WaiverPlayerCard`.
-   - Removed `predictionsOpen` local state and the duplicate inline `WaiverManagerPredictions` panel.
-   - Kept compact card click as the primary action opening `PlayerDetailDialog`.
-   - Preserved manager prediction data path into the popup (`Predicted bidding` in dialog still present).
+## Root causes and fixes
 
-## PR / preview
+1. **Divider too far left on mobile**
+   - Root cause: the custom-value rail used a fixed `8.75rem` width at every viewport.
+   - Fix: mobile rail is `7.75rem`, returning 16px to player/name details; `sm:` and larger retain `8.75rem`.
+   - The value input was also only 36px high (38px bordered group), so final hosted QA raised it to a true 44px input/46px editor group rather than sacrificing touch usability.
 
-- **Review PR:** https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/21
-- **Branch:** `fix/team-impact-compact-stack`
-- **Preview URL:** https://nice-moss-07ec56310-21.centralus.7.azurestaticapps.net
+2. **Zero-edit preservation confirmation**
+   - Root cause: Save opened confirmation for every generated-setting change, even when `board.overrides` had no applicable manual edit.
+   - Fix: count only overrides for current players whose normalized value differs from the frozen baseline. With count 0, Save regenerates directly. With count >=1, confirmation uses the actual singular/plural count and keeps preservation checked by default.
 
-## Validation
-
-### Focused local tests (resource-safe)
-- Rechecked memory before Node work: 1,705 MiB available, no competing heavy Node worker; Gateway remained the largest process, so no broad build/typecheck was attempted.
-- Ran serially under the 1,024 MiB heap cap and low priority:
-  - `NODE_OPTIONS=--max-old-space-size=1024 nice -n 10 npm test -- src/components/PlayerDetailDialog.test.tsx` → **12/12 passed**.
-  - `NODE_OPTIONS=--max-old-space-size=1024 nice -n 10 npm run lint -- src/components/PlayerDetailDialog.tsx src/components/PlayerDetailDialog.test.tsx` → **0 warnings/errors**.
-- `git diff --check` passed.
-
-### CI
-- `build` ✅
-- `Build and Deploy` ✅
-
-### Hosted QA on PR preview
-- Confirmed on live preview (2026 SeaMex data path):
-  - no side `Bids` rail on Waivers cards,
-  - card tap/click opens Player Details and popup bidding remains present,
-  - Team Impact is a compact four-line stack with `Overall:`, `WR:`, and `Lineup pts:`,
-  - complete accessible labels remain present (`Overall: 7/24 to 3/24`, `WR: 1/24 to 1/24`),
-  - before/after rank values retain independent amber/green quartile colors while labels/arrows remain neutral.
+3. **Custom valuation unavailable in Player Details**
+   - Root cause: custom cards deliberately passed `suggestedBid: null` to avoid conflating custom and market concepts, but no separate custom valuation was propagated; the generic Suggested field therefore rendered `Unavailable`.
+   - Fix: `PlayerDetailData` now has explicit `customValue`. Custom cards pass the selected board value; the popup renders `Custom value` separately from market `Predicted`, source-native rank/value, Team Impact, manager predictions, and bidding history.
 
 ## Files changed
 
-- `src/components/PlayerDetailDialog.tsx`
-- `src/components/PlayerDetailDialog.test.tsx`
 - `src/pages/WaiversPage.tsx`
 - `src/pages/WaiversPage.test.tsx`
+- `src/components/CustomRankingDialogs.tsx`
+- `src/components/CustomRankingDialogs.test.tsx`
+- `src/components/PlayerDetailDialog.tsx`
 - `PROGRESS.md`
 - `HANDOFF.md`
 
-## Safety / boundaries
+Untracked QA evidence was intentionally preserved under `artifacts/pr23-qa/2026-10-10-mobile-follow-up/` and was not staged wholesale.
 
-- PR #20 untouched.
-- No merge, no auto-merge, no production deploy, no branch deletion.
+## Validation
+
+Passed locally:
+
+- Focused Vitest: **56/56** across:
+  - `src/components/CustomRankingDialogs.test.tsx`
+  - `src/pages/WaiversPage.test.tsx`
+  - `src/components/PlayerDetailDialog.test.tsx`
+  - `src/logic/__tests__/customRankings.test.ts`
+- Follow-up WaiversPage test after the touch-target correction: **15/15**.
+- Capped serial `npm run build` with `NODE_OPTIONS=--max-old-space-size=1024 nice -n 10`.
+- Changed-file Oxlint: **0 errors**; one pre-existing `react(set-state-in-effect)` warning in `CustomRankingDialogs.tsx` when linting the wider changed set.
+- `git diff --check` and bounded added-line secret scan.
+
+Implementation-head GitHub checks passed:
+
+- CI run `38094475186`: success (lint, typecheck, frontend tests, managed Functions tests, build, artifact).
+- Azure preview run `38094475177`: success.
+
+## Hosted QA
+
+Real SeaMex Guillotine 2026 league / `PR23 QA` custom ranking:
+
+- Desktop: responsive value rail retained; left/right card actions remained distinct; popup showed source-native value, `Custom value $34`, and market `Predicted $0` separately.
+- Mobile 390×844 measurements: viewport/document width 390px (no page-level horizontal overflow), card 334px, player region 210px, value region 124px, input 44px, editor group 46px.
+- One override: confirmation showed `1 player value has been edited.` and preservation checked by default; preserving retained the override after regeneration.
+- Unchecked preservation cleared the override.
+- Zero overrides: settings regenerated directly with no confirmation, no zero-count copy, and no preservation checkbox.
+- Left side opened Player Details; right editor focused without opening a dialog.
+
+Evidence:
+
+- `artifacts/pr23-qa/2026-10-10-mobile-follow-up/desktop-custom-cards.jpg`
+- `artifacts/pr23-qa/2026-10-10-mobile-follow-up/desktop-custom-popup.jpg`
+- `artifacts/pr23-qa/2026-10-10-mobile-follow-up/mobile-390-custom-cards.jpg`
+- `artifacts/pr23-qa/2026-10-10-mobile-follow-up/mobile-390-custom-popup.jpg`
+- `artifacts/pr23-qa/2026-10-10-mobile-follow-up/mobile-390-one-override-confirmation.jpg`
+- `artifacts/pr23-qa/2026-10-10-mobile-follow-up/qa-notes.md`
+
+## Safety gate
+
+PR #23 remains unmerged. Do not merge, enable auto-merge, delete the branch, deploy production, or dispatch deployment workflows without John's explicit authorization for that exact action.

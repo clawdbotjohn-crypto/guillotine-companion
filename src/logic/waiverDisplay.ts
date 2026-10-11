@@ -6,8 +6,12 @@ import {
 
 export { DEFAULT_WAIVER_STRATEGY };
 
-export const WAIVER_STRATEGIES: { key: StrategyKey; label: string }[] =
-  WAIVER_STRATEGY_REGISTRY.map(({ key, label }) => ({ key, label }));
+export type DisplayStrategyKey = StrategyKey | 'custom';
+
+export const WAIVER_STRATEGIES: { key: DisplayStrategyKey; label: string }[] = [
+  ...WAIVER_STRATEGY_REGISTRY.map(({ key, label }) => ({ key, label })),
+  { key: 'custom', label: 'Custom' },
+];
 
 export const WAIVER_STRATEGY_EXPLANATIONS = Object.fromEntries(
   WAIVER_STRATEGY_REGISTRY
@@ -16,11 +20,14 @@ export const WAIVER_STRATEGY_EXPLANATIONS = Object.fromEntries(
 ) as Record<Exclude<StrategyKey, 'vorp'>, string>;
 
 export function getWaiverStrategyExplanation(
-  strategy: StrategyKey,
+  strategy: DisplayStrategyKey,
   _replacementTeamCount: number,
   vorpAvailable: boolean,
   unavailableReason?: string,
 ): string {
+  if (strategy === 'custom') {
+    return 'Uses the frozen generated values and explicit manual overrides saved in the selected custom ranking.';
+  }
   const definition = WAIVER_STRATEGY_REGISTRY.find(({ key }) => key === strategy)!;
   if (strategy !== 'vorp' && strategy !== 'max-vorp') return definition.explanation;
   if (vorpAvailable) return definition.explanation;
