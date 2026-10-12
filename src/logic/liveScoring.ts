@@ -20,6 +20,7 @@ export interface LiveStarterScore {
   name: string;
   fantasyPosition: string;
   lineupPosition: string;
+  injuryStatus: string | null;
   currentPoints: number;
   projectedFinal: number | null;
   status: LiveStarterStatus;
@@ -267,6 +268,8 @@ export function buildLiveScoringModel(input: BuildLiveScoringInput): LiveScoring
     const starters = starterIds.map((playerId, index): LiveStarterScore => {
       const player = input.players?.get(playerId);
       const fantasyPosition = player?.position || 'UNK';
+      const injuryStatus = player?.injury_status
+        || (player?.status && player.status !== 'Active' ? player.status : null);
       const currentPoints = starterCurrentPoints(matchup, playerId, index);
       const projection = finite(input.weeklyProjections?.get(playerId)?.points);
       const game = player?.team ? gameByTeam.get(player.team.toUpperCase()) : undefined;
@@ -320,6 +323,7 @@ export function buildLiveScoringModel(input: BuildLiveScoringInput): LiveScoring
         name: player?.full_name || playerId,
         fantasyPosition,
         lineupPosition: displayLineupPosition(lineupPositions[index], fantasyPosition),
+        injuryStatus,
         currentPoints,
         projectedFinal,
         status,

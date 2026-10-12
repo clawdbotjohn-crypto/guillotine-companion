@@ -127,7 +127,12 @@ export function TeamScoringDialog({
                   <li key={starter.playerId} className="flex min-h-[4.5rem] items-center gap-3 py-3">
                     <PositionBadge position={starter.lineupPosition} className="w-[4.75rem] shrink-0 px-1" />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-semibold text-[#f0f0ff]">{starter.name}</div>
+                      <div className="flex min-w-0 items-baseline gap-1.5">
+                        <span className="truncate text-sm font-semibold text-[#f0f0ff]">{starter.name}</span>
+                        {starter.injuryStatus && (
+                          <span className="shrink-0 text-[10px] font-semibold text-[#f59e0b]">{starter.injuryStatus}</span>
+                        )}
+                      </div>
                       <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-[#777aa5]">
                         <span>{starter.fantasyPosition}</span>
                         {starter.context && <span>{starter.context}</span>}

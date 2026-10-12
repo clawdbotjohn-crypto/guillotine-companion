@@ -22,11 +22,13 @@ const model: LiveScoringModel = {
     starters: [
       {
         playerId: 'p1', name: 'Ada Runner', fantasyPosition: 'RB', lineupPosition: 'FLEX',
-        currentPoints: 12.4, projectedFinal: 18.2, status: 'live', context: 'Live', hasStarted: true,
+        injuryStatus: 'Questionable', currentPoints: 12.4, projectedFinal: 18.2,
+        status: 'live', context: 'Live', hasStarted: true,
       },
       {
         playerId: 'p2', name: 'Grace Catcher', fantasyPosition: 'WR', lineupPosition: 'WR',
-        currentPoints: 0, projectedFinal: null, status: 'unknown', context: null, hasStarted: false,
+        injuryStatus: null, currentPoints: 0, projectedFinal: null,
+        status: 'unknown', context: null, hasStarted: false,
       },
     ],
   }],
@@ -53,6 +55,7 @@ describe('HubLiveScoring', () => {
     const dialog = screen.getByRole('dialog', { name: 'John’s Team scoring' });
     expect(dialog.getAttribute('aria-modal')).toBe('true');
     expect(screen.getByText('Ada Runner')).toBeTruthy();
+    expect(screen.getByText('Questionable')).toBeTruthy();
     expect(screen.getByText('Grace Catcher')).toBeTruthy();
     expect(screen.getByText('FLEX')).toBeTruthy();
     expect(screen.getByText('12.4')).toBeTruthy();
