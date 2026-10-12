@@ -33,7 +33,7 @@ import {
   classifyCanonicalBidEvents,
   getActiveRosterIds,
   buildLiveScoringModel,
-  getLiveDataUpdatedAt,
+  isWeeklyScoringActive,
   buildMaxVorpPlayerValues,
   buildModeledPositionRanks,
   buildSelectedRosterValueDisplay,
@@ -251,7 +251,7 @@ export function HubPage() {
   const liveModel = liveSeasonEnabled
     && liveMatchupsQuery.data
     && weeklyGamesQuery.data
-    && weeklyScoredPlayers?.size
+    && weeklyProjectionQuery.data
     && players
     ? buildLiveScoringModel({
         rosters,
@@ -260,14 +260,10 @@ export function HubPage() {
         games: weeklyGamesQuery.data,
         players,
         elimination: elimResult,
+        lineupPositions: league?.roster_positions,
       })
     : null;
-  const liveUpdatedAt = liveModel
-    ? getLiveDataUpdatedAt(
-        liveMatchupsQuery.dataUpdatedAt,
-        weeklyGamesQuery.dataUpdatedAt,
-      )
-    : null;
+  const liveScoringActive = isWeeklyScoringActive(weeklyGamesQuery.data);
   const liveLoading = liveSeasonEnabled
     && (
       liveMatchupsQuery.isLoading
@@ -286,9 +282,7 @@ export function HubPage() {
       ? 'Sleeper official scores or game status could not be loaded.'
       : weeklyProjectionQuery.isError
         ? 'Sleeper weekly projections could not be loaded.'
-        : weeklyProjectionQuery.isSuccess && !weeklyScoredPlayers?.size
-          ? 'Sleeper has no usable projections for this scoring week.'
-          : undefined;
+        : undefined;
   const refreshLiveScores = async () => {
     await Promise.all([
       liveMatchupsQuery.refetch(),
@@ -449,10 +443,10 @@ export function HubPage() {
         <HubLiveScoring
           week={projectionWeek}
           model={liveModel}
+          isActive={liveScoringActive}
           isLoading={liveLoading}
           isRefreshing={liveRefreshing}
           unavailableReason={liveUnavailableReason}
-          updatedAt={liveUpdatedAt}
           currentRosterId={rosterId}
           onRefresh={refreshLiveScores}
         />
@@ -597,10 +591,10 @@ export function HubPage() {
       <HubLiveScoring
         week={projectionWeek}
         model={liveModel}
+        isActive={liveScoringActive}
         isLoading={liveLoading}
         isRefreshing={liveRefreshing}
         unavailableReason={liveUnavailableReason}
-        updatedAt={liveUpdatedAt}
         currentRosterId={rosterId}
         onRefresh={refreshLiveScores}
       />

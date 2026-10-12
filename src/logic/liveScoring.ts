@@ -1,6 +1,6 @@
 import type { Matchup, Roster, SleeperGame } from '../api/types';
 import type { PlayerRecord } from '../store/players';
-import type { ActiveStanding, TeamRisk } from './analytics';
+import type { ActiveStanding } from './analytics';
 import { getCurrentElimsPerWeek, rankActiveTeams } from './analytics';
 import type { EliminationResult } from './elimination';
 import type { WeeklyScoredPlayer } from './projections';
@@ -12,18 +12,32 @@ const LIVE_WINDOW_BEFORE_MS = 15 * 60_000;
 const LIVE_WINDOW_AFTER_MS = 5 * 60 * 60_000;
 const LIVE_WAKE_AHEAD_MS = 6 * 60 * 60_000;
 
-export type LiveProjectionQuality = 'full' | 'partial' | 'unavailable';
 export type LiveFreshness = 'fresh' | 'stale' | 'unavailable';
+export type LiveStarterStatus = 'not-started' | 'live' | 'final' | 'bye' | 'unknown';
+
+export interface LiveStarterScore {
+  playerId: string;
+  name: string;
+  fantasyPosition: string;
+  lineupPosition: string;
+  currentPoints: number;
+  projectedFinal: number | null;
+  status: LiveStarterStatus;
+  context: string | null;
+  hasStarted: boolean;
+}
 
 export interface LiveTeamScore {
   rosterId: number;
   displayName: string;
   eliminated: boolean;
-  officialPoints: number | null;
-  projectedFinal: number | null;
-  projectionQuality: LiveProjectionQuality;
+  officialPoints: number;
+  projectedFinal: number;
   playersRemaining: number;
   playersInProgress: number;
+  startersStarted: number;
+  starterCount: number;
+  starters: LiveStarterScore[];
   standing: ActiveStanding | null;
 }
 
@@ -69,13 +83,21 @@ export function isGameInProgress(game: SleeperGame): boolean {
     || status === 'live';
 }
 
-function isGameComplete(game: SleeperGame): boolean {
+export function isGameComplete(game: SleeperGame): boolean {
   const metadata = gameMetadata(game);
   const status = normalizedStatus(game);
   return bool(metadata.is_over) === true
     || status === 'complete'
     || status === 'final'
-    || status === 'closed';
+    || status === 'closed'
+    || status === 'post';
+}
+
+function hasGameStarted(game: SleeperGame): boolean {
+  const metadata = gameMetadata(game);
+  return isGameInProgress(game)
+    || isGameComplete(game)
+    || bool(metadata.has_started) === true;
 }
 
 function isGamePregame(game: SleeperGame): boolean {
@@ -133,6 +155,21 @@ export function isWithinLiveGameWindow(games: readonly SleeperGame[] | undefined
 }
 
 /**
+ * The Hub banner spans the whole scoring slate: first observed weekly kickoff
+ * through the final game's completion. Unlike polling windows, this deliberately
+ * remains true between Thursday, Sunday, and Monday game windows.
+ */
+export function isWeeklyScoringActive(games: readonly SleeperGame[] | undefined, now = Date.now()): boolean {
+  if (!games?.length || games.every(isGameComplete)) return false;
+  if (games.some(hasGameStarted)) return true;
+  const firstKickoff = games
+    .map((game) => normalizedStartTime(game.start_time))
+    .filter((start): start is number => start != null)
+    .sort((left, right) => left - right)[0];
+  return firstKickoff != null && now >= firstKickoff;
+}
+
+/**
  * Poll once a minute only in a live window. When a kickoff is within six hours,
  * return one one-shot delay to wake the query at the window boundary; games
  * hours or days away do not cause background polling.
@@ -156,11 +193,7 @@ export function getLiveFreshness(updatedAt: number | null | undefined, now = Dat
   return now - updatedAt <= LIVE_FRESHNESS_MS ? 'fresh' : 'stale';
 }
 
-/**
- * Freshness tracks the two minute-polled live inputs. Weekly projections are a
- * baseline assumption, not a live feed, so including their cache timestamp
- * would make a correctly refreshing live model appear stale after two minutes.
- */
+/** Weekly projections are a baseline, so freshness follows only minute-polled inputs. */
 export function getLiveDataUpdatedAt(
   matchupUpdatedAt: number | null | undefined,
   gamesUpdatedAt: number | null | undefined,
@@ -179,117 +212,161 @@ export function formatLiveUpdatedAt(updatedAt: number | null | undefined): strin
 
 interface BuildLiveScoringInput {
   rosters: readonly Roster[];
-  matchups: readonly Matchup[] | undefined;
+  matchups: readonly Matchup[];
   weeklyProjections: ReadonlyMap<string, WeeklyScoredPlayer> | null;
-  games: readonly SleeperGame[] | undefined;
+  games: readonly SleeperGame[];
   players: ReadonlyMap<string, PlayerRecord> | undefined;
   elimination: EliminationResult;
+  lineupPositions?: readonly string[];
+}
+
+function validStarterIds(matchup: Matchup | undefined): string[] {
+  return (matchup?.starters ?? []).filter((playerId) => (
+    typeof playerId === 'string' && playerId.trim() !== '' && playerId !== '0'
+  ));
+}
+
+function displayLineupPosition(position: string | undefined, fallback: string): string {
+  if (!position) return fallback;
+  if (position === 'WRRB_FLEX' || position === 'REC_FLEX') return 'FLEX';
+  if (position === 'SUPER_FLEX' || position === 'QB_FLEX') return 'SUPER FLEX';
+  return position.replaceAll('_', ' ');
+}
+
+function starterLineupPositions(positions: readonly string[] | undefined): string[] {
+  return (positions ?? []).filter((position) => ![
+    'BN', 'BENCH', 'IR', 'RESERVE', 'TAXI',
+  ].includes(position));
+}
+
+function starterCurrentPoints(matchup: Matchup | undefined, playerId: string, index: number): number {
+  return finite(matchup?.players_points?.[playerId])
+    ?? finite(matchup?.starters_points?.[index])
+    ?? 0;
 }
 
 export function buildLiveScoringModel(input: BuildLiveScoringInput): LiveScoringModel {
-  const matchupByRoster = new Map((input.matchups ?? []).map((matchup) => [matchup.roster_id, matchup]));
+  const matchupByRoster = new Map(input.matchups.map((matchup) => [matchup.roster_id, matchup]));
   const gameByTeam = new Map<string, SleeperGame>();
-  for (const game of input.games ?? []) {
+  for (const game of input.games) {
     for (const team of gameTeams(game)) gameByTeam.set(team, game);
   }
+  const lineupPositions = starterLineupPositions(input.lineupPositions);
 
   const teams: LiveTeamScore[] = input.rosters.map((roster) => {
     const matchup = matchupByRoster.get(roster.roster_id);
     const teamInfo = input.elimination.teams.get(roster.roster_id);
     const eliminated = teamInfo?.eliminatedWeek != null;
-    const starters = matchup?.starters ?? [];
-    const officialPoints = finite(matchup?.points);
+    const starterIds = validStarterIds(matchup);
+    const officialPoints = finite(matchup?.points) ?? 0;
     let additions = 0;
-    let resolved = 0;
     let playersRemaining = 0;
     let playersInProgress = 0;
+    let startersStarted = 0;
 
-    for (const playerId of starters) {
+    const starters = starterIds.map((playerId, index): LiveStarterScore => {
       const player = input.players?.get(playerId);
-      if (!player?.team) continue;
-      const game = gameByTeam.get(player.team.toUpperCase());
-      // A mapped NFL team missing from a non-empty schedule is a bye/no-game.
-      // An empty schedule cannot establish that fact, so fail closed instead.
+      const fantasyPosition = player?.position || 'UNK';
+      const currentPoints = starterCurrentPoints(matchup, playerId, index);
+      const projection = finite(input.weeklyProjections?.get(playerId)?.points);
+      const game = player?.team ? gameByTeam.get(player.team.toUpperCase()) : undefined;
+      let projectedFinal: number | null = null;
+      let status: LiveStarterStatus = 'unknown';
+      let context: string | null = null;
+      let hasStarted = false;
+
       if (!game) {
-        if ((input.games?.length ?? 0) > 0) resolved += 1;
-        continue;
-      }
-      if (isGameComplete(game)) {
-        resolved += 1;
-        continue;
-      }
-      const projection = input.weeklyProjections?.get(playerId)?.points;
-      if (isGamePregame(game)) {
-        playersRemaining += 1;
-        if (projection != null && Number.isFinite(projection)) {
-          additions += projection;
-          resolved += 1;
+        if (player?.team && input.games.length > 0) {
+          status = 'bye';
+          context = 'Bye / no game';
+          projectedFinal = currentPoints;
         }
-        continue;
-      }
-      if (isGameInProgress(game)) {
+      } else if (isGameComplete(game)) {
+        status = 'final';
+        context = 'Final';
+        hasStarted = true;
+        projectedFinal = currentPoints;
+      } else if (isGameInProgress(game)) {
+        status = 'live';
+        context = 'Live';
+        hasStarted = true;
         playersRemaining += 1;
         playersInProgress += 1;
         const fraction = getRemainingGameFraction(game);
-        if (fraction != null && projection != null && Number.isFinite(projection)) {
-          additions += projection * fraction;
-          resolved += 1;
+        if (fraction != null && projection != null) {
+          const remaining = projection * fraction;
+          additions += remaining;
+          projectedFinal = currentPoints + remaining;
         }
+      } else if (isGamePregame(game)) {
+        status = 'not-started';
+        context = 'Not started';
+        playersRemaining += 1;
+        if (projection != null) {
+          additions += projection;
+          projectedFinal = currentPoints + projection;
+        }
+      } else if (hasGameStarted(game)) {
+        status = 'live';
+        context = 'Started';
+        hasStarted = true;
+        playersRemaining += 1;
+        playersInProgress += 1;
       }
-    }
 
-    const projectedFinal = officialPoints != null && starters.length > 0 && resolved > 0
-      ? officialPoints + additions
-      : null;
-    const projectionQuality: LiveProjectionQuality = projectedFinal == null
-      ? 'unavailable'
-      : resolved === starters.length ? 'full' : 'partial';
+      if (hasStarted) startersStarted += 1;
+      return {
+        playerId,
+        name: player?.full_name || playerId,
+        fantasyPosition,
+        lineupPosition: displayLineupPosition(lineupPositions[index], fantasyPosition),
+        currentPoints,
+        projectedFinal,
+        status,
+        context,
+        hasStarted,
+      };
+    });
+
     return {
       rosterId: roster.roster_id,
       displayName: teamInfo?.displayName ?? `Team ${roster.roster_id}`,
       eliminated,
       officialPoints,
-      projectedFinal,
-      projectionQuality,
+      projectedFinal: officialPoints + additions,
       playersRemaining,
       playersInProgress,
+      startersStarted,
+      starterCount: starterIds.length,
+      starters,
       standing: null,
     };
   });
 
   const activeTeams = teams.filter((team) => !team.eliminated);
-  // Partial totals remain visible, but never drive survival labels or a cutline.
-  const rankingsAvailable = activeTeams.length > 0
-    && activeTeams.every((team) => team.projectedFinal != null && team.projectionQuality === 'full');
-  let projectedCutline: number | null = null;
-  if (rankingsAvailable) {
-    const standings = rankActiveTeams(
-      teams.map((team) => ({
-        rosterId: team.rosterId,
-        value: team.projectedFinal ?? 0,
-        eliminated: team.eliminated,
-      })),
-      getCurrentElimsPerWeek(input.elimination),
-    );
-    for (const team of teams) team.standing = standings.get(team.rosterId) ?? null;
-    const eliminationCount = Math.min(getCurrentElimsPerWeek(input.elimination), activeTeams.length);
-    const ordered = activeTeams
-      .map((team) => team.projectedFinal!)
-      .sort((a, b) => a - b);
-    projectedCutline = ordered[eliminationCount - 1] ?? null;
-  }
+  const rankingsAvailable = activeTeams.length > 0;
+  const standings = rankActiveTeams(
+    teams.map((team) => ({
+      rosterId: team.rosterId,
+      value: team.projectedFinal,
+      eliminated: team.eliminated,
+    })),
+    getCurrentElimsPerWeek(input.elimination),
+  );
+  for (const team of teams) team.standing = standings.get(team.rosterId) ?? null;
 
+  const eliminationCount = Math.min(getCurrentElimsPerWeek(input.elimination), activeTeams.length);
+  const orderedActiveScores = activeTeams
+    .map((team) => team.projectedFinal)
+    .sort((left, right) => left - right);
+  const projectedCutline = orderedActiveScores[eliminationCount - 1] ?? null;
+
+  // Scores is a survival board: lowest projected active team first. Roster ID
+  // is the stable tie-breaker, and eliminated teams remain visible at the end.
   teams.sort((left, right) => {
     if (left.eliminated !== right.eliminated) return left.eliminated ? 1 : -1;
-    if (!left.eliminated && rankingsAvailable) {
-      return (left.standing?.rank ?? Number.MAX_SAFE_INTEGER) - (right.standing?.rank ?? Number.MAX_SAFE_INTEGER);
-    }
-    return right.officialPoints! - left.officialPoints! || left.rosterId - right.rosterId;
+    return left.projectedFinal - right.projectedFinal || left.rosterId - right.rosterId;
   });
 
   return { teams, activeTeamCount: activeTeams.length, projectedCutline, rankingsAvailable };
-}
-
-export function riskLabel(risk: TeamRisk): string {
-  return risk === 'at-risk' ? 'Danger' : risk === 'warning' ? 'Watch' : 'Safe';
 }

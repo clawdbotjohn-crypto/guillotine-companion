@@ -530,7 +530,7 @@ describe('current team ranking semantics', () => {
     const allTeamTotals = new Map<number, number>();
     for (const week of matchups.values()) {
       for (const entry of week) {
-        allTeamTotals.set(entry.roster_id, (allTeamTotals.get(entry.roster_id) ?? 0) + entry.points);
+        allTeamTotals.set(entry.roster_id, (allTeamTotals.get(entry.roster_id) ?? 0) + (entry.points ?? 0));
       }
     }
     const oldAllTeamOrder = [...allTeamTotals.entries()]

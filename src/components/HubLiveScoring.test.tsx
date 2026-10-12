@@ -1,60 +1,82 @@
+/* @vitest-environment jsdom */
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { LiveScoringModel } from '../logic/liveScoring';
 import { HubLiveScoring } from './HubLiveScoring';
 
 const model: LiveScoringModel = {
-  activeTeamCount: 2,
-  projectedCutline: 88.2,
+  activeTeamCount: 3,
   rankingsAvailable: true,
-  teams: [
-    {
-      rosterId: 1, displayName: 'Alpha', eliminated: false, officialPoints: 41.2,
-      projectedFinal: 94.4, projectionQuality: 'full', playersRemaining: 3,
-      playersInProgress: 1, standing: { rosterId: 1, rank: 1, outOf: 2, risk: 'safe' },
-    },
-    {
-      rosterId: 2, displayName: 'Bravo', eliminated: false, officialPoints: 35,
-      projectedFinal: 88.2, projectionQuality: 'partial', playersRemaining: 2,
-      playersInProgress: 0, standing: { rosterId: 2, rank: 2, outOf: 2, risk: 'at-risk' },
-    },
-    {
-      rosterId: 3, displayName: 'Chopped', eliminated: true, officialPoints: 70,
-      projectedFinal: 70, projectionQuality: 'full', playersRemaining: 0,
-      playersInProgress: 0, standing: null,
-    },
-  ],
+  projectedCutline: 61,
+  teams: [{
+    rosterId: 1,
+    displayName: 'John’s Team',
+    eliminated: false,
+    officialPoints: 42.25,
+    projectedFinal: 75.5,
+    playersRemaining: 1,
+    playersInProgress: 1,
+    startersStarted: 1,
+    starterCount: 2,
+    standing: { rosterId: 1, rank: 2, outOf: 3, risk: 'warning' },
+    starters: [
+      {
+        playerId: 'p1', name: 'Ada Runner', fantasyPosition: 'RB', lineupPosition: 'FLEX',
+        currentPoints: 12.4, projectedFinal: 18.2, status: 'live', context: 'Live', hasStarted: true,
+      },
+      {
+        playerId: 'p2', name: 'Grace Catcher', fantasyPosition: 'WR', lineupPosition: 'WR',
+        currentPoints: 0, projectedFinal: null, status: 'unknown', context: null, hasStarted: false,
+      },
+    ],
+  }],
 };
 
 describe('HubLiveScoring', () => {
-  it('labels official Sleeper data, app projections, survivor denominator, partial data, and eliminated teams', () => {
-    render(<HubLiveScoring week={5} model={model} updatedAt={900_000} now={1_000_000} onRefresh={() => {}} />);
-    expect(screen.getByText('Sleeper')).toBeTruthy();
-    expect(screen.getAllByText(/App projection/i).length).toBeGreaterThan(0);
-    expect(screen.getByText('1/2 projected · Safe')).toBeTruthy();
-    expect(screen.getByText('partial')).toBeTruthy();
-    expect(screen.getByText('Eliminated')).toBeTruthy();
-    expect(screen.getByText('Excluded from survival rank')).toBeTruthy();
-    expect(screen.getByText('3 remaining · 1 in progress')).toBeTruthy();
-    expect(screen.getByText(/App-projected cutline: 88.2/)).toBeTruthy();
-    expect(screen.getByText('Fresh')).toBeTruthy();
+  it('renders only during the weekly slate and has no CTA copy', () => {
+    const { rerender } = render(
+      <HubLiveScoring week={6} model={model} isActive={false} currentRosterId={1} onRefresh={() => undefined} />,
+    );
+    expect(screen.queryByRole('button')).toBeNull();
+
+    rerender(<HubLiveScoring week={6} model={model} isActive currentRosterId={1} onRefresh={() => undefined} />);
+    expect(screen.getByText('42.3')).toBeTruthy();
+    expect(screen.getByText('2/3')).toBeTruthy();
+    expect(screen.getByLabelText('Status: Warning')).toBeTruthy();
+    expect(screen.queryByText(/view|open|details/i)).toBeNull();
   });
 
-  it('offers an accessible explicit refresh and loading label', () => {
-    const refresh = vi.fn();
-    const { rerender } = render(<HubLiveScoring week={5} model={model} onRefresh={refresh} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh live scores' }));
-    expect(refresh).toHaveBeenCalledOnce();
-    rerender(<HubLiveScoring week={5} model={model} onRefresh={refresh} isRefreshing />);
-    expect((screen.getByRole('button', { name: 'Refreshing live scores…' }) as HTMLButtonElement).disabled).toBe(true);
+  it('uses the whole semantic banner button to open the owner starter dialog', () => {
+    render(<HubLiveScoring week={6} model={model} isActive currentRosterId={1} onRefresh={() => undefined} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open Week 6 scoring for John’s Team' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'John’s Team scoring' });
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    expect(screen.getByText('Ada Runner')).toBeTruthy();
+    expect(screen.getByText('Grace Catcher')).toBeTruthy();
+    expect(screen.getByText('FLEX')).toBeTruthy();
+    expect(screen.getByText('12.4')).toBeTruthy();
+    expect(screen.getByText('Started')).toBeTruthy();
+    expect(screen.getByText('1/2')).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('renders honest loading and unavailable states', () => {
-    const { rerender } = render(<HubLiveScoring week={5} model={null} isLoading onRefresh={() => {}} />);
-    expect(screen.getByText(/Loading official scores/)).toBeTruthy();
-    rerender(<HubLiveScoring week={null} model={null} unavailableReason="Historical season selected." onRefresh={() => {}} />);
-    expect(screen.getByText('Live scoring unavailable')).toBeTruthy();
-    expect(screen.getByText('Historical season selected.')).toBeTruthy();
-    expect((screen.getByRole('button', { name: 'Refresh live scores' }) as HTMLButtonElement).disabled).toBe(true);
+  it('keeps request failure distinct from loaded zero scores and exposes retry', () => {
+    const retry = vi.fn();
+    render(
+      <HubLiveScoring
+        week={6}
+        model={null}
+        isActive
+        unavailableReason="Sleeper official scores could not be loaded."
+        currentRosterId={1}
+        onRefresh={retry}
+      />,
+    );
+    expect(screen.getByText('Sleeper official scores could not be loaded.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry live scores' }));
+    expect(retry).toHaveBeenCalledOnce();
   });
 });

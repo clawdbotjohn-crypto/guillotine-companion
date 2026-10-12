@@ -42,11 +42,11 @@ export interface Roster {
 export interface Matchup {
   roster_id: number;
   matchup_id: number;
-  points: number;
+  points: number | null;
   starters: string[] | null;
-  starters_points: number[] | null;
+  starters_points: Array<number | null> | null;
   players: string[] | null;
-  players_points: Record<string, number> | null;
+  players_points: Record<string, number | null> | null;
 }
 
 export interface WaiverBudgetTransfer {
