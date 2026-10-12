@@ -132,7 +132,7 @@ export function TeamScoringDialog({
                         <span className="truncate text-sm font-semibold text-[#f0f0ff]">{starter.name}</span>
                         {starter.injuryStatus && (
                           <span
-                            className="shrink-0 text-sm font-bold text-[#f87171]"
+                            className="shrink-0 text-sm font-semibold text-[#f87171]"
                             aria-label={starter.injuryStatus}
                             title={starter.injuryStatus}
                           >

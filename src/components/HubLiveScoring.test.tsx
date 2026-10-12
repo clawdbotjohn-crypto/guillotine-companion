@@ -77,6 +77,7 @@ describe('HubLiveScoring', () => {
     expect(injuryStatus.getAttribute('aria-label')).toBe('Questionable');
     expect(injuryStatus.getAttribute('title')).toBe('Questionable');
     expect(injuryStatus.className).toContain('text-sm');
+    expect(injuryStatus.className).toContain('font-semibold');
     expect(injuryStatus.className).toContain('text-[#f87171]');
     expect(injuryStatus.parentElement?.className).toContain('items-center');
     expect(screen.queryByText('Questionable')).toBeNull();
