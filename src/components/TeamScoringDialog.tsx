@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
+import { formatScoringInjuryStatus } from '../logic/injuryStatus';
 import type { LiveScoringModel, LiveTeamScore } from '../logic/liveScoring';
 import { PositionBadge, StatusBadge } from './ui';
 
@@ -130,7 +131,13 @@ export function TeamScoringDialog({
                       <div className="flex min-w-0 items-baseline gap-1.5">
                         <span className="truncate text-sm font-semibold text-[#f0f0ff]">{starter.name}</span>
                         {starter.injuryStatus && (
-                          <span className="shrink-0 text-[10px] font-semibold text-[#f59e0b]">{starter.injuryStatus}</span>
+                          <span
+                            className="shrink-0 text-[10px] font-bold text-[#f87171]"
+                            aria-label={starter.injuryStatus}
+                            title={starter.injuryStatus}
+                          >
+                            {formatScoringInjuryStatus(starter.injuryStatus)}
+                          </span>
                         )}
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-[#777aa5]">

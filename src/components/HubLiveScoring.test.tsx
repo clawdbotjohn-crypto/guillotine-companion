@@ -1,6 +1,7 @@
 /* @vitest-environment jsdom */
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { formatScoringInjuryStatus } from '../logic/injuryStatus';
 import type { LiveScoringModel } from '../logic/liveScoring';
 import { HubLiveScoring } from './HubLiveScoring';
 
@@ -34,6 +35,23 @@ const model: LiveScoringModel = {
   }],
 };
 
+describe('formatScoringInjuryStatus', () => {
+  it.each([
+    ['Questionable', 'Q'],
+    ['Doubtful', 'D'],
+    ['Injured Reserve', 'IR'],
+    ['IR', 'IR'],
+    ['Out', 'O'],
+    ['Suspended', 'S'],
+  ])('formats %s as %s', (status, shorthand) => {
+    expect(formatScoringInjuryStatus(status)).toBe(shorthand);
+  });
+
+  it('preserves an unrecognized status instead of hiding it', () => {
+    expect(formatScoringInjuryStatus('PUP')).toBe('PUP');
+  });
+});
+
 describe('HubLiveScoring', () => {
   it('renders only during the weekly slate and has no CTA copy', () => {
     const { rerender } = render(
@@ -55,7 +73,11 @@ describe('HubLiveScoring', () => {
     const dialog = screen.getByRole('dialog', { name: 'John’s Team scoring' });
     expect(dialog.getAttribute('aria-modal')).toBe('true');
     expect(screen.getByText('Ada Runner')).toBeTruthy();
-    expect(screen.getByText('Questionable')).toBeTruthy();
+    const injuryStatus = screen.getByText('Q');
+    expect(injuryStatus.getAttribute('aria-label')).toBe('Questionable');
+    expect(injuryStatus.getAttribute('title')).toBe('Questionable');
+    expect(injuryStatus.className).toContain('text-[#f87171]');
+    expect(screen.queryByText('Questionable')).toBeNull();
     expect(screen.getByText('Grace Catcher')).toBeTruthy();
     expect(screen.getByText('FLEX')).toBeTruthy();
     expect(screen.getByText('12.4')).toBeTruthy();
