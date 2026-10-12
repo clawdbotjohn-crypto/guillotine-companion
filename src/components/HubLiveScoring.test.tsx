@@ -76,6 +76,7 @@ describe('HubLiveScoring', () => {
     const injuryStatus = screen.getByText('Q');
     expect(injuryStatus.getAttribute('aria-label')).toBe('Questionable');
     expect(injuryStatus.getAttribute('title')).toBe('Questionable');
+    expect(injuryStatus.className).toContain("font-['Space_Mono']");
     expect(injuryStatus.className).toContain('text-sm');
     expect(injuryStatus.className).toContain('font-semibold');
     expect(injuryStatus.className).toContain('text-[#f87171]');
