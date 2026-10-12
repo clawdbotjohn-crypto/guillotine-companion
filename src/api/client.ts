@@ -10,6 +10,7 @@ import type {
   UserLeague,
   NflState,
   WeeklyProjectionMap,
+  SleeperGame,
   FantasyCalcResponse,
   FantasyProsResponse,
   ProjectionSnapshotProvenance,
@@ -60,6 +61,8 @@ export const getAllPlayers = () => get<Record<string, any>>('/players/nfl');
 export const getNflState = () => get<NflState>('/state/nfl');
 export const getWeeklyProjections = (season: string, week: number) =>
   get<WeeklyProjectionMap>(`/projections/nfl/regular/${season}/${week}`);
+export const getWeeklyGames = (season: string, week: number) =>
+  get<SleeperGame[]>(`/scores/nfl/regular/${season}/${week}`);
 
 async function getLocal<T>(path: string): Promise<T> {
   const res = await fetch(path);

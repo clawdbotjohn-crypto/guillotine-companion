@@ -42,11 +42,11 @@ export interface Roster {
 export interface Matchup {
   roster_id: number;
   matchup_id: number;
-  points: number;
+  points: number | null;
   starters: string[] | null;
-  starters_points: number[] | null;
+  starters_points: Array<number | null> | null;
   players: string[] | null;
-  players_points: Record<string, number> | null;
+  players_points: Record<string, number | null> | null;
 }
 
 export interface WaiverBudgetTransfer {
@@ -127,6 +127,18 @@ export interface NflState {
   league_season: string;
   season_start_date: string;
   season_has_scores: boolean;
+}
+
+/** Defensively typed shape from Sleeper's weekly NFL scores feed. */
+export interface SleeperGame {
+  game_id?: string | number;
+  start_time?: number | string;
+  status?: string;
+  updated_at?: number | string;
+  home_team?: string;
+  away_team?: string;
+  metadata?: Record<string, unknown> | null;
+  [key: string]: unknown;
 }
 
 /** Sleeper's weekly projection object contains many stat fields; waiver math uses these totals. */

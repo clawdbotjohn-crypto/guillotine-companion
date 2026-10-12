@@ -1,16 +1,17 @@
 import { NavLink } from 'react-router-dom';
-import { Crosshair, ShoppingCart, Trophy, Users } from 'lucide-react';
+import { Crosshair, RadioTower, ShoppingCart, Trophy, Users } from 'lucide-react';
 
 const tabs = [
   { to: '/hub', label: 'Hub', icon: Crosshair },
   { to: '/waivers', label: 'Waivers', icon: ShoppingCart },
+  { to: '/scores', label: 'Scores', icon: RadioTower },
   { to: '/league', label: 'League', icon: Trophy },
   { to: '/teams', label: 'Teams', icon: Users },
 ] as const;
 
 export function BottomNav() {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-[#0a0d1a] border-t border-[#2a2e55] safe-area-bottom">
+    <nav aria-label="Main navigation" className="fixed bottom-0 left-0 right-0 z-50 bg-[#0a0d1a] border-t border-[#2a2e55] safe-area-bottom">
       <div className="max-w-lg mx-auto flex">
         {tabs.map((tab) => (
           <NavLink
