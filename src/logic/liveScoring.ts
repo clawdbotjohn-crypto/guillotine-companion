@@ -246,6 +246,14 @@ function starterCurrentPoints(matchup: Matchup | undefined, playerId: string, in
     ?? 0;
 }
 
+export function hasCompleteMatchupCoverage(
+  rosters: readonly Roster[],
+  matchups: readonly Matchup[],
+): boolean {
+  const loadedRosterIds = new Set(matchups.map((matchup) => matchup.roster_id));
+  return rosters.every((roster) => loadedRosterIds.has(roster.roster_id));
+}
+
 export function buildLiveScoringModel(input: BuildLiveScoringInput): LiveScoringModel {
   const matchupByRoster = new Map(input.matchups.map((matchup) => [matchup.roster_id, matchup]));
   const gameByTeam = new Map<string, SleeperGame>();
@@ -254,8 +262,9 @@ export function buildLiveScoringModel(input: BuildLiveScoringInput): LiveScoring
   }
   const lineupPositions = starterLineupPositions(input.lineupPositions);
 
-  const teams: LiveTeamScore[] = input.rosters.map((roster) => {
+  const teams: LiveTeamScore[] = input.rosters.flatMap((roster) => {
     const matchup = matchupByRoster.get(roster.roster_id);
+    if (!matchup) return [];
     const teamInfo = input.elimination.teams.get(roster.roster_id);
     const eliminated = teamInfo?.eliminatedWeek != null;
     const starterIds = validStarterIds(matchup);

@@ -14,6 +14,7 @@ export {
 
 export {
   buildLiveScoringModel,
+  hasCompleteMatchupCoverage,
   formatLiveUpdatedAt,
   getLiveFreshness,
   getLiveDataUpdatedAt,

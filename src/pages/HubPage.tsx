@@ -33,6 +33,7 @@ import {
   classifyCanonicalBidEvents,
   getActiveRosterIds,
   buildLiveScoringModel,
+  hasCompleteMatchupCoverage,
   isWeeklyScoringActive,
   buildMaxVorpPlayerValues,
   buildModeledPositionRanks,
@@ -248,7 +249,10 @@ export function HubPage() {
         getPlayerPosition,
       )
     : null;
+  const liveMatchupCoverageComplete = !!liveMatchupsQuery.data
+    && hasCompleteMatchupCoverage(rosters, liveMatchupsQuery.data);
   const liveModel = liveSeasonEnabled
+    && liveMatchupCoverageComplete
     && liveMatchupsQuery.data
     && weeklyGamesQuery.data
     && weeklyProjectionQuery.data
@@ -280,9 +284,11 @@ export function HubPage() {
       : 'There is no current playing week to score.'
     : liveMatchupsQuery.isError || weeklyGamesQuery.isError
       ? 'Sleeper official scores or game status could not be loaded.'
-      : weeklyProjectionQuery.isError
-        ? 'Sleeper weekly projections could not be loaded.'
-        : undefined;
+      : liveMatchupsQuery.data && !liveMatchupCoverageComplete
+        ? 'Sleeper returned incomplete team scoring data.'
+        : weeklyProjectionQuery.isError
+          ? 'Sleeper weekly projections could not be loaded.'
+          : undefined;
   const refreshLiveScores = async () => {
     await Promise.all([
       liveMatchupsQuery.refetch(),

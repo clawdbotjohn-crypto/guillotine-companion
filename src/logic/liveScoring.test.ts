@@ -9,6 +9,7 @@ import {
   getLiveFreshness,
   getLiveRefreshInterval,
   getRemainingGameFraction,
+  hasCompleteMatchupCoverage,
   isWeeklyScoringActive,
   isWithinLiveGameWindow,
   LIVE_REFRESH_MS,
@@ -108,6 +109,23 @@ describe('live scoring model', () => {
     expect(model.projectedCutline).toBe(0);
   });
 
+  it('treats an absent team matchup as incomplete request data, not a loaded zero score', () => {
+    const rosters = [roster(1), roster(2)];
+    const matchups = [matchup(1, 0, [])];
+    expect(hasCompleteMatchupCoverage(rosters, matchups)).toBe(false);
+
+    const model = buildLiveScoringModel({
+      rosters,
+      matchups,
+      weeklyProjections: new Map(),
+      games: [],
+      players: new Map(),
+      elimination: elimination(),
+    });
+    expect(model.teams.map((team) => team.rosterId)).toEqual([1]);
+    expect(model.teams[0].officialPoints).toBe(0);
+  });
+
   it('uses deterministic zero contribution for unmapped and bye starters without hiding status', () => {
     const model = buildLiveScoringModel({
       rosters: [roster(1)], matchups: [matchup(1, 12, ['bye', 'unknown'])],
@@ -120,7 +138,7 @@ describe('live scoring model', () => {
     expect(model.teams[0].standing?.risk).toBe('at-risk');
   });
 
-  it('orders active teams projected-lowest first with roster-id ties and excludes eliminated teams', () => {
+  it('orders active teams projected-lowest first with roster-id ties and excludes eliminated teams from active rankings', () => {
     const model = buildLiveScoringModel({
       rosters: [roster(3), roster(2), roster(1), roster(4)],
       matchups: [matchup(1, 10, []), matchup(2, 10, []), matchup(3, 20, []), matchup(4, 1, [])],

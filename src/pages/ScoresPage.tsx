@@ -22,6 +22,7 @@ import {
   getLiveDataUpdatedAt,
   getLiveFreshness,
   getProjectionScoring,
+  hasCompleteMatchupCoverage,
   getUpcomingPlayingWeek,
   type LiveScoringModel,
   type LiveTeamScore,
@@ -153,6 +154,10 @@ export function ScoresPage() {
     weeklyGamesQuery.data,
   );
 
+  const matchupCoverageComplete = !!rosters
+    && !!scoringMatchupsQuery.data
+    && hasCompleteMatchupCoverage(rosters, scoringMatchupsQuery.data);
+
   const model = useMemo(() => {
     if (
       selectedWeek == null
@@ -163,6 +168,7 @@ export function ScoresPage() {
       || !scoringMatchupsQuery.data
       || !weeklyGamesQuery.data
       || !weeklyProjectionQuery.data
+      || !matchupCoverageComplete
     ) return null;
     const elimination = computeEliminations(priorMatchupsQuery.data, rosters, users);
     const weeklyScoredPlayers = buildWeeklyScoredPlayers(
@@ -188,6 +194,7 @@ export function ScoresPage() {
     scoringMatchupsQuery.data,
     weeklyGamesQuery.data,
     weeklyProjectionQuery.data,
+    matchupCoverageComplete,
     league,
   ]);
 
@@ -222,6 +229,7 @@ export function ScoresPage() {
     || nflStateQuery.isError
     || priorMatchupsQuery.isError
     || scoringMatchupsQuery.isError
+    || (!!scoringMatchupsQuery.data && !!rosters && !matchupCoverageComplete)
     || weeklyGamesQuery.isError
     || weeklyProjectionQuery.isError;
   const retry = async () => {
