@@ -182,6 +182,39 @@ describe('waiver controls', () => {
     expect(within(screen.getByRole('dialog', { name: 'Test Runner' })).getByText('Proj.: 0 (W4)')).toBeTruthy();
   });
 
+  it.each([
+    { name: 'standard ranking', strategy: 'weeks-starter' as const },
+    { name: 'custom ranking', strategy: 'custom' as const },
+  ])('keeps positive market prediction details visible from the $name path when its valuation is $0', ({ strategy }) => {
+    const zeroRow: WaiverPlayerRow = {
+      ...waiverRow,
+      suggestions: waiverRow.suggestions.map((suggestion) => suggestion.strategy === 'weeks-starter' ? { ...suggestion, value: 0 } : suggestion),
+    };
+    const prediction: ManagerPredictionDisplay = {
+      rosterId: 1, managerName: 'Positive Market Manager', predictedBid: 40, currentFaab: 100,
+      cappedByFaab: false, likelihood: 'Likely',
+      profile: { managerRosterId: 1, managerMultiplier: 1, style: 'standard', confidence: 'low', usableEvidenceCount: 1, baselineStrategyId: 'max-vorp', baselineStrategyVersion: 'max-vorp-v1', evidence: [] },
+    };
+    render(<WaiverPlayerCard
+      {...cardProps}
+      row={zeroRow}
+      strategy={strategy}
+      customValue={strategy === 'custom' ? 0 : undefined}
+      managerPredictions={[prediction]}
+      showManagerPredictions
+    />);
+
+    expect(screen.getByText((_text, element) => element?.textContent === 'Predicted bid $40')).toBeTruthy();
+    const card = screen.getByRole('button', { name: strategy === 'custom' ? /custom value \$0/i : /suggested bid \$0/i });
+    fireEvent.click(card);
+    const dialog = screen.getByRole('dialog', { name: 'Test Runner' });
+    const acquisition = within(dialog).getByRole('region', { name: 'Acquisition context' });
+    expect(within(within(acquisition).getByText('Suggested').parentElement!).getByText('$0')).toBeTruthy();
+    expect(within(within(acquisition).getByText('Predicted').parentElement!).getByText('$40')).toBeTruthy();
+    expect(within(dialog).queryByRole('region', { name: 'Predicted bidding' })).toBeNull();
+    expect(within(dialog).getByRole('button', { name: 'Open details for Positive Market Manager' })).toBeTruthy();
+  });
+
   it('opens details for a $0 player without a prediction', () => {
     const zeroRow: WaiverPlayerRow = {
       ...waiverRow,

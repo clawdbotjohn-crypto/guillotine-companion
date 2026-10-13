@@ -294,10 +294,12 @@ export function WaiverPlayerCard({
   const selectedTeamOwner = owner?.rosterId === selectedRosterId;
   const sourceMetric = formatWaiverSourceMetric(row, rankingSource);
   const orderedPredictions = orderManagerPredictions(managerPredictions);
-  const eligiblePredictions = orderedPredictions.filter(isEligibleBuyerPrediction);
-  const predictedBid = eligiblePredictions[0]?.predictedBid;
-  const hasPredictionDetails = !owner && showManagerPredictions && managerPredictions.length > 0 && value > 0;
-  const showPrediction = hasPredictionDetails && predictedBid != null;
+  const predictedBid = orderedPredictions.find((prediction) => (
+    isEligibleBuyerPrediction(prediction)
+    && Number.isFinite(prediction.predictedBid)
+    && prediction.predictedBid > 0
+  ))?.predictedBid;
+  const showPrediction = !owner && showManagerPredictions && predictedBid != null;
   const cardLabel = owner
     ? `${row.name}, ${selectedTeamOwner ? 'owned by your selected team' : 'rostered by another team'}. Open player details`
     : strategy === 'custom'

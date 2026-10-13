@@ -60,7 +60,6 @@ export function PlayerDetailDialog({ open, onClose, data }: { open: boolean; onC
   const winningGroups = groupedHistory.map((events) => events.filter((event) => event.outcome === 'won')).filter((events) => events.length > 0);
   const otherBidGroups = groupedHistory.map((events) => events.filter((event) => event.outcome === 'legitimate-loss')).filter((events) => events.length > 0);
   const orderedPredictions = orderManagerPredictions(data.managerPredictions ?? []);
-  const supportsPrediction = !data.owned && typeof data.suggestedBid === 'number' && Number.isFinite(data.suggestedBid) && data.suggestedBid > 0;
   const predictedBid = orderedPredictions.find((prediction) => (
     isEligibleBuyerPrediction(prediction)
     && Number.isFinite(prediction.predictedBid)
@@ -88,7 +87,7 @@ export function PlayerDetailDialog({ open, onClose, data }: { open: boolean; onC
       && impact.positionRank.before === impact.positionRank.after
     )
   );
-  const hasPrediction = supportsPrediction && predictedBid != null && orderedPredictions.length > 0;
+  const hasPrediction = predictedBid != null;
   const closeDialog = useCallback(() => onClose(), [onClose]);
 
   useEffect(() => {

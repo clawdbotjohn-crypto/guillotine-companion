@@ -207,6 +207,49 @@ describe('PlayerDetailDialog', () => {
     expect(within(teamImpact).queryByText('Lineup pts')).toBeNull();
   });
 
+  it.each([
+    {
+      name: 'Suggested $0 with positive Predicted',
+      suggestedBid: 0,
+      managerPredictions: [managerPrediction(2, 'Positive Market Manager', 7, 'Likely')],
+      hasManagerDetails: true,
+    },
+    {
+      name: 'positive Suggested with Predicted $0',
+      suggestedBid: 2,
+      managerPredictions: [managerPrediction(2, 'Zero Market Manager', 0, 'Likely')],
+      hasManagerDetails: false,
+    },
+    {
+      name: 'Suggested and Predicted both $0',
+      suggestedBid: 0,
+      managerPredictions: [managerPrediction(2, 'Zero Market Manager', 0, 'Likely')],
+      hasManagerDetails: false,
+    },
+    {
+      name: 'unavailable Predicted',
+      suggestedBid: 2,
+      managerPredictions: undefined,
+      hasManagerDetails: false,
+    },
+  ])('bases lower Predicted bidding details only on market prediction: $name', ({ suggestedBid, managerPredictions, hasManagerDetails }) => {
+    render(<PlayerDetailDialog open onClose={vi.fn()} data={{
+      ...data,
+      suggestedBid,
+      managerPredictions,
+    }} />);
+    const dialog = screen.getByRole('dialog', { name: 'Detail Player' });
+
+    if (hasManagerDetails) {
+      expect(within(dialog).queryByRole('region', { name: 'Predicted bidding' })).toBeNull();
+      expect(within(dialog).getByRole('button', { name: 'Open details for Positive Market Manager' })).toBeTruthy();
+    } else {
+      const predictionState = within(dialog).getByRole('region', { name: 'Predicted bidding' });
+      expect(within(predictionState).getByText('None')).toBeTruthy();
+      expect(within(dialog).queryByRole('button', { name: /Open details for/ })).toBeNull();
+    }
+  });
+
   it('shows $0 in the compact Predicted summary when no eligible positive bid exists', () => {
     render(<PlayerDetailDialog open onClose={vi.fn()} data={{
       ...data,
