@@ -139,7 +139,7 @@ describe('PlayerDetailDialog', () => {
     expect(within(teamImpact).queryByText('The suggested bid changes FAAB only. It does not change projected points.')).toBeNull();
   });
 
-  it('renders calculated no-change and truthful $0 Team Impact as the same simple None state as empty Predicted bidding', () => {
+  it('renders calculated no-change as None but preserves truthful numeric $0 Team Impact', () => {
     const noChangeImpact = {
       status: 'available' as const,
       overallRank: { before: 8, after: 8, outOf: 10 },
@@ -175,13 +175,15 @@ describe('PlayerDetailDialog', () => {
         ...noChangeImpact,
         overallRank: { before: 8, after: 7, outOf: 10 },
         positionRank: { before: 6, after: 5, outOf: 10 },
-        lineupPoints: { before: 104.5, after: 110 },
+        lineupPoints: { before: 104.5, after: 106.2 },
         incomingPlayerStarts: true,
         displacedStarterIds: ['old-rb'],
       },
     }} />);
-    expect(within(teamImpact).getByText('None')).toBeTruthy();
-    expect(within(teamImpact).queryByText('Overall')).toBeNull();
+    expect(within(teamImpact).queryByText('None')).toBeNull();
+    expect(within(teamImpact).getByText('+1.7')).toBeTruthy();
+    expect(within(teamImpact).getByLabelText('Lineup points delta plus 1.7')).toBeTruthy();
+    expect(within(teamImpact).getByLabelText('Overall: 8/10 to 7/10')).toBeTruthy();
   });
 
   it('shows unavailable Team Impact as flat None while preserving an accessible reason', () => {

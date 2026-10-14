@@ -24,7 +24,7 @@ export interface AvailableFreeAgentTeamImpact {
   incomingPlayerStarts: boolean;
   displacedStarterIds: string[];
   assumedDropPlayerId: string | null;
-  dropReason: 'lowest-projected-non-starter' | 'lowest-projected-roster-player' | null;
+  dropReason: 'explicit-scenario-drop' | 'lowest-projected-non-starter' | 'lowest-projected-roster-player' | null;
 }
 
 export interface UnavailableFreeAgentTeamImpact {
@@ -62,6 +62,8 @@ export function buildFreeAgentTeamImpact({
   league,
   elimination,
   weeklyProjections,
+  selectedRosterPlayerIds,
+  explicitDropPlayerId,
 }: {
   playerId: string;
   playerPosition: string;
@@ -70,6 +72,10 @@ export function buildFreeAgentTeamImpact({
   league: League | undefined;
   elimination: EliminationResult;
   weeklyProjections: ReadonlyMap<string, WeeklyScoredPlayer> | null;
+  /** Optional planner scenario state. Waivers omits this and uses the selected roster as-is. */
+  selectedRosterPlayerIds?: readonly string[];
+  /** Optional planner-selected drop. Waivers omits this and keeps its deterministic generic drop. */
+  explicitDropPlayerId?: string;
 }): FreeAgentTeamImpact {
   if (selectedRosterId == null) return unavailable('Select your team to calculate impact.');
   const selectedRoster = rosters.find((roster) => roster.roster_id === selectedRosterId);
@@ -88,7 +94,9 @@ export function buildFreeAgentTeamImpact({
   }
   const nativePosition = incomingProjection.position || playerPosition;
 
-  const currentPlayerIds = uniquePlayerIds(selectedRoster);
+  const currentPlayerIds = selectedRosterPlayerIds
+    ? [...new Set(selectedRosterPlayerIds.filter(Boolean))]
+    : uniquePlayerIds(selectedRoster);
   const slots = parseLineupSlots(league?.roster_positions);
   const currentLineup = projectBestLineup(currentPlayerIds, weeklyProjections, slots);
   const currentStarterIds = new Set(currentLineup.starters.map((starter) => starter.playerId));
@@ -97,7 +105,13 @@ export function buildFreeAgentTeamImpact({
   let assumedDropPlayerId: string | null = null;
   let dropReason: AvailableFreeAgentTeamImpact['dropReason'] = null;
 
-  if (dropRequired) {
+  if (explicitDropPlayerId != null) {
+    if (!currentPlayerIds.includes(explicitDropPlayerId)) {
+      return unavailable('A required roster drop could not be modeled safely.');
+    }
+    assumedDropPlayerId = explicitDropPlayerId;
+    dropReason = 'explicit-scenario-drop';
+  } else if (dropRequired) {
     const candidates = currentPlayerIds
       .map((candidateId) => ({
         playerId: candidateId,
@@ -118,10 +132,13 @@ export function buildFreeAgentTeamImpact({
   const scenarioPlayerIds = currentPlayerIds
     .filter((candidateId) => candidateId !== assumedDropPlayerId)
     .concat(playerId);
+  const beforeRosters = rosters.map((roster) => roster.roster_id === selectedRosterId
+    ? { ...roster, players: currentPlayerIds }
+    : roster);
   const scenarioRosters = rosters.map((roster) => roster.roster_id === selectedRosterId
     ? { ...roster, players: scenarioPlayerIds }
     : roster);
-  const beforeTeams = projectAllTeams([...rosters], weeklyProjections, league, elimination);
+  const beforeTeams = projectAllTeams(beforeRosters, weeklyProjections, league, elimination);
   const afterTeams = projectAllTeams(scenarioRosters, weeklyProjections, league, elimination);
   const beforeTeam = beforeTeams.find((team) => team.rosterId === selectedRosterId);
   const afterTeam = afterTeams.find((team) => team.rosterId === selectedRosterId);
