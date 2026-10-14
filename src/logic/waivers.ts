@@ -387,6 +387,7 @@ export function calculateMaxVorpBid(
 export interface NonVorpStarterModel {
   positionRanks: Map<string, number>;
   currentSelectedCountByPosition: Map<string, number>;
+  middleSelectedCountByPosition: Map<string, number>;
   selectedIdsByStage: Set<string>[];
 }
 
@@ -404,7 +405,21 @@ function comparePointsPerWeek(a: RosPlayerProjection, b: RosPlayerProjection): n
   return b.pointsPerWeek - a.pointsPerWeek || a.playerId.localeCompare(b.playerId);
 }
 
-/** Build current and modeled-stage selected-source pools once for the whole waiver board. */
+/** Safe's middle horizon: halfway through the survivors, with the final four as the floor. */
+export function getSafeReplacementTeamCount(teamsRemaining: number): number {
+  const finiteTeams = Number.isFinite(teamsRemaining) ? Math.max(0, teamsRemaining) : 0;
+  return Math.max(FINAL_FOUR_TEAMS, Math.ceil(finiteTeams / 2));
+}
+
+function countSelectedByPosition<T extends AllocatablePlayer>(players: T[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const player of players) {
+    counts.set(player.position, (counts.get(player.position) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/** Build current, middle-horizon, and modeled-stage selected-source pools once per waiver board. */
 export function buildNonVorpStarterModel(
   projections: Map<string, RosPlayerProjection>,
   ctx: LeagueContext,
@@ -428,13 +443,14 @@ export function buildNonVorpStarterModel(
     ctx.startersPerPos,
     ctx.teamsRemaining,
   );
-  const currentSelectedCountByPosition = new Map<string, number>();
-  for (const player of currentPool.players) {
-    currentSelectedCountByPosition.set(
-      player.position,
-      (currentSelectedCountByPosition.get(player.position) ?? 0) + 1,
-    );
-  }
+  const currentSelectedCountByPosition = countSelectedByPosition(currentPool.players);
+  const middlePool = allocateOptimizedStarterPool(
+    eligible,
+    comparePointsPerWeek,
+    ctx.startersPerPos,
+    getSafeReplacementTeamCount(ctx.teamsRemaining),
+  );
+  const middleSelectedCountByPosition = countSelectedByPosition(middlePool.players);
 
   // Preserve the established fixed cadence and survivor progression exactly.
   const eliminationsPerWeek = ctx.teamsRemaining > 16 ? 2 : 1;
@@ -446,7 +462,12 @@ export function buildNonVorpStarterModel(
     teams = Math.max(1, teams - eliminationsPerWeek);
   }
 
-  return { positionRanks, currentSelectedCountByPosition, selectedIdsByStage };
+  return {
+    positionRanks,
+    currentSelectedCountByPosition,
+    middleSelectedCountByPosition,
+    selectedIdsByStage,
+  };
 }
 
 export function buildWaiverBoardModel(
@@ -596,11 +617,14 @@ export function buildWaiverBoard(
     });
     arr.slice(0, maxPerPos).forEach((p) => {
       const posRank = nonVorpModel.positionRanks.get(p.playerId) ?? 0;
-      const replacementRank = nonVorpModel.currentSelectedCountByPosition.get(pos) ?? 0;
+      const currentReplacementRank = nonVorpModel.currentSelectedCountByPosition.get(pos) ?? 0;
+      const middleReplacementRank = nonVorpModel.middleSelectedCountByPosition.get(pos) ?? 0;
       const base = { position: pos, posRank };
-      const safe = safeStrategy(base, ctx, replacementRank);
+      const safe = safeStrategy(base, ctx, middleReplacementRank);
+      // Weeks-as-Starter and Aggressive intentionally retain the pre-change current-stage base.
+      const weeksBase = safeStrategy(base, ctx, currentReplacementRank);
       const starterWeeks = projectedStarterWeeks(p.playerId, nonVorpModel);
-      const weeks = weeksStarterStrategy(safe, starterWeeks, ctx);
+      const weeks = weeksStarterStrategy(weeksBase, starterWeeks, ctx);
       const predictedWinningBid = predictWinningBid(weeks, ctx.currentWeek);
       const playerVorp = calibration
         ? calculatePlayerVorp(sleeperRos?.get(p.playerId), calibration.replacementByPosition)
