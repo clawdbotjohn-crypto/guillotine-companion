@@ -19,6 +19,7 @@ import {
   computeRosteredPlayerOwners,
   getValidRemainingTeamCounts,
   getReplacementTeamBounds,
+  getSafeReplacementTeamCount,
   normalizeReplacementTeamTarget,
   predictedBidMultiplier,
   resolveWaiverBoardModel,
@@ -841,27 +842,125 @@ describe('non-VORP optimized replacement boundaries', () => {
     return result;
   }
 
-  it('makes the final actually selected player the zero boundary and keeps one-above positive', () => {
+  it.each([
+    [12, 6],
+    [11, 6],
+    [9, 5],
+    [8, 4],
+    [4, 4],
+    [3, 4],
+  ])('uses middle horizon max(4, ceil(%i / 2)) = %i', (teamsRemaining, expectedHorizon) => {
+    expect(getSafeReplacementTeamCount(teamsRemaining)).toBe(expectedHorizon);
+    const players = ranked('QB', 16);
+    const slots = { QB: 1, RB: 0, WR: 0, TE: 0, FLEX: 0, SUPER_FLEX: 0 };
+    const ctx = { ...context, teamsRemaining, weeksRemaining: 1, startersPerPos: slots };
+    const model = buildWaiverBoardModel(players, ctx).nonVorpStarterModel;
+    const rows = buildWaiverBoard(
+      [...players.keys()], players, ctx, [], (id) => id,
+      { maxPerPos: Number.POSITIVE_INFINITY },
+    );
+
+    expect(model.currentSelectedCountByPosition.get('QB')).toBe(Math.min(teamsRemaining, 16));
+    expect(model.middleSelectedCountByPosition.get('QB')).toBe(expectedHorizon);
+    expect(valueFor(rows, `qb-${String(expectedHorizon).padStart(2, '0')}`, 'safe')).toBe(0);
+    expect(valueFor(rows, `qb-${String(expectedHorizon - 1).padStart(2, '0')}`, 'safe')).toBeGreaterThan(0);
+  });
+
+  it.each([
+    {
+      budget: 1000,
+      expected: {
+        QB: [188, 132, 99, 66, 33, 0],
+        RB: [250, 176, 132, 88, 44, 0],
+        WR: [250, 176, 132, 88, 44, 0],
+        TE: [63, 44, 33, 22, 11, 0],
+      },
+    },
+    {
+      budget: 200,
+      expected: {
+        QB: [38, 26, 20, 13, 7, 0],
+        RB: [50, 35, 26, 18, 9, 0],
+        WR: [50, 35, 26, 18, 9, 0],
+        TE: [13, 9, 7, 4, 2, 0],
+      },
+    },
+  ])('preserves top premium, position weights, linear decline, scaling, and rounding at $budget', ({ budget, expected }) => {
     const players = new Map<string, RosPlayerProjection>();
     for (const position of ['QB', 'RB', 'WR', 'TE']) {
-      for (const [id, player] of ranked(position, 5, 100)) players.set(id, player);
+      for (const [id, player] of ranked(position, 8)) players.set(id, player);
     }
     const rows = boardFor(
       players,
       { QB: 1, RB: 1, WR: 1, TE: 1, FLEX: 0, SUPER_FLEX: 0 },
+      { teamsRemaining: 12, budget },
     );
 
+    for (const [position, values] of Object.entries(expected)) {
+      expect(values.map((_, index) => valueFor(
+        rows,
+        `${position.toLowerCase()}-${String(index + 1).padStart(2, '0')}`,
+        'safe',
+      ))).toEqual(values);
+    }
+  });
+
+  it('changes displayed Safe only while sibling strategy fixtures remain bit-for-bit stable', () => {
+    const players = ranked('QB', 16);
+    const slots = { QB: 1, RB: 0, WR: 0, TE: 0, FLEX: 0, SUPER_FLEX: 0 };
+    const rows = buildWaiverBoard(
+      [...players.keys()],
+      players,
+      { ...context, startersPerPos: slots },
+      [],
+      (id) => id,
+      {
+        maxPerPos: Number.POSITIVE_INFINITY,
+        sleeperRosProjections: players,
+        replacementTeamCount: 12,
+      },
+    );
+    const rankSix = rows.find((row) => row.playerId === 'qb-06')!;
+    const values = Object.fromEntries(rankSix.suggestions.map(({ strategy, value }) => [strategy, value]));
+
+    expect(values).toEqual({
+      'max-vorp': 632,
+      'weeks-starter': 63,
+      safe: 0,
+      aggressive: 102,
+      vorp: 632,
+    });
+    expect(rankSix.starterWeeks).toBe(7);
+    expect(rankSix.predictedWinningBid).toBe(102);
+    expect(rankSix.maxVorpTeamCount).toBe(12);
+    expect(rankSix.maxVorp).toBe(6);
+  });
+
+  it('moves displayed Safe from the current-survivor cutoff to the middle/final-four cutoff only', () => {
+    const players = new Map<string, RosPlayerProjection>();
+    for (const position of ['QB', 'RB', 'WR', 'TE']) {
+      for (const [id, player] of ranked(position, 5, 100)) players.set(id, player);
+    }
+    const slots = { QB: 1, RB: 1, WR: 1, TE: 1, FLEX: 0, SUPER_FLEX: 0 };
+    const ctx = { ...context, teamsRemaining: 2, weeksRemaining: 2, budget: 1000, startersPerPos: slots };
+    const model = buildWaiverBoardModel(players, ctx).nonVorpStarterModel;
+    const rows = buildWaiverBoard(
+      [...players.keys()], players, ctx, [], (id) => id,
+      { maxPerPos: Number.POSITIVE_INFINITY },
+    );
+
+    expect(Object.fromEntries(model.currentSelectedCountByPosition)).toEqual({ QB: 2, RB: 2, WR: 2, TE: 2 });
+    expect(Object.fromEntries(model.middleSelectedCountByPosition)).toEqual({ QB: 4, RB: 4, WR: 4, TE: 4 });
     for (const position of ['qb', 'rb', 'wr', 'te']) {
       expect(valueFor(rows, `${position}-01`, 'safe')).toBe(
         position === 'qb' ? 188 : position === 'te' ? 63 : 250,
       );
-      expect(valueFor(rows, `${position}-01`, 'safe')).toBeGreaterThan(0);
-      expect(valueFor(rows, `${position}-02`, 'safe')).toBe(0);
-      for (const rank of [3, 4, 5]) {
-        const id = `${position}-${String(rank).padStart(2, '0')}`;
-        for (const strategy of ['safe', 'weeks-starter', 'aggressive'] as const) {
-          expect(valueFor(rows, id, strategy)).toBe(0);
-        }
+      expect(valueFor(rows, `${position}-03`, 'safe')).toBeGreaterThan(0);
+      expect(valueFor(rows, `${position}-04`, 'safe')).toBe(0);
+      expect(valueFor(rows, `${position}-05`, 'safe')).toBe(0);
+      // Sibling strategies keep the former two-team replacement boundary.
+      for (const strategy of ['weeks-starter', 'aggressive'] as const) {
+        expect(valueFor(rows, `${position}-02`, strategy)).toBe(0);
       }
     }
   });
@@ -870,27 +969,37 @@ describe('non-VORP optimized replacement boundaries', () => {
     {
       name: 'no shared slots',
       slots: { QB: 1, RB: 1, WR: 1, TE: 1, FLEX: 0, SUPER_FLEX: 0 },
-      expectedBoundary: { QB: 2, RB: 2, WR: 2, TE: 2 },
+      currentBoundary: { QB: 2, RB: 2, WR: 2, TE: 2 },
+      middleBoundary: { QB: 4, RB: 4, WR: 4, TE: 4 },
     },
     {
       name: 'multiple FLEX slots allocated once',
       slots: { QB: 1, RB: 1, WR: 1, TE: 1, FLEX: 2, SUPER_FLEX: 0 },
-      expectedBoundary: { QB: 2, RB: 6, WR: 2, TE: 2 },
+      currentBoundary: { QB: 2, RB: 6, WR: 2, TE: 2 },
+      middleBoundary: { QB: 4, RB: 12, WR: 4, TE: 4 },
     },
     {
       name: 'FLEX and SUPER_FLEX each allocated once',
       slots: { QB: 1, RB: 1, WR: 1, TE: 1, FLEX: 1, SUPER_FLEX: 1 },
-      expectedBoundary: { QB: 4, RB: 4, WR: 2, TE: 2 },
+      currentBoundary: { QB: 4, RB: 4, WR: 2, TE: 2 },
+      middleBoundary: { QB: 8, RB: 8, WR: 4, TE: 4 },
     },
-  ])('$name', ({ slots, expectedBoundary }) => {
+  ])('$name', ({ slots, currentBoundary, middleBoundary }) => {
     const players = new Map<string, RosPlayerProjection>();
     // Cross-position scores force FLEX to RB and SUPER_FLEX to QB.
     for (const [position, start] of [['QB', 400], ['RB', 300], ['WR', 200], ['TE', 100]] as const) {
-      for (const [id, player] of ranked(position, 10, start)) players.set(id, player);
+      for (const [id, player] of ranked(position, 16, start)) players.set(id, player);
     }
-    const rows = boardFor(players, slots);
+    const ctx = { ...context, teamsRemaining: 2, weeksRemaining: 2, budget: 1000, startersPerPos: slots };
+    const model = buildWaiverBoardModel(players, ctx).nonVorpStarterModel;
+    const rows = buildWaiverBoard(
+      [...players.keys()], players, ctx, [], (id) => id,
+      { maxPerPos: Number.POSITIVE_INFINITY },
+    );
 
-    for (const [position, boundary] of Object.entries(expectedBoundary)) {
+    expect(Object.fromEntries(model.currentSelectedCountByPosition)).toEqual(currentBoundary);
+    expect(Object.fromEntries(model.middleSelectedCountByPosition)).toEqual(middleBoundary);
+    for (const [position, boundary] of Object.entries(middleBoundary)) {
       const prefix = position.toLowerCase();
       const boundaryId = `${prefix}-${String(boundary).padStart(2, '0')}`;
       expect(valueFor(rows, boundaryId, 'safe')).toBe(0);
@@ -900,8 +1009,8 @@ describe('non-VORP optimized replacement boundaries', () => {
       }
       expect(valueFor(rows, `${prefix}-${String(boundary + 1).padStart(2, '0')}`, 'safe')).toBe(0);
     }
-    const selectedCount = Object.values(expectedBoundary).reduce((sum, count) => sum + count, 0);
-    expect(selectedCount).toBe(2 * Object.values(slots).reduce((sum, count) => sum + count, 0));
+    const selectedCount = Object.values(middleBoundary).reduce((sum, count) => sum + count, 0);
+    expect(selectedCount).toBe(4 * Object.values(slots).reduce((sum, count) => sum + count, 0));
   });
 
   it('supports R=0, R=1, zero-direct-slot winners, sparse supply, and invalid scores', () => {
@@ -943,12 +1052,15 @@ describe('non-VORP optimized replacement boundaries', () => {
     const first = boardFor(players, slots, { teamsRemaining: 1, weeksRemaining: 2 });
     const second = boardFor(new Map([...players].reverse()), slots, { teamsRemaining: 1, weeksRemaining: 2 });
 
-    // rb-a direct, rb-m FLEX, therefore rb-m is the deterministic RB boundary.
+    // Current-stage Weeks selects rb-a direct + rb-m FLEX. Safe's final-four floor
+    // selects all three RBs, with player-ID ordering making rb-z the RB boundary.
     expect(first.find((row) => row.playerId === 'rb-a')?.posRank).toBe(1);
     expect(first.find((row) => row.playerId === 'rb-m')?.posRank).toBe(2);
     expect(valueFor(first, 'rb-a', 'safe')).toBe(250);
-    expect(valueFor(first, 'rb-m', 'safe')).toBe(0);
+    expect(valueFor(first, 'rb-m', 'safe')).toBe(110);
     expect(valueFor(first, 'rb-z', 'safe')).toBe(0);
+    expect(valueFor(first, 'rb-m', 'weeks-starter')).toBe(0);
+    expect(valueFor(first, 'rb-m', 'aggressive')).toBe(0);
     expect(first).toEqual(second);
   });
 
