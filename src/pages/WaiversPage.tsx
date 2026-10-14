@@ -215,6 +215,7 @@ interface TeamImpactContext {
 export function WaiverPlayerCard({
   row,
   strategy,
+  summaryMode = 'default',
   customValue,
   onCustomValueCommit,
   remainingFaab,
@@ -241,6 +242,7 @@ export function WaiverPlayerCard({
 }: {
   row: WaiverPlayerRow;
   strategy: DisplayStrategyKey;
+  summaryMode?: 'default' | 'suggested-bids';
   customValue?: number;
   onCustomValueCommit?: (value: number) => void;
   remainingFaab: number | null;
@@ -292,6 +294,7 @@ export function WaiverPlayerCard({
         ? 'Projection unavailable'
         : byeWeek != null ? `Bye W${byeWeek}` : null;
   const selectedTeamOwner = owner?.rosterId === selectedRosterId;
+  const suggestedBidsSummary = summaryMode === 'suggested-bids';
   const sourceMetric = formatWaiverSourceMetric(row, rankingSource);
   const orderedPredictions = orderManagerPredictions(managerPredictions);
   const eligiblePredictions = orderedPredictions.filter(isEligibleBuyerPrediction);
@@ -337,18 +340,18 @@ export function WaiverPlayerCard({
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <div className="flex min-w-0 items-center gap-1.5">
-                  <span className="min-w-0 truncate text-sm font-semibold text-[#f0f0ff]">{row.name}</span>
+                  <span className={`min-w-0 text-sm font-semibold text-[#f0f0ff] ${suggestedBidsSummary ? 'break-words leading-5' : 'truncate'}`}>{row.name}</span>
                   {owner && <span role="img" aria-label="Rostered" className={`shrink-0 ${selectedTeamOwner ? 'text-[#6ee7b7]' : 'text-[#8b8eac]'}`}><UserCheck size={14} strokeWidth={1.75} aria-hidden="true" /></span>}
                 </div>
-                <div className="mt-0.5 truncate text-[10px] text-[#6b6e99]">
+                {!suggestedBidsSummary && <div className="mt-0.5 truncate text-[10px] text-[#6b6e99]">
                   {row.position} #{row.posRank} · {nflTeam || 'FA'}{playingWeek != null && weeklyRank != null ? ` · W${projectionWeek} #${weeklyRank}` : ''}
-                </div>
-                {weeklyMeta && <div className="mt-1 truncate text-[10px] text-[#8b8eac]">{weeklyMeta}</div>}
+                </div>}
+                {!suggestedBidsSummary && weeklyMeta && <div className="mt-1 truncate text-[10px] text-[#8b8eac]">{weeklyMeta}</div>}
               </div>
-              {strategy !== 'custom' && <div className="w-[8.75rem] shrink-0 rounded-lg bg-[#0c0f22] px-2.5 py-2 text-right" data-testid="compact-bid-summary">
+              {strategy !== 'custom' && <div className={`${suggestedBidsSummary ? 'min-w-[3.5rem]' : 'w-[8.75rem]'} shrink-0 rounded-lg bg-[#0c0f22] px-2.5 py-2 text-right`} data-testid="compact-bid-summary">
                 <div data-testid="suggested-bid-row" className="flex items-baseline justify-end gap-1.5 whitespace-nowrap">
-                  <span className="text-[9px] text-[#6b6e99]">{owner ? 'Current value' : 'Suggested bid'}</span>
-                  <span className="inline-flex items-center justify-end gap-1 font-['Space_Mono'] text-base font-bold tabular-nums text-[#10b981]">
+                  {!suggestedBidsSummary && <span className="text-[9px] text-[#6b6e99]">{owner ? 'Current value' : 'Suggested bid'}</span>}
+                  <span aria-label={!owner && suggestedBidsSummary ? `Suggested bid ${formatDisplayCurrency(value)}` : undefined} className="inline-flex items-center justify-end gap-1 font-['Space_Mono'] text-base font-bold tabular-nums text-[#10b981]">
                     {!owner && value > 0 && remainingFaab != null && value > remainingFaab && <FaabOverBudgetWarning />}
                     <span>{formatDisplayCurrency(value)}</span>
                   </span>

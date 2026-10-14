@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, type ComponentProps } from 'react';
 import { ArrowLeft, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -10,11 +10,12 @@ import {
   useRosters,
   useWeeklyProjections,
 } from '../api';
-import { Card, Skeleton, StatusBadge } from '../components/ui';
+import { Card, PositionBadge, Skeleton, StatusBadge } from '../components/ui';
 import { usePlayerValues } from '../hooks/usePlayerValues';
 import {
   buildWeeklyProjectionContext,
   buildWeeklyScoredPlayers,
+  classifyCanonicalBidEvents,
   computeEliminations,
   extractBids,
   getActiveRosterIds,
@@ -22,7 +23,6 @@ import {
   getProjectionScoring,
   getTeamByeWeek,
 } from '../logic';
-import type { TeamRisk } from '../logic/analytics';
 import {
   buildLeagueContext,
   buildMaxVorpCalibration,
@@ -32,14 +32,18 @@ import {
   computeAvailablePlayers,
   type WaiverPlayerRow,
 } from '../logic/waivers';
-import { buildWeeklyBidPlan, isFinalBiddingRound, type WeeklyBidRecommendation } from '../logic/weeklyBidPlan';
+import { buildWeeklyBidPlan, type WeeklyBidRecommendation } from '../logic/weeklyBidPlan';
 import { getPlayerName, getPlayerPosition } from '../store/players';
 import { useAppStore, usePlayers } from '../store';
 import { WaiverPlayerCard } from './WaiversPage';
 
-function riskLabel(risk: TeamRisk): string {
-  if (risk === 'at-risk') return 'Danger';
-  return risk === 'warning' ? 'Warning' : 'Safe';
+export function WeeklyDropPlayer({ position, name }: { position: string; name: string }) {
+  return (
+    <div className="min-w-0">
+      <PositionBadge position={position} />
+      <h2 className="mt-2 break-words text-xs font-semibold leading-5 text-[#f0f0ff] sm:text-sm">{name}</h2>
+    </div>
+  );
 }
 
 function targetRowWithBid(recommendation: WeeklyBidRecommendation): WaiverPlayerRow {
@@ -55,13 +59,16 @@ function targetRowWithBid(recommendation: WeeklyBidRecommendation): WaiverPlayer
   };
 }
 
-function WeeklyTargetCard({
+export function WeeklyTargetCard({
   recommendation,
   playingWeek,
   remainingFaab,
   weeklyContext,
   players,
   season,
+  selectedRosterId,
+  canonicalHistory,
+  teamImpactContext,
 }: {
   recommendation: WeeklyBidRecommendation;
   playingWeek: number | null;
@@ -69,23 +76,19 @@ function WeeklyTargetCard({
   weeklyContext: ReturnType<typeof buildWeeklyProjectionContext>;
   players: ReturnType<typeof usePlayers>['data'];
   season: string;
+  selectedRosterId?: number | null;
+  canonicalHistory?: ComponentProps<typeof WaiverPlayerCard>['canonicalHistory'];
+  teamImpactContext?: ComponentProps<typeof WaiverPlayerCard>['teamImpactContext'];
 }) {
   const target = recommendation.target;
   const weekly = weeklyContext.get(target.playerId);
   const player = players?.get(target.playerId);
-  const transition = recommendation.beforeRisk === recommendation.afterRisk
-    ? `${riskLabel(recommendation.beforeRisk)} posture`
-    : `${riskLabel(recommendation.beforeRisk)} → ${riskLabel(recommendation.afterRisk)}`;
-  const cap = recommendation.budgetCapApplied
-    ? ` · capped by $${remainingFaab} scenario budget`
-    : recommendation.opponentCapApplied
-      ? ' · capped at richest active opponent + $1'
-      : '';
   return (
     <div className="min-w-0" data-testid="weekly-target-card">
       <WaiverPlayerCard
         row={targetRowWithBid(recommendation)}
         strategy="safe"
+        summaryMode="suggested-bids"
         remainingFaab={remainingFaab}
         nflTeam={player?.team}
         age={player?.age}
@@ -95,18 +98,19 @@ function WeeklyTargetCard({
         weeklyRank={weekly?.positionRank}
         byeWeek={getTeamByeWeek(season, player?.team)}
         playingWeek={playingWeek}
+        selectedRosterId={selectedRosterId}
         sourceLabel="Sleeper ROS"
+        rankingSource="sleeper"
+        canonicalHistory={canonicalHistory}
+        teamImpactContext={teamImpactContext}
       />
-      <p className="-mt-1 mb-3 px-1 text-[10px] leading-4 text-[#8b8eb8]">
-        +{recommendation.weeklyGain.toFixed(1)} this week · +{recommendation.rosGain.toFixed(1)} ROS · {transition}{cap}
-      </p>
     </div>
   );
 }
 
 export function WeeklyBidPlanPage() {
   const navigate = useNavigate();
-  const { leagueId, rosterId, teamName } = useAppStore();
+  const { leagueId, rosterId } = useAppStore();
   const leagueQuery = useLeague(leagueId);
   const usersQuery = useLeagueUsers(leagueId);
   const rostersQuery = useRosters(leagueId);
@@ -128,6 +132,21 @@ export function WeeklyBidPlanPage() {
     !!leagueQuery.data && !!nflStateQuery.data
       && leagueQuery.data.season === nflStateQuery.data.season,
   );
+  const canonicalHistoryByPlayer = useMemo(() => {
+    const events = transactionsQuery.data && leagueQuery.data
+      ? classifyCanonicalBidEvents(
+        transactionsQuery.data,
+        leagueQuery.data.settings?.waiver_budget ?? 1000,
+      )
+      : [];
+    const byPlayer = new Map<string, typeof events>();
+    for (const event of events) {
+      const history = byPlayer.get(event.playerId) ?? [];
+      history.push(event);
+      byPlayer.set(event.playerId, history);
+    }
+    return byPlayer;
+  }, [transactionsQuery.data, leagueQuery.data]);
 
   const model = useMemo(() => {
     const league = leagueQuery.data;
@@ -201,15 +220,12 @@ export function WeeklyBidPlanPage() {
     });
     return {
       plan,
+      elimination,
+      weeklyScoredPlayers: weekly,
       weeklyContext: buildWeeklyProjectionContext(
         weeklyQuery.data,
         getProjectionScoring(league.scoring_settings?.rec),
         (playerId) => players.get(playerId)?.position,
-      ),
-      finalRound: isFinalBiddingRound(
-        league.settings,
-        playingWeek,
-        ctx.teamsRemaining,
       ),
     };
   }, [
@@ -233,6 +249,14 @@ export function WeeklyBidPlanPage() {
   const close = () => navigate('/hub');
   const plan = model?.plan;
   const positionMoveCount = plan?.rows.filter((row) => row.kind === 'position').length ?? 0;
+  const teamImpactContext = rostersQuery.data && leagueQuery.data && model
+    ? {
+      rosters: rostersQuery.data,
+      league: leagueQuery.data,
+      elimination: model.elimination,
+      weeklyProjections: model.weeklyScoredPlayers,
+    }
+    : undefined;
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#06060f] px-4 pb-12 pt-4 text-[#f0f0ff] sm:px-6">
@@ -242,61 +266,63 @@ export function WeeklyBidPlanPage() {
             <ArrowLeft className="h-5 w-5" aria-hidden="true" />
           </button>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate font-['Orbitron'] text-sm font-bold uppercase tracking-[0.08em]">Weekly Bid Plan</h1>
-            <p className="mt-0.5 truncate text-[10px] text-[#6b6e99]">{teamName || 'Your team'} · read-only advisory</p>
+            <h1 className="font-['Orbitron'] text-sm font-bold uppercase tracking-[0.08em]">Suggested Bids</h1>
           </div>
-          <button type="button" onClick={close} className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-[#8b8eb8] hover:bg-[#11142b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#818cf8]" aria-label="Close weekly bid plan">
+          <button type="button" onClick={close} className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-[#8b8eb8] hover:bg-[#11142b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#818cf8]" aria-label="Close Suggested Bids">
             <X className="h-5 w-5" aria-hidden="true" />
           </button>
         </header>
 
-        {isLoading && <div aria-label="Loading weekly bid plan"><Skeleton lines={6} /></div>}
+        {isLoading && <div aria-label="Loading Suggested Bids"><Skeleton lines={6} /></div>}
         {!isLoading && error && (
           <Card hover={false} className="p-5">
-            <h2 className="font-semibold">Plan unavailable</h2>
-            <p className="mt-2 text-sm leading-6 text-[#8b8eb8]">Live Sleeper projections or league data could not be loaded. No fallback recommendations were fabricated.</p>
+            <h2 className="font-semibold">Suggested Bids unavailable</h2>
           </Card>
         )}
         {!isLoading && !error && !plan && (
           <Card hover={false} className="p-5">
-            <h2 className="font-semibold">No plan available</h2>
-            <p className="mt-2 text-sm leading-6 text-[#8b8eb8]">A current active roster plus both weekly and ROS projections are required. No placeholder bids are shown.</p>
+            <h2 className="font-semibold">No Suggested Bids available</h2>
           </Card>
         )}
         {!isLoading && !error && plan && (
           <>
-            <section className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="Bid plan summary">
+            <section className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="Suggested Bids summary">
               <Card hover={false} className="p-3"><p className="text-[9px] uppercase tracking-wider text-[#6b6e99]">Posture</p><div className="mt-1"><StatusBadge status={plan.startingRisk} /></div></Card>
               <Card hover={false} className="p-3"><p className="text-[9px] uppercase tracking-wider text-[#6b6e99]">Projected rank</p><p className="mt-1 font-['Space_Mono'] text-lg font-bold text-[#a5b4fc]">{plan.startingRank}/{plan.activeTeamCount}</p></Card>
               <Card hover={false} className="p-3"><p className="text-[9px] uppercase tracking-wider text-[#6b6e99]">FAAB available</p><p className="mt-1 font-['Space_Mono'] text-lg font-bold text-[#10b981]">${plan.initialBudgetRemaining}</p></Card>
               <Card hover={false} className="p-3"><p className="text-[9px] uppercase tracking-wider text-[#6b6e99]">Position moves</p><p className="mt-1 font-['Space_Mono'] text-lg font-bold">{positionMoveCount}</p></Card>
             </section>
-            <p className="mb-4 text-xs leading-5 text-[#8b8eb8]">
-              Each later row assumes the first target above it was won, subtracts that bid, rebuilds your best lineup, and reprices from the new survival posture. Richest other active owner: ${plan.richestOtherActiveBudget}. Final bidding round: {model?.finalRound ? 'Yes' : 'No'}; no terminal-round uplift is applied.
-            </p>
-
             {plan.rows.length === 0 ? (
               <Card hover={false} className="p-6 text-center">
-                <h2 className="font-semibold">No qualifying improvements</h2>
-                <p className="mt-2 text-sm leading-6 text-[#8b8eb8]">No available player is better than a proposed drop both this week and for the rest of the season.</p>
+                <h2 className="font-semibold">No Suggested Bids</h2>
               </Card>
             ) : (
-              <section aria-label="Weekly add drop recommendations" className="overflow-hidden rounded-xl border border-[#1a1e3a]">
-                <div className="grid grid-cols-[minmax(6rem,0.7fr)_minmax(0,2fr)] gap-2 border-b border-[#2a2e55] bg-[#0c0f22] px-3 py-2 text-[9px] font-semibold uppercase tracking-[0.12em] text-[#6b6e99] sm:grid-cols-[minmax(11rem,0.75fr)_minmax(0,2fr)] sm:gap-4 sm:px-4">
-                  <span>Player to drop</span><span>Recommended targets &amp; bids</span>
+              <section aria-label="Suggested Bids" className="overflow-hidden rounded-xl border border-[#1a1e3a]">
+                <div className="grid grid-cols-[minmax(5.5rem,0.58fr)_minmax(0,2fr)] gap-2 border-b border-[#2a2e55] bg-[#0c0f22] px-3 py-2 text-[9px] font-semibold uppercase tracking-[0.12em] text-[#6b6e99] sm:grid-cols-[minmax(11rem,0.75fr)_minmax(0,2fr)] sm:gap-4 sm:px-4">
+                  <span>Who to drop</span><span>Targets</span>
                 </div>
-                {plan.rows.map((row, rowIndex) => {
+                {plan.rows.map((row) => {
                   const drop = playersQuery.data?.get(row.dropPlayerId);
                   return (
-                    <article key={`${row.kind}-${row.dropPlayerId}`} className="grid min-w-0 grid-cols-[minmax(6rem,0.7fr)_minmax(0,2fr)] gap-2 border-b border-[#1a1e3a] bg-[#090a18] px-3 py-4 last:border-b-0 sm:grid-cols-[minmax(11rem,0.75fr)_minmax(0,2fr)] sm:gap-4 sm:px-4" data-testid="weekly-drop-row">
-                      <div className="min-w-0">
-                        <span className="inline-flex rounded-md bg-[#1b1e3b] px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-[#a5b4fc]">{row.dropPosition}</span>
-                        <h2 className="mt-2 break-words text-xs font-semibold leading-5 text-[#f0f0ff] sm:text-sm">{drop ? getPlayerName(row.dropPlayerId) : row.dropPlayerId}</h2>
-                        <p className="mt-1 text-[10px] leading-4 text-[#6b6e99]">{row.kind === 'streamer' ? '$0 like-for-like upgrade' : rowIndex === 0 ? 'Weakest qualifying hold' : `After assumed win · $${row.scenarioBudgetBefore} left`}</p>
-                      </div>
+                    <article key={`${row.kind}-${row.dropPlayerId}`} className="grid min-w-0 grid-cols-[minmax(5.5rem,0.58fr)_minmax(0,2fr)] gap-2 border-b border-[#1a1e3a] bg-[#090a18] px-3 py-4 last:border-b-0 sm:grid-cols-[minmax(11rem,0.75fr)_minmax(0,2fr)] sm:gap-4 sm:px-4" data-testid="weekly-drop-row">
+                      <WeeklyDropPlayer
+                        position={row.dropPosition}
+                        name={drop ? getPlayerName(row.dropPlayerId) : row.dropPlayerId}
+                      />
                       <div className="min-w-0">
                         {row.recommendations.map((recommendation) => (
-                          <WeeklyTargetCard key={recommendation.target.playerId} recommendation={recommendation} playingWeek={playingWeek} remainingFaab={row.scenarioBudgetBefore} weeklyContext={model!.weeklyContext} players={playersQuery.data} season={leagueQuery.data?.season ?? ''} />
+                          <WeeklyTargetCard
+                            key={recommendation.target.playerId}
+                            recommendation={recommendation}
+                            playingWeek={playingWeek}
+                            remainingFaab={row.scenarioBudgetBefore}
+                            weeklyContext={model!.weeklyContext}
+                            players={playersQuery.data}
+                            season={leagueQuery.data?.season ?? ''}
+                            selectedRosterId={rosterId}
+                            canonicalHistory={canonicalHistoryByPlayer.get(recommendation.target.playerId) ?? []}
+                            teamImpactContext={teamImpactContext}
+                          />
                         ))}
                       </div>
                     </article>
@@ -304,7 +330,6 @@ export function WeeklyBidPlanPage() {
                 })}
               </section>
             )}
-            <p className="mt-4 text-[10px] leading-4 text-[#5c5f88]">Advisory only. This page cannot submit claims, write provider data, or reserve FAAB. Weekly projections drive immediate effects; Sleeper ROS projections protect long-term assets.</p>
           </>
         )}
       </div>
