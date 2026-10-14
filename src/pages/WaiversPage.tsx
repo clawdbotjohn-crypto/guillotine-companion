@@ -1,7 +1,7 @@
 // Waivers page — recommended bids per strategy, weekly context, and predicted winning bid.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AlertTriangle, ShoppingCart, Info, RefreshCw, UserCheck, Plus, Settings, Trash2 } from 'lucide-react';
-import { Button, Card, Skeleton } from '../components/ui';
+import { Button, Card, PositionBadge, Skeleton } from '../components/ui';
 import { FaabOverBudgetWarning } from '../components/FaabOverBudgetWarning';
 import { buildManagerDetailData, type ManagerDetailData } from '../logic/managerDetails';
 import { PlayerDetailDialog, type PlayerProjectionState } from '../components/PlayerDetailDialog';
@@ -216,6 +216,7 @@ export function WaiverPlayerCard({
   row,
   strategy,
   summaryMode = 'default',
+  showCompactBidSummary = true,
   customValue,
   onCustomValueCommit,
   remainingFaab,
@@ -239,10 +240,12 @@ export function WaiverPlayerCard({
   rankingSource = 'sleeper',
   canonicalHistory = [],
   teamImpactContext,
+  teamImpactScenario,
 }: {
   row: WaiverPlayerRow;
   strategy: DisplayStrategyKey;
   summaryMode?: 'default' | 'suggested-bids';
+  showCompactBidSummary?: boolean;
   customValue?: number;
   onCustomValueCommit?: (value: number) => void;
   remainingFaab: number | null;
@@ -266,6 +269,10 @@ export function WaiverPlayerCard({
   rankingSource?: WaiverRankingSource;
   canonicalHistory?: import('../logic').CanonicalBidEvent[];
   teamImpactContext?: TeamImpactContext;
+  teamImpactScenario?: {
+    selectedRosterPlayerIds: readonly string[];
+    explicitDropPlayerId: string;
+  };
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const suggestion = strategy === 'custom' ? undefined : row.suggestions.find((item) => item.strategy === strategy);
@@ -316,6 +323,8 @@ export function WaiverPlayerCard({
       league: teamImpactContext.league,
       elimination: teamImpactContext.elimination,
       weeklyProjections: teamImpactContext.weeklyProjections,
+      selectedRosterPlayerIds: teamImpactScenario?.selectedRosterPlayerIds,
+      explicitDropPlayerId: teamImpactScenario?.explicitDropPlayerId,
     });
   }, [
     detailsOpen,
@@ -324,6 +333,7 @@ export function WaiverPlayerCard({
     row.position,
     selectedRosterId,
     teamImpactContext,
+    teamImpactScenario,
   ]);
 
   return (
@@ -339,7 +349,8 @@ export function WaiverPlayerCard({
           >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
-                <div className="flex min-w-0 items-center gap-1.5">
+                <div className={`flex min-w-0 items-center gap-1.5 ${suggestedBidsSummary ? 'flex-wrap' : ''}`}>
+                  {suggestedBidsSummary && <PositionBadge position={row.position} className="shrink-0" />}
                   <span className={`min-w-0 text-sm font-semibold text-[#f0f0ff] ${suggestedBidsSummary ? 'break-words leading-5' : 'truncate'}`}>{row.name}</span>
                   {owner && <span role="img" aria-label="Rostered" className={`shrink-0 ${selectedTeamOwner ? 'text-[#6ee7b7]' : 'text-[#8b8eac]'}`}><UserCheck size={14} strokeWidth={1.75} aria-hidden="true" /></span>}
                 </div>
@@ -348,7 +359,7 @@ export function WaiverPlayerCard({
                 </div>}
                 {!suggestedBidsSummary && weeklyMeta && <div className="mt-1 truncate text-[10px] text-[#8b8eac]">{weeklyMeta}</div>}
               </div>
-              {strategy !== 'custom' && <div className={`${suggestedBidsSummary ? 'min-w-[3.5rem]' : 'w-[8.75rem]'} shrink-0 rounded-lg bg-[#0c0f22] px-2.5 py-2 text-right`} data-testid="compact-bid-summary">
+              {strategy !== 'custom' && showCompactBidSummary && <div className={`${suggestedBidsSummary ? 'min-w-[3.5rem]' : 'w-[8.75rem]'} shrink-0 rounded-lg bg-[#0c0f22] px-2.5 py-2 text-right`} data-testid="compact-bid-summary">
                 <div data-testid="suggested-bid-row" className="flex items-baseline justify-end gap-1.5 whitespace-nowrap">
                   {!suggestedBidsSummary && <span className="text-[9px] text-[#6b6e99]">{owner ? 'Current value' : 'Suggested bid'}</span>}
                   <span aria-label={!owner && suggestedBidsSummary ? `Suggested bid ${formatDisplayCurrency(value)}` : undefined} className="inline-flex items-center justify-end gap-1 font-['Space_Mono'] text-base font-bold tabular-nums text-[#10b981]">

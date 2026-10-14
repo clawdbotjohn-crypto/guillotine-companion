@@ -72,7 +72,7 @@ const projections = weekly([
   ['q2', 'QB', 12], ['w2', 'WR', 16], ['r2', 'RB', 8],
   ['q3', 'QB', 9], ['w3', 'WR', 7], ['r3', 'RB', 5],
   ['q4', 'QB', 50], ['w4', 'WR', 50], ['r4', 'RB', 50],
-  ['free-wr', 'WR', 20], ['low-wr', 'WR', 1],
+  ['free-wr', 'WR', 20], ['low-wr', 'WR', 1], ['synthetic-te-target', 'TE', 7.7],
 ]);
 
 describe('buildFreeAgentTeamImpact', () => {
@@ -97,6 +97,41 @@ describe('buildFreeAgentTeamImpact', () => {
       displacedStarterIds: ['r1'],
       assumedDropPlayerId: 'bench',
       dropReason: 'lowest-projected-non-starter',
+    });
+  });
+
+  it('keeps a synthetic TE target at +1.7 in both generic Waivers and explicit-drop Suggested Bids scenarios', () => {
+    const teProjections = new Map(projections);
+    teProjections.set('r1', { playerId: 'r1', position: 'TE', points: 6 });
+    teProjections.set('r2', { playerId: 'r2', position: 'TE', points: 8 });
+    teProjections.set('r3', { playerId: 'r3', position: 'TE', points: 5 });
+    const common = {
+      playerId: 'synthetic-te-target',
+      playerPosition: 'TE',
+      selectedRosterId: 1,
+      rosters,
+      league: { ...league, roster_positions: ['QB', 'WR', 'TE', 'BN'] },
+      elimination: elimination(),
+      weeklyProjections: teProjections,
+    };
+    const waiversImpact = buildFreeAgentTeamImpact(common);
+    const suggestedImpact = buildFreeAgentTeamImpact({
+      ...common,
+      selectedRosterPlayerIds: rosters[0].players ?? [],
+      explicitDropPlayerId: 'bench',
+    });
+
+    expect(waiversImpact).toMatchObject({
+      status: 'available',
+      lineupPoints: { before: 24, after: 25.7 },
+      incomingPlayerStarts: true,
+    });
+    expect(suggestedImpact).toMatchObject({
+      status: 'available',
+      lineupPoints: { before: 24, after: 25.7 },
+      assumedDropPlayerId: 'bench',
+      dropReason: 'explicit-scenario-drop',
+      incomingPlayerStarts: true,
     });
   });
 

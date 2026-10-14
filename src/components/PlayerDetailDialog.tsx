@@ -78,16 +78,12 @@ export function PlayerDetailDialog({ open, onClose, data }: { open: boolean; onC
   const impactDelta = impact?.status === 'available'
     ? impact.lineupPoints.after - impact.lineupPoints.before
     : null;
-  const hasNoTeamImpact = impact?.status === 'available' && (
-    data.suggestedBid === 0
-    || (
-      !impact.incomingPlayerStarts
-      && impact.displacedStarterIds.length === 0
-      && impact.lineupPoints.before === impact.lineupPoints.after
-      && impact.overallRank.before === impact.overallRank.after
-      && impact.positionRank.before === impact.positionRank.after
-    )
-  );
+  const hasNoTeamImpact = impact?.status === 'available'
+    && !impact.incomingPlayerStarts
+    && impact.displacedStarterIds.length === 0
+    && impact.lineupPoints.before === impact.lineupPoints.after
+    && impact.overallRank.before === impact.overallRank.after
+    && impact.positionRank.before === impact.positionRank.after;
   const hasPrediction = supportsPrediction && predictedBid != null && orderedPredictions.length > 0;
   const closeDialog = useCallback(() => onClose(), [onClose]);
 

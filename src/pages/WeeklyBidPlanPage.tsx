@@ -10,7 +10,7 @@ import {
   useRosters,
   useWeeklyProjections,
 } from '../api';
-import { Card, PositionBadge, Skeleton, StatusBadge } from '../components/ui';
+import { Card, Skeleton, StatusBadge } from '../components/ui';
 import { usePlayerValues } from '../hooks/usePlayerValues';
 import {
   buildWeeklyProjectionContext,
@@ -22,6 +22,7 @@ import {
   getCompletedLeagueWeek,
   getProjectionScoring,
   getTeamByeWeek,
+  type RosPlayerProjection,
 } from '../logic';
 import {
   buildLeagueContext,
@@ -30,18 +31,68 @@ import {
   buildWaiverBoard,
   buildWaiverBoardModel,
   computeAvailablePlayers,
+  computeRosteredPlayerOwners,
+  type RosteredPlayerOwner,
   type WaiverPlayerRow,
 } from '../logic/waivers';
 import { buildWeeklyBidPlan, type WeeklyBidRecommendation } from '../logic/weeklyBidPlan';
+import { managerName } from '../logic/managerPredictionDisplay';
 import { getPlayerName, getPlayerPosition } from '../store/players';
 import { useAppStore, usePlayers } from '../store';
 import { WaiverPlayerCard } from './WaiversPage';
 
-export function WeeklyDropPlayer({ position, name }: { position: string; name: string }) {
+export function WeeklyDropPlayerCard({
+  row,
+  owner,
+  playingWeek,
+  weeklyPoints,
+  weeklyRank,
+  nflTeam,
+  age,
+  status,
+  injuryStatus,
+  byeWeek,
+  canonicalHistory,
+  managerLabels,
+  selectedRosterId,
+}: {
+  row: WaiverPlayerRow;
+  owner: RosteredPlayerOwner;
+  playingWeek: number | null;
+  weeklyPoints?: number;
+  weeklyRank?: number;
+  nflTeam?: string;
+  age?: number | null;
+  status?: string | null;
+  injuryStatus?: string | null;
+  byeWeek?: number | null;
+  canonicalHistory?: ComponentProps<typeof WaiverPlayerCard>['canonicalHistory'];
+  managerLabels?: ComponentProps<typeof WaiverPlayerCard>['managerLabels'];
+  selectedRosterId?: number | null;
+}) {
   return (
-    <div className="min-w-0">
-      <PositionBadge position={position} />
-      <h2 className="mt-2 break-words text-xs font-semibold leading-5 text-[#f0f0ff] sm:text-sm">{name}</h2>
+    <div className="min-w-0" data-testid="weekly-drop-card">
+      <WaiverPlayerCard
+        row={row}
+        strategy="safe"
+        summaryMode="suggested-bids"
+        showCompactBidSummary={false}
+        remainingFaab={null}
+        nflTeam={nflTeam}
+        age={age}
+        status={status}
+        injuryStatus={injuryStatus}
+        weeklyPoints={weeklyPoints}
+        weeklyRank={weeklyRank}
+        byeWeek={byeWeek}
+        playingWeek={playingWeek}
+        owner={owner}
+        selectedRosterId={selectedRosterId}
+        sourceLabel="Sleeper ROS"
+        rankingSource="sleeper"
+        canonicalHistory={canonicalHistory}
+        managerLabels={managerLabels}
+      />
     </div>
   );
 }
@@ -68,7 +119,9 @@ export function WeeklyTargetCard({
   season,
   selectedRosterId,
   canonicalHistory,
+  managerLabels,
   teamImpactContext,
+  teamImpactScenario,
 }: {
   recommendation: WeeklyBidRecommendation;
   playingWeek: number | null;
@@ -78,7 +131,9 @@ export function WeeklyTargetCard({
   season: string;
   selectedRosterId?: number | null;
   canonicalHistory?: ComponentProps<typeof WaiverPlayerCard>['canonicalHistory'];
+  managerLabels?: ComponentProps<typeof WaiverPlayerCard>['managerLabels'];
   teamImpactContext?: ComponentProps<typeof WaiverPlayerCard>['teamImpactContext'];
+  teamImpactScenario?: ComponentProps<typeof WaiverPlayerCard>['teamImpactScenario'];
 }) {
   const target = recommendation.target;
   const weekly = weeklyContext.get(target.playerId);
@@ -102,7 +157,9 @@ export function WeeklyTargetCard({
         sourceLabel="Sleeper ROS"
         rankingSource="sleeper"
         canonicalHistory={canonicalHistory}
+        managerLabels={managerLabels}
         teamImpactContext={teamImpactContext}
+        teamImpactScenario={teamImpactScenario}
       />
     </div>
   );
@@ -218,10 +275,57 @@ export function WeeklyBidPlanPage() {
       initialBudget: ctx.budget,
       eliminationsPerWeek: ctx.teamsRemaining > 16 ? 2 : 1,
     });
+    const recommendationScenarios = new Map<string, string[]>();
+    let scenarioPlayers = [...(rosters.find((roster) => roster.roster_id === rosterId)?.players ?? [])];
+    for (const row of plan?.rows ?? []) {
+      for (const recommendation of row.recommendations) {
+        recommendationScenarios.set(
+          `${row.dropPlayerId}:${recommendation.target.playerId}`,
+          [...scenarioPlayers],
+        );
+      }
+      if (row.kind === 'position' && row.recommendations[0]) {
+        scenarioPlayers = scenarioPlayers
+          .filter((playerId) => playerId !== row.dropPlayerId)
+          .concat(row.recommendations[0].target.playerId);
+      }
+    }
+    const positionRanks = new Map<string, number>();
+    const positionGroups = new Map<string, RosPlayerProjection[]>();
+    for (const projection of ros.values()) {
+      const group = positionGroups.get(projection.position) ?? [];
+      group.push(projection);
+      positionGroups.set(projection.position, group);
+    }
+    for (const group of positionGroups.values()) {
+      group.sort((a, b) => b.totalPoints - a.totalPoints || a.playerId.localeCompare(b.playerId));
+      group.forEach((projection, index) => positionRanks.set(projection.playerId, index + 1));
+    }
+    const rosteredRows = new Map<string, WaiverPlayerRow>();
+    for (const playerId of rosters.find((roster) => roster.roster_id === rosterId)?.players ?? []) {
+      const projection = ros.get(playerId);
+      const position = projection?.position ?? getPlayerPosition(playerId) ?? '—';
+      rosteredRows.set(playerId, {
+        playerId,
+        name: getPlayerName(playerId),
+        position,
+        posRank: positionRanks.get(playerId) ?? 0,
+        rosPoints: projection?.totalPoints ?? 0,
+        projectedPointsPerWeek: projection?.pointsPerWeek ?? 0,
+        sourceValue: projection?.sourceValue ?? projection?.totalPoints ?? 0,
+        sourceRank: projection?.sourceRank,
+        starterWeeks: 0,
+        possibleStarterWeeks: 0,
+        suggestions: [{ strategy: 'safe', label: 'Safe', value: 0, pctOfBudget: 0 }],
+        predictedWinningBid: 0,
+      });
+    }
     return {
       plan,
       elimination,
       weeklyScoredPlayers: weekly,
+      recommendationScenarios,
+      rosteredRows,
       weeklyContext: buildWeeklyProjectionContext(
         weeklyQuery.data,
         getProjectionScoring(league.scoring_settings?.rec),
@@ -257,6 +361,15 @@ export function WeeklyBidPlanPage() {
       weeklyProjections: model.weeklyScoredPlayers,
     }
     : undefined;
+  const ownershipByPlayer = rostersQuery.data && usersQuery.data
+    ? computeRosteredPlayerOwners(rostersQuery.data, usersQuery.data)
+    : new Map<string, RosteredPlayerOwner>();
+  const managerLabels = rostersQuery.data && usersQuery.data
+    ? new Map(rostersQuery.data.map((roster) => [
+      roster.roster_id,
+      managerName(roster.roster_id, rostersQuery.data!, usersQuery.data!),
+    ]))
+    : new Map<number, string>();
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#06060f] px-4 pb-12 pt-4 text-[#f0f0ff] sm:px-6">
@@ -303,11 +416,26 @@ export function WeeklyBidPlanPage() {
                 </div>
                 {plan.rows.map((row) => {
                   const drop = playersQuery.data?.get(row.dropPlayerId);
+                  const dropRow = model.rosteredRows.get(row.dropPlayerId);
+                  const dropOwner = ownershipByPlayer.get(row.dropPlayerId);
+                  const dropWeekly = model.weeklyContext.get(row.dropPlayerId);
+                  if (!dropRow || !dropOwner) return null;
                   return (
                     <article key={`${row.kind}-${row.dropPlayerId}`} className="grid min-w-0 grid-cols-[minmax(5.5rem,0.58fr)_minmax(0,2fr)] gap-2 border-b border-[#1a1e3a] bg-[#090a18] px-3 py-4 last:border-b-0 sm:grid-cols-[minmax(11rem,0.75fr)_minmax(0,2fr)] sm:gap-4 sm:px-4" data-testid="weekly-drop-row">
-                      <WeeklyDropPlayer
-                        position={row.dropPosition}
-                        name={drop ? getPlayerName(row.dropPlayerId) : row.dropPlayerId}
+                      <WeeklyDropPlayerCard
+                        row={dropRow}
+                        owner={dropOwner}
+                        playingWeek={playingWeek}
+                        weeklyPoints={dropWeekly?.points}
+                        weeklyRank={dropWeekly?.positionRank}
+                        nflTeam={drop?.team}
+                        age={drop?.age}
+                        status={drop?.status}
+                        injuryStatus={drop?.injury_status}
+                        byeWeek={getTeamByeWeek(leagueQuery.data?.season ?? '', drop?.team)}
+                        canonicalHistory={canonicalHistoryByPlayer.get(row.dropPlayerId) ?? []}
+                        managerLabels={managerLabels}
+                        selectedRosterId={rosterId}
                       />
                       <div className="min-w-0">
                         {row.recommendations.map((recommendation) => (
@@ -321,7 +449,14 @@ export function WeeklyBidPlanPage() {
                             season={leagueQuery.data?.season ?? ''}
                             selectedRosterId={rosterId}
                             canonicalHistory={canonicalHistoryByPlayer.get(recommendation.target.playerId) ?? []}
+                            managerLabels={managerLabels}
                             teamImpactContext={teamImpactContext}
+                            teamImpactScenario={{
+                              selectedRosterPlayerIds: model.recommendationScenarios.get(
+                                `${row.dropPlayerId}:${recommendation.target.playerId}`,
+                              ) ?? [],
+                              explicitDropPlayerId: recommendation.dropPlayerId,
+                            }}
                           />
                         ))}
                       </div>
