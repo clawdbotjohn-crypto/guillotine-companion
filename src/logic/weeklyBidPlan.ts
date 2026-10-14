@@ -56,7 +56,8 @@ export interface WeeklyBidPlan {
 }
 
 function remainingBudget(initialBudget: number, roster: Roster | undefined): number {
-  return Math.max(0, initialBudget - (roster?.settings.waiver_budget_used ?? initialBudget));
+  if (!roster) return 0;
+  return Math.max(0, initialBudget - (roster.settings.waiver_budget_used ?? 0));
 }
 
 function scoreFor(

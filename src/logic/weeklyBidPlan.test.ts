@@ -115,6 +115,15 @@ describe('weekly team bid planning', () => {
   });
 
   it('caps at actual scenario budget, preserves qualifying $0 recommendations, and caps by richest active opponent + $1', () => {
+    const unspentRoster = roster(1, ['drop-a']);
+    delete (unspentRoster.settings as Partial<Roster['settings']>).waiver_budget_used;
+    const unspentPlan = buildWeeklyBidPlan(base({
+      rosters: [unspentRoster, roster(2, ['other-1'], 50)],
+      activeRosterIds: new Set([1, 2]),
+      maxPositionDrops: 1,
+    }))!;
+    expect(unspentPlan.initialBudgetRemaining).toBe(100);
+
     const zeroPlan = buildWeeklyBidPlan(base({
       rosters: [roster(1, ['drop-a'], 100), roster(2, ['other-1'], 20)],
       activeRosterIds: new Set([1, 2]),
