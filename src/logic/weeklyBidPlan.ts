@@ -79,24 +79,36 @@ function rosFor(
 function classifyScenario(
   input: WeeklyBidPlanInput,
   selectedPlayerIds: readonly string[],
-): { risk: TeamRisk; rank: number; outOf: number } {
+): { risk: TeamRisk; rank: number; outOf: number; projectedTotal: number } {
   const slots = parseLineupSlots([...input.lineupPositions]);
+  let selectedProjectedTotal = 0;
   const standings = rankActiveTeams(
-    input.rosters.map((roster) => ({
-      rosterId: roster.roster_id,
-      value: projectBestLineup(
+    input.rosters.map((roster) => {
+      const projectedTotal = projectBestLineup(
         roster.roster_id === input.selectedRosterId
           ? [...selectedPlayerIds]
           : roster.players ?? [],
         input.weeklyProjections,
         slots,
-      ).total,
-      eliminated: !input.activeRosterIds.has(roster.roster_id),
-    })),
+      ).total;
+      if (roster.roster_id === input.selectedRosterId) selectedProjectedTotal = projectedTotal;
+      return {
+        rosterId: roster.roster_id,
+        value: projectedTotal,
+        eliminated: !input.activeRosterIds.has(roster.roster_id),
+      };
+    }),
     input.eliminationsPerWeek,
   );
   const selected = standings.get(input.selectedRosterId);
-  return selected ?? { risk: 'warning', rank: 0, outOf: input.activeRosterIds.size };
+  return selected
+    ? { ...selected, projectedTotal: selectedProjectedTotal }
+    : {
+        risk: 'warning',
+        rank: 0,
+        outOf: input.activeRosterIds.size,
+        projectedTotal: selectedProjectedTotal,
+      };
 }
 
 /**
@@ -202,7 +214,7 @@ export function buildWeeklyBidPlan(input: WeeklyBidPlanInput): WeeklyBidPlan | n
             return {
               target,
               dropPlayerId,
-              weeklyGain: scoreFor(target.playerId, input.weeklyProjections) - dropWeek,
+              weeklyGain: after.projectedTotal - before.projectedTotal,
               rosGain: rosFor(target.playerId, input.rosProjections) - dropRos,
               beforeRisk: before.risk,
               afterRisk: after.risk,
@@ -215,6 +227,7 @@ export function buildWeeklyBidPlan(input: WeeklyBidPlanInput): WeeklyBidPlan | n
               safeMultiplier: priced.safeMultiplier,
             };
           })
+          .filter((recommendation) => recommendation.weeklyGain > 0)
           .sort(recommendationComparator);
         return { dropPlayerId, dropWeek, dropRos, recommendations };
       })

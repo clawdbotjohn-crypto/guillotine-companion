@@ -94,6 +94,34 @@ describe('weekly team bid planning', () => {
       .some((rec) => rec.target.playerId === 'target-a')).toBe(false);
   });
 
+  it('rejects raw cross-position upgrades that do not improve the optimized lineup and reports lineup gain', () => {
+    const weeklyPlayers = [
+      weekly('qb-starter', 'QB', 30), weekly('rb-starter', 'RB', 10),
+      weekly('bench-wr', 'WR', 1), weekly('target-qb', 'QB', 20),
+      weekly('target-rb', 'RB', 12), weekly('other-qb', 'QB', 25),
+    ];
+    const rosPlayers = [
+      ros('qb-starter', 'QB', 150), ros('rb-starter', 'RB', 20),
+      ros('bench-wr', 'WR', 5), ros('target-qb', 'QB', 100),
+      ros('target-rb', 'RB', 90), ros('other-qb', 'QB', 120),
+    ];
+    const plan = buildWeeklyBidPlan(base({
+      rosters: [roster(1, ['qb-starter', 'rb-starter', 'bench-wr']), roster(2, ['other-qb'])],
+      activeRosterIds: new Set([1, 2]),
+      lineupPositions: ['QB', 'RB'],
+      weeklyProjections: new Map(weeklyPlayers.map((player) => [player.playerId, player])),
+      rosProjections: new Map(rosPlayers.map((player) => [player.playerId, player])),
+      availableRows: [target('target-qb', 'QB', 10, 20), target('target-rb', 'RB', 10, 20)],
+      availablePlayerIds: ['target-qb', 'target-rb'],
+      maxPositionDrops: 1,
+    }))!;
+
+    expect(plan.rows).toHaveLength(1);
+    expect(plan.rows[0].dropPlayerId).toBe('bench-wr');
+    expect(plan.rows[0].recommendations.map((rec) => rec.target.playerId)).toEqual(['target-rb']);
+    expect(plan.rows[0].recommendations[0].weeklyGain).toBe(2);
+  });
+
   it('orders weakest qualifying holds first and caps position drops at five', () => {
     const plan = buildWeeklyBidPlan(base())!;
     const positionRows = plan.rows.filter((row) => row.kind === 'position');
