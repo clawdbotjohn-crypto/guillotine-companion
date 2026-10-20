@@ -1,5 +1,5 @@
 import { useMemo, type ComponentProps } from 'react';
-import { ArrowLeft, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
   useAllMatchups,
@@ -71,7 +71,17 @@ export function WeeklyDropPlayerCard({
   selectedRosterId?: number | null;
 }) {
   return (
-    <div className="min-w-0" data-testid="weekly-drop-card">
+    <div
+      className="min-w-0 rounded-xl border border-[#ef4444]/55 bg-[#ef4444]/[0.06] p-1"
+      data-testid="weekly-drop-card"
+      data-bid-action="drop"
+      role="group"
+      aria-label={`Drop ${row.name}`}
+    >
+      <div className="flex items-center gap-1 px-1.5 pb-1 pt-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#f87171]" aria-hidden="true">
+        <ArrowDown className="h-3 w-3" strokeWidth={2.5} />
+        <span>Drop</span>
+      </div>
       <WaiverPlayerCard
         row={row}
         strategy="safe"
@@ -88,6 +98,7 @@ export function WeeklyDropPlayerCard({
         playingWeek={playingWeek}
         owner={owner}
         selectedRosterId={selectedRosterId}
+        suppressSelectedOwnerAccent
         sourceLabel="Sleeper ROS"
         rankingSource="sleeper"
         canonicalHistory={canonicalHistory}
@@ -138,8 +149,22 @@ export function WeeklyTargetCard({
   const target = recommendation.target;
   const weekly = weeklyContext.get(target.playerId);
   const player = players?.get(target.playerId);
+  const impactSummary = `#${recommendation.beforeRank} → #${recommendation.afterRank} · +${recommendation.weeklyGain.toFixed(1)} lineup pts`;
   return (
-    <div className="min-w-0" data-testid="weekly-target-card">
+    <div
+      className="min-w-0 rounded-xl border border-[#10b981]/55 bg-[#10b981]/[0.06] p-1"
+      data-testid="weekly-target-card"
+      data-bid-action="add"
+      role="group"
+      aria-label={`Add ${target.name}; league rank ${recommendation.beforeRank} to ${recommendation.afterRank}; plus ${recommendation.weeklyGain.toFixed(1)} lineup points; suggested bid $${recommendation.suggestedBid}`}
+    >
+      <div className="flex min-w-0 items-center justify-between gap-2 px-1.5 pb-1 pt-0.5 text-[9px] font-bold text-[#34d399]" aria-hidden="true">
+        <span className="flex shrink-0 items-center gap-1 uppercase tracking-[0.12em]">
+          <ArrowUp className="h-3 w-3" strokeWidth={2.5} />
+          Add
+        </span>
+        <span className="min-w-0 truncate font-mono font-semibold tracking-normal text-[#a7f3d0]">{impactSummary}</span>
+      </div>
       <WaiverPlayerCard
         row={targetRowWithBid(recommendation)}
         strategy="safe"
@@ -274,6 +299,8 @@ export function WeeklyBidPlanPage() {
       availablePlayerIds: allAvailableIds,
       initialBudget: ctx.budget,
       eliminationsPerWeek: ctx.teamsRemaining > 16 ? 2 : 1,
+      valueByPlayerId: new Map([...ros].map(([playerId, value]) => [playerId, value.totalPoints])),
+      replacementByPosition: vorpCalibration?.replacementByPosition,
     });
     const recommendationScenarios = new Map<string, string[]>();
     let scenarioPlayers = [...(rosters.find((roster) => roster.roster_id === rosterId)?.players ?? [])];

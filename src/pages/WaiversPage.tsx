@@ -231,6 +231,7 @@ export function WaiverPlayerCard({
   projectionState = 'loaded',
   owner,
   selectedRosterId,
+  suppressSelectedOwnerAccent = false,
   managerPredictions = [],
   managerDetails = new Map(),
   managerLabels = new Map(),
@@ -260,6 +261,7 @@ export function WaiverPlayerCard({
   projectionState?: PlayerProjectionState;
   owner?: RosteredPlayerOwner;
   selectedRosterId?: number | null;
+  suppressSelectedOwnerAccent?: boolean;
   managerPredictions?: ManagerPredictionDisplay[];
   showManagerPredictions?: boolean;
   managerDetails?: ReadonlyMap<number, ManagerDetailData>;
@@ -302,6 +304,12 @@ export function WaiverPlayerCard({
         : byeWeek != null ? `Bye W${byeWeek}` : null;
   const selectedTeamOwner = owner?.rosterId === selectedRosterId;
   const suggestedBidsSummary = summaryMode === 'suggested-bids';
+  const compactWeeklyPoints = weeklyPoints == null || weeklyPoints === 0
+    ? '0'
+    : weeklyPoints.toFixed(1);
+  const compactRosPoints = Number.isInteger(row.rosPoints)
+    ? String(row.rosPoints)
+    : row.rosPoints.toFixed(1);
   const sourceMetric = formatWaiverSourceMetric(row, rankingSource);
   const orderedPredictions = orderManagerPredictions(managerPredictions);
   const eligiblePredictions = orderedPredictions.filter(isEligibleBuyerPrediction);
@@ -338,7 +346,7 @@ export function WaiverPlayerCard({
 
   return (
     <>
-      <Card hover className={`p-0 mb-2 overflow-hidden ${owner ? selectedTeamOwner ? 'border-[#10b981]/70' : 'border-[#2a2d4d]' : ''}`}>
+      <Card hover className={`p-0 mb-2 overflow-hidden ${owner ? selectedTeamOwner && !suppressSelectedOwnerAccent ? 'border-[#10b981]/70' : 'border-[#2a2d4d]' : ''}`}>
         <div className="flex min-w-0 items-stretch">
           <button
             type="button"
@@ -354,6 +362,13 @@ export function WaiverPlayerCard({
                   <span className={`min-w-0 text-sm font-semibold text-[#f0f0ff] ${suggestedBidsSummary ? 'break-words leading-5' : 'truncate'}`}>{row.name}</span>
                   {owner && <span role="img" aria-label="Rostered" className={`shrink-0 ${selectedTeamOwner ? 'text-[#6ee7b7]' : 'text-[#8b8eac]'}`}><UserCheck size={14} strokeWidth={1.75} aria-hidden="true" /></span>}
                 </div>
+                {suggestedBidsSummary && <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 font-['Space_Mono'] text-[9px] leading-4 text-[#8b8eac]" data-testid="suggested-bids-player-context">
+                  <span>{row.position} {row.posRank > 0 ? `#${row.posRank}` : '#—'}</span>
+                  <span aria-hidden="true" className="text-[#454970]">·</span>
+                  <span>W{projectionWeek} {compactWeeklyPoints} pts {weeklyRank != null && weeklyRank > 0 ? `#${weeklyRank}` : '#—'}</span>
+                  <span aria-hidden="true" className="text-[#454970]">·</span>
+                  <span>ROS {compactRosPoints} pts</span>
+                </div>}
                 {!suggestedBidsSummary && <div className="mt-0.5 truncate text-[10px] text-[#6b6e99]">
                   {row.position} #{row.posRank} · {nflTeam || 'FA'}{playingWeek != null && weeklyRank != null ? ` · W${projectionWeek} #${weeklyRank}` : ''}
                 </div>}

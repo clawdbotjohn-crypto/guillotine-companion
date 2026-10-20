@@ -76,15 +76,25 @@ describe('Suggested Bids owner presentation', () => {
       }}
     />);
 
-    const opener = screen.getByRole('button', { name: `${longName}, suggested bid $0. Open player details` });
+    const addGroup = screen.getByRole('group', { name: new RegExp(`^Add ${longName}`) });
+    expect(addGroup.getAttribute('data-bid-action')).toBe('add');
+    expect(addGroup.getAttribute('aria-label')).toContain('league rank 10 to 6; plus 5.0 lineup points; suggested bid $0');
+    expect(addGroup.className).toContain('border-[#10b981]/55');
+    expect(within(addGroup).getByText('Add')).toBeTruthy();
+    expect(within(addGroup).getByText('#10 → #6 · +5.0 lineup pts')).toBeTruthy();
+    const opener = within(addGroup).getByRole('button', { name: `${longName}, suggested bid $0. Open player details` });
     const renderedName = within(opener).getByText(longName);
     expect(renderedName.className).toContain('break-words');
     expect(renderedName.className).not.toContain('truncate');
     expect(within(opener).getByText('WR').style.color).toBe('rgb(16, 185, 129)');
     expect(within(opener).getByText('$0')).toBeTruthy();
     expect(within(opener).queryByText('Suggested bid')).toBeNull();
-    expect(opener.textContent).toBe(`WR${longName}$0`);
-    expect(screen.queryByText(/this week|ROS|posture|scenario|capped|W7|Bye/i)).toBeNull();
+    const context = within(opener).getByTestId('suggested-bids-player-context');
+    expect(within(context).getByText('WR #2')).toBeTruthy();
+    expect(within(context).getByText('W7 18.0 pts #1')).toBeTruthy();
+    expect(within(context).getByText('ROS 200 pts')).toBeTruthy();
+    expect(opener.textContent).toContain(`${longName}WR #2·W7 18.0 pts #1·ROS 200 pts$0`);
+    expect(screen.queryByText(/this week|posture|scenario|capped|Bye/i)).toBeNull();
 
     fireEvent.click(opener);
     const dialog = screen.getByRole('dialog', { name: longName });
@@ -193,7 +203,13 @@ describe('Suggested Bids owner presentation', () => {
       canonicalHistory={history}
     />);
 
-    const opener = screen.getByRole('button', { name: /Synthetic Defense With A Full Wrapped Name, owned by your selected team/i });
+    const dropGroup = screen.getByRole('group', { name: 'Drop Synthetic Defense With A Full Wrapped Name' });
+    expect(dropGroup.getAttribute('data-bid-action')).toBe('drop');
+    expect(dropGroup.className).toContain('border-[#ef4444]/55');
+    expect(within(dropGroup).getByText('Drop')).toBeTruthy();
+    const opener = within(dropGroup).getByRole('button', { name: /Synthetic Defense With A Full Wrapped Name, owned by your selected team/i });
+    expect(opener.parentElement?.parentElement?.className).toContain('border-[#2a2d4d]');
+    expect(opener.parentElement?.parentElement?.className).not.toContain('border-[#10b981]/70');
     const name = within(opener).getByText('Synthetic Defense With A Full Wrapped Name');
     expect(name.className).toContain('break-words');
     expect(name.className).not.toContain('truncate');
@@ -201,6 +217,10 @@ describe('Suggested Bids owner presentation', () => {
     expect(defense.style.color).toBe('rgb(100, 116, 139)');
     expect(defense.style.borderColor).toBe('rgb(100, 116, 139)');
     expect(within(opener).queryByTestId('compact-bid-summary')).toBeNull();
+    const context = within(opener).getByTestId('suggested-bids-player-context');
+    expect(within(context).getByText('DEF #4')).toBeTruthy();
+    expect(within(context).getByText('W7 6.2 pts #4')).toBeTruthy();
+    expect(within(context).getByText('ROS 200 pts')).toBeTruthy();
 
     opener.focus();
     fireEvent.keyDown(opener, { key: 'Enter' });

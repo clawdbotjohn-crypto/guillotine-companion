@@ -120,6 +120,16 @@ describe('waiver controls', () => {
     expect(value.parentElement?.className).not.toContain('text-[#f59e0b]');
   });
 
+  it('renders compact position, weekly, and ROS context through the shared suggested-bids summary mode', () => {
+    render(<WaiverPlayerCard {...cardProps} strategy="safe" summaryMode="suggested-bids" />);
+    const card = screen.getByRole('button', { name: /Test Runner, suggested bid \$50/i });
+    const context = within(card).getByTestId('suggested-bids-player-context');
+    expect(within(context).getByText('RB #17')).toBeTruthy();
+    expect(within(context).getByText('W7 13.4 pts #16')).toBeTruthy();
+    expect(within(context).getByText('ROS 180 pts')).toBeTruthy();
+    expect(within(card).getByTestId('compact-bid-summary').className).toContain('min-w-[3.5rem]');
+  });
+
   it('splits custom cards so player details and value editing are separate, accessible interactions', () => {
     const onCommit = vi.fn();
     const prediction: ManagerPredictionDisplay = {
