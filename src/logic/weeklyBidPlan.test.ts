@@ -6,6 +6,7 @@ import {
   buildStablePositionDropQueue,
   buildWeeklyBidPlan,
   classifyWeeklyLineupGain,
+  formatWeeklyLineupGain,
   safeCutDistanceMultiplier,
   type WeeklyBidPlanInput,
 } from './weeklyBidPlan';
@@ -111,7 +112,7 @@ function streamerInput({
     lineupPositions: ['DEF', 'K'],
     weeklyProjections: new Map(weeklyPlayers.map((player) => [player.playerId, player])),
     rosProjections: new Map(rosPlayers.map((player) => [player.playerId, player])),
-    availableRows: candidates.map((player) => target(player.playerId, player.position, 12, 24)),
+    availableRows: candidates.map((player) => ({ ...target(player.playerId, player.position, 12, 24), posRank: 0 })),
     availablePlayerIds: candidates.map((player) => player.playerId),
     maxPositionDrops: 0,
   });
@@ -148,6 +149,12 @@ function pricingInput(
 }
 
 describe('weekly team bid planning', () => {
+  it('formats tiny positive gains without collapsing them to +0.0', () => {
+    expect(formatWeeklyLineupGain(0.04)).toBe('+0.04 pts');
+    expect(formatWeeklyLineupGain(0.004)).toBe('<+0.01 pts');
+    expect(formatWeeklyLineupGain(2.34)).toBe('+2.3 pts');
+  });
+
   it('requires a target to beat a drop both this week and ROS and protects low-week ROS stars', () => {
     const input = base();
     input.weeklyProjections.set('injured-star', weekly('injured-star', 'RB', 0));
@@ -467,6 +474,8 @@ describe('weekly team bid planning', () => {
       'def-top', 'def-a-tie', 'def-b-tie',
     ]);
     expect(streamers[1].recommendations.map((item) => item.target.playerId)).toEqual(['k-top']);
+    expect(streamers[0].recommendations.map((item) => item.target.posRank)).toEqual([1, 2, 3]);
+    expect(streamers[1].recommendations[0].target.posRank).toBe(1);
     expect(streamers.flatMap((row) => row.recommendations).every((item) =>
       item.theoreticalBid === 0 && item.suggestedBid === 0)).toBe(true);
   });

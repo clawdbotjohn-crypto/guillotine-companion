@@ -13,8 +13,11 @@ import {
 import { Card, Skeleton, StatusBadge } from '../components/ui';
 import { usePlayerValues } from '../hooks/usePlayerValues';
 import {
+  buildRosPositionRankMap,
   buildWeeklyProjectionContext,
   buildWeeklyScoredPlayers,
+  buildBiddingTeamStatusMap,
+  projectAllTeams,
   classifyCanonicalBidEvents,
   computeEliminations,
   extractBids,
@@ -22,7 +25,6 @@ import {
   getCompletedLeagueWeek,
   getProjectionScoring,
   getTeamByeWeek,
-  type RosPlayerProjection,
 } from '../logic';
 import {
   buildLeagueContext,
@@ -37,6 +39,7 @@ import {
 } from '../logic/waivers';
 import {
   buildWeeklyBidPlan,
+  formatWeeklyLineupGain,
   type WeeklyBidPlan,
   type WeeklyBidRecommendation,
 } from '../logic/weeklyBidPlan';
@@ -58,6 +61,7 @@ export function WeeklyDropPlayerCard({
   byeWeek,
   canonicalHistory,
   managerLabels,
+  biddingTeamStatuses,
   selectedRosterId,
 }: {
   row: WaiverPlayerRow;
@@ -72,6 +76,7 @@ export function WeeklyDropPlayerCard({
   byeWeek?: number | null;
   canonicalHistory?: ComponentProps<typeof WaiverPlayerCard>['canonicalHistory'];
   managerLabels?: ComponentProps<typeof WaiverPlayerCard>['managerLabels'];
+  biddingTeamStatuses?: ComponentProps<typeof WaiverPlayerCard>['biddingTeamStatuses'];
   selectedRosterId?: number | null;
 }) {
   return (
@@ -108,9 +113,17 @@ export function WeeklyDropPlayerCard({
         rankingSource="sleeper"
         canonicalHistory={canonicalHistory}
         managerLabels={managerLabels}
+        biddingTeamStatuses={biddingTeamStatuses}
       />
     </div>
   );
+}
+
+function formatWeeklyLineupGainAria(gain: number): string {
+  if (gain > 0 && gain < 0.01) return 'greater than zero and less than 0.01 points';
+  if (gain > 0) return `plus ${gain < 0.1 ? gain.toFixed(2) : gain.toFixed(1)} points`;
+  if (gain < 0) return `minus ${Math.abs(gain).toFixed(1)} points`;
+  return '0.0 points';
 }
 
 function targetRowWithBid(recommendation: WeeklyBidRecommendation): WaiverPlayerRow {
@@ -136,6 +149,7 @@ export function WeeklyTargetCard({
   selectedRosterId,
   canonicalHistory,
   managerLabels,
+  biddingTeamStatuses,
   teamImpactContext,
   teamImpactScenario,
 }: {
@@ -148,19 +162,21 @@ export function WeeklyTargetCard({
   selectedRosterId?: number | null;
   canonicalHistory?: ComponentProps<typeof WaiverPlayerCard>['canonicalHistory'];
   managerLabels?: ComponentProps<typeof WaiverPlayerCard>['managerLabels'];
+  biddingTeamStatuses?: ComponentProps<typeof WaiverPlayerCard>['biddingTeamStatuses'];
   teamImpactContext?: ComponentProps<typeof WaiverPlayerCard>['teamImpactContext'];
   teamImpactScenario?: ComponentProps<typeof WaiverPlayerCard>['teamImpactScenario'];
 }) {
   const target = recommendation.target;
   const weekly = weeklyContext.get(target.playerId);
   const player = players?.get(target.playerId);
+  const weeklyGainDisplay = formatWeeklyLineupGain(recommendation.weeklyGain);
   return (
     <div
       className="min-w-0 overflow-hidden rounded-xl border border-[#10b981]/45 bg-[#10b981]/[0.045]"
       data-testid="weekly-target-card"
       data-bid-action="add"
       role="group"
-      aria-label={`Add ${target.name}; league rank ${recommendation.beforeRank} to ${recommendation.afterRank}; plus ${recommendation.weeklyGain.toFixed(1)} lineup points; suggested bid $${recommendation.suggestedBid}`}
+      aria-label={`Add ${target.name}; league rank ${recommendation.beforeRank} to ${recommendation.afterRank}; lineup gain ${formatWeeklyLineupGainAria(recommendation.weeklyGain)}; suggested bid $${recommendation.suggestedBid}`}
     >
       <div className="flex min-h-8 items-center gap-1.5 border-b border-[#10b981]/25 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-[#34d399]" aria-hidden="true">
         <ArrowUp className="h-3.5 w-3.5" strokeWidth={2.5} />
@@ -185,13 +201,14 @@ export function WeeklyTargetCard({
         rankingSource="sleeper"
         canonicalHistory={canonicalHistory}
         managerLabels={managerLabels}
+        biddingTeamStatuses={biddingTeamStatuses}
         teamImpactContext={teamImpactContext}
         teamImpactScenario={teamImpactScenario}
       />
       <div className="grid grid-cols-1 gap-2 border-t border-[#10b981]/25 bg-[#081c1c]/55 px-3 py-2.5 sm:grid-cols-2" data-testid="weekly-target-impact">
         <div className="flex min-w-0 items-center justify-between gap-3 sm:block">
           <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#8b8eac]">Next-week gain</span>
-          <span className="whitespace-nowrap font-['Space_Mono'] text-sm font-bold text-[#6ee7b7]">+{recommendation.weeklyGain.toFixed(1)} pts</span>
+          <span className="whitespace-nowrap font-['Space_Mono'] text-sm font-bold text-[#6ee7b7]">{weeklyGainDisplay}</span>
         </div>
         <div className="flex min-w-0 items-center justify-between gap-3 sm:block sm:text-right">
           <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#8b8eac]">Overall rank</span>
@@ -250,7 +267,7 @@ export function WeeklyBidSummary({ plan }: { plan: WeeklyBidPlan }) {
       <Card hover={false} className="p-3"><p className="text-[9px] uppercase tracking-wider text-[#6b6e99]">FAAB available</p><p className="mt-1 font-['Space_Mono'] text-lg font-bold text-[#10b981]">${plan.initialBudgetRemaining}</p></Card>
       <Card hover={false} className="p-3">
         <div role="group" aria-labelledby="planned-pickups-label" aria-describedby="planned-pickups-description">
-          <p id="planned-pickups-label" className="text-[9px] uppercase tracking-wider text-[#6b6e99]">Planned pickups</p>
+          <p id="planned-pickups-label" className="text-[9px] uppercase tracking-wider text-[#6b6e99]">Recommended pickups</p>
           <p className="mt-1 font-['Space_Mono'] text-lg font-bold">{plannedPickupCount}</p>
           <p id="planned-pickups-description" className="sr-only">Conditional position-player pickups modeled</p>
         </div>
@@ -336,6 +353,7 @@ export function WeeklyBidPlanPage() {
         maxPerPos: Number.POSITIVE_INFINITY,
       },
     );
+    const rosPositionRanks = buildRosPositionRankMap(ros);
     const rosteredIds = new Set(rosters.flatMap((roster) => roster.players ?? []));
     const allAvailableIds = [...weekly.keys()].filter((playerId) => !rosteredIds.has(playerId));
     const streamRows: WaiverPlayerRow[] = allAvailableIds
@@ -347,7 +365,7 @@ export function WeeklyBidPlanPage() {
           playerId,
           name: getPlayerName(playerId),
           position: projection.position,
-          posRank: 0,
+          posRank: rosPositionRanks.get(playerId) ?? 0,
           rosPoints: playerRos?.totalPoints ?? projection.points,
           projectedPointsPerWeek: playerRos?.pointsPerWeek ?? projection.points,
           sourceValue: playerRos?.totalPoints ?? projection.points,
@@ -357,6 +375,10 @@ export function WeeklyBidPlanPage() {
           predictedWinningBid: 0,
         };
       });
+    const biddingTeamStatuses = buildBiddingTeamStatusMap(
+      elimination,
+      projectAllTeams(rosters, weekly, league, elimination),
+    );
     const plan = buildWeeklyBidPlan({
       selectedRosterId: rosterId,
       rosters,
@@ -371,17 +393,6 @@ export function WeeklyBidPlanPage() {
       valueByPlayerId: new Map([...ros].map(([playerId, value]) => [playerId, value.totalPoints])),
       replacementByPosition: vorpCalibration?.replacementByPosition,
     });
-    const positionRanks = new Map<string, number>();
-    const positionGroups = new Map<string, RosPlayerProjection[]>();
-    for (const projection of ros.values()) {
-      const group = positionGroups.get(projection.position) ?? [];
-      group.push(projection);
-      positionGroups.set(projection.position, group);
-    }
-    for (const group of positionGroups.values()) {
-      group.sort((a, b) => b.totalPoints - a.totalPoints || a.playerId.localeCompare(b.playerId));
-      group.forEach((projection, index) => positionRanks.set(projection.playerId, index + 1));
-    }
     const rosteredRows = new Map<string, WaiverPlayerRow>();
     for (const playerId of rosters.find((roster) => roster.roster_id === rosterId)?.players ?? []) {
       const projection = ros.get(playerId);
@@ -390,7 +401,7 @@ export function WeeklyBidPlanPage() {
         playerId,
         name: getPlayerName(playerId),
         position,
-        posRank: positionRanks.get(playerId) ?? 0,
+        posRank: rosPositionRanks.get(playerId) ?? 0,
         rosPoints: projection?.totalPoints ?? 0,
         projectedPointsPerWeek: projection?.pointsPerWeek ?? 0,
         sourceValue: projection?.sourceValue ?? projection?.totalPoints ?? 0,
@@ -405,6 +416,7 @@ export function WeeklyBidPlanPage() {
       plan,
       elimination,
       weeklyScoredPlayers: weekly,
+      biddingTeamStatuses,
       rosteredRows,
       weeklyContext: buildWeeklyProjectionContext(
         weeklyQuery.data,
@@ -517,6 +529,7 @@ export function WeeklyBidPlanPage() {
                           byeWeek={getTeamByeWeek(leagueQuery.data?.season ?? '', drop?.team)}
                           canonicalHistory={canonicalHistoryByPlayer.get(row.dropPlayerId) ?? []}
                           managerLabels={managerLabels}
+                          biddingTeamStatuses={model?.biddingTeamStatuses}
                           selectedRosterId={rosterId}
                         />
                       )}
@@ -533,6 +546,7 @@ export function WeeklyBidPlanPage() {
                           selectedRosterId={rosterId}
                           canonicalHistory={canonicalHistoryByPlayer.get(recommendation.target.playerId) ?? []}
                           managerLabels={managerLabels}
+                          biddingTeamStatuses={model?.biddingTeamStatuses}
                           teamImpactContext={teamImpactContext}
                           teamImpactScenario={{
                             selectedRosterPlayerIds: currentRosterPlayerIds,

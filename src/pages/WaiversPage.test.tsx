@@ -177,7 +177,7 @@ describe('waiver controls', () => {
     expect(within(dialog).getByText('Market Manager')).toBeTruthy();
   });
 
-  it('uses the upcoming playing week directly and treats a loaded missing projection as 0', () => {
+  it('uses the upcoming playing week directly and does not fabricate loaded missing projections', () => {
     render(<WaiverPlayerCard
       {...cardProps}
       playingWeek={4}
@@ -186,10 +186,29 @@ describe('waiver controls', () => {
       projectionState="loaded"
       strategy="safe"
     />);
-    expect(screen.getByText('W4 0 pts · Bye W8')).toBeTruthy();
+    expect(screen.getByText('W4 Unavailable · Bye W8')).toBeTruthy();
     expect(screen.queryByText(/W5/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Test Runner, suggested bid/i }));
-    expect(within(screen.getByRole('dialog', { name: 'Test Runner' })).getByText('Proj.: 0 (W4)')).toBeTruthy();
+    expect(within(screen.getByRole('dialog', { name: 'Test Runner' })).getByText('Proj.: Unavailable (W4) · RB #—')).toBeTruthy();
+  });
+
+  it('shows an explicit known-bye zero without fabricating a weekly rank', () => {
+    render(<WaiverPlayerCard
+      {...cardProps}
+      playingWeek={8}
+      byeWeek={8}
+      weeklyPoints={undefined}
+      weeklyRank={4}
+      projectionState="loaded"
+      strategy="safe"
+      summaryMode="suggested-bids"
+    />);
+    const card = screen.getByRole('button', { name: /Test Runner, suggested bid/i });
+    expect(within(card).getByText('W8 BYE · 0 pts #—')).toBeTruthy();
+    expect(within(card).queryByText(/#4/)).toBeNull();
+    fireEvent.click(card);
+    const dialog = screen.getByRole('dialog', { name: 'Test Runner' });
+    expect(within(dialog).getByText('Proj.: BYE · 0 (W8) · RB #—')).toBeTruthy();
   });
 
   it('opens details for a $0 player without a prediction', () => {

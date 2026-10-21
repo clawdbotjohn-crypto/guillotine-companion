@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { NflState, WeeklyProjectionMap } from '../../api/types';
 import {
+  buildRosPositionRankMap,
   buildWeeklyProjectionContext,
   buildWeeklyScoredPlayers,
   getProjectionScoring,
@@ -16,6 +17,9 @@ const positions: Record<string, string> = {
   rostered: 'WR',
   other: 'WR',
   kicker: 'K',
+  kickerTwo: 'K',
+  defense: 'DEF',
+  defenseTwo: 'DEF',
 };
 
 function weekly(...entries: [number, WeeklyProjectionMap][]) {
@@ -95,6 +99,34 @@ describe('Sleeper ROS projection aggregation', () => {
 
     // The rostered player remains in the pool, so the available player is WR2 rather than WR1.
     expect(context.get('available')).toMatchObject({ points: 18, positionRank: 2, position: 'WR' });
+  });
+
+  it('includes kicker and defense weekly points and same-position ranks in the complete source pool', () => {
+    const context = buildWeeklyProjectionContext({
+      kicker: { pts_ppr: 7 },
+      kickerTwo: { pts_ppr: 11 },
+      defense: { pts_ppr: 8 },
+      defenseTwo: { pts_ppr: 6 },
+    }, 'ppr', (playerId) => positions[playerId]);
+
+    expect(context.get('kicker')).toMatchObject({ points: 7, position: 'K', positionRank: 2 });
+    expect(context.get('kickerTwo')).toMatchObject({ points: 11, position: 'K', positionRank: 1 });
+    expect(context.get('defense')).toMatchObject({ points: 8, position: 'DEF', positionRank: 1 });
+    expect(context.get('defenseTwo')).toMatchObject({ points: 6, position: 'DEF', positionRank: 2 });
+  });
+
+  it('builds deterministic ROS position ranks at runtime and canonicalizes defense aliases', () => {
+    const ranks = buildRosPositionRankMap(new Map([
+      ['def-z', { playerId: 'def-z', position: 'DST', totalPoints: 80, pointsPerWeek: 8, projectedWeeks: 10 }],
+      ['def-a', { playerId: 'def-a', position: 'D/ST', totalPoints: 80, pointsPerWeek: 8, projectedWeeks: 10 }],
+      ['def-low', { playerId: 'def-low', position: 'def', totalPoints: 70, pointsPerWeek: 7, projectedWeeks: 10 }],
+      ['kicker', { playerId: 'kicker', position: 'K', totalPoints: 75, pointsPerWeek: 7.5, projectedWeeks: 10 }],
+    ]));
+
+    expect(ranks.get('def-a')).toBe(1);
+    expect(ranks.get('def-z')).toBe(2);
+    expect(ranks.get('def-low')).toBe(3);
+    expect(ranks.get('kicker')).toBe(1);
   });
 
   it('uses the official season/team bye table and is honest for unsupported data', () => {

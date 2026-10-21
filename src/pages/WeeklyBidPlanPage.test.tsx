@@ -143,7 +143,7 @@ describe('Suggested Bids owner presentation', () => {
     expect(within(summary).queryByText('Bids won')).toBeNull();
 
     const plannedPickups = within(summary).getByRole('group', {
-      name: 'Planned pickups',
+      name: 'Recommended pickups',
       description: 'Conditional position-player pickups modeled',
     });
     expect(within(plannedPickups).getByText('2')).toBeTruthy();
@@ -175,7 +175,7 @@ describe('Suggested Bids owner presentation', () => {
 
     const addGroup = screen.getByRole('group', { name: new RegExp(`^Add ${longName}`) });
     expect(addGroup.getAttribute('data-bid-action')).toBe('add');
-    expect(addGroup.getAttribute('aria-label')).toContain('league rank 10 to 6; plus 5.0 lineup points; suggested bid $0');
+    expect(addGroup.getAttribute('aria-label')).toContain('league rank 10 to 6; lineup gain plus 5.0 points; suggested bid $0');
     expect(addGroup.className).toContain('border-[#10b981]/45');
     expect(within(addGroup).getByText('Add')).toBeTruthy();
     const impact = within(addGroup).getByTestId('weekly-target-impact');
@@ -203,6 +203,24 @@ describe('Suggested Bids owner presentation', () => {
     expect(within(dialog).getByRole('region', { name: 'Predicted bidding' })).toBeTruthy();
     expect(within(dialog).getByText('Bidding history · 1')).toBeTruthy();
     expect(within(dialog).getByText('$12')).toBeTruthy();
+  });
+
+  it('does not render a strictly positive sub-tenth lineup gain as +0.0', () => {
+    render(<WeeklyTargetCard
+      recommendation={{ ...recommendation, weeklyGain: 0.04 }}
+      playingWeek={7}
+      remainingFaab={224}
+      weeklyContext={new Map([['target-player', {
+        playerId: 'target-player', position: 'WR', points: 18, positionRank: 1,
+      }]]) as never}
+      players={new Map()}
+      season="2026"
+    />);
+
+    const addGroup = screen.getByRole('group', { name: new RegExp(`^Add ${longName}`) });
+    expect(within(addGroup).getByText('+0.04 pts')).toBeTruthy();
+    expect(within(addGroup).queryByText('+0.0 pts')).toBeNull();
+    expect(addGroup.getAttribute('aria-label')).toContain('lineup gain plus 0.04 points');
   });
 
   it('passes the explicit recommendation scenario so a $0 synthetic TE target shows the same +1.7 impact as Waivers', () => {

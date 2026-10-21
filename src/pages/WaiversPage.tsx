@@ -32,6 +32,7 @@ import {
   computeProjectedLineupGroupRanks,
   classifyCanonicalBidEvents,
   buildFreeAgentTeamImpact,
+  buildBiddingTeamStatusMap,
   type EliminationResult,
   type WeeklyScoredPlayer,
   type WaiverRankingSource,
@@ -236,6 +237,7 @@ export function WaiverPlayerCard({
   managerPredictions = [],
   managerDetails = new Map(),
   managerLabels = new Map(),
+  biddingTeamStatuses = new Map(),
   showManagerPredictions = false,
   getPlayerName: resolvePlayerName = getPlayerName,
   sourceLabel = 'Sleeper ROS',
@@ -269,6 +271,7 @@ export function WaiverPlayerCard({
   showManagerPredictions?: boolean;
   managerDetails?: ReadonlyMap<number, ManagerDetailData>;
   managerLabels?: ReadonlyMap<number, string>;
+  biddingTeamStatuses?: ReadonlyMap<number, import('../logic').BiddingTeamStatus>;
   getPlayerName?: (playerId: string) => string;
   sourceLabel?: string;
   rankingSource?: WaiverRankingSource;
@@ -293,13 +296,14 @@ export function WaiverPlayerCard({
     if (normalized !== value) onCustomValueCommit?.(normalized);
   };
   const projectionWeek = playingWeek == null ? '—' : playingWeek;
+  const knownBye = playingWeek != null && byeWeek === playingWeek;
   const weeklyProjection = projectionState === 'loading'
     ? 'Loading…'
-    : projectionState === 'error' || projectionState === 'unavailable'
+    : projectionState === 'error' || projectionState === 'unavailable' || (weeklyPoints == null && !knownBye)
       ? 'Unavailable'
-      : `${weeklyPoints == null || weeklyPoints === 0 ? '0' : weeklyPoints.toFixed(1)} pts`;
+      : `${knownBye ? 'BYE · ' : ''}${weeklyPoints == null || weeklyPoints === 0 ? '0' : weeklyPoints.toFixed(1)} pts`;
   const weeklyMeta = playingWeek != null
-    ? `W${projectionWeek} ${weeklyProjection}${byeWeek != null ? ` · Bye W${byeWeek}` : ''}`
+    ? `W${projectionWeek} ${weeklyProjection}${byeWeek != null && !knownBye ? ` · Bye W${byeWeek}` : ''}`
     : projectionState === 'loading'
       ? 'Projection loading…'
       : projectionState === 'error'
@@ -307,9 +311,13 @@ export function WaiverPlayerCard({
         : byeWeek != null ? `Bye W${byeWeek}` : null;
   const selectedTeamOwner = owner?.rosterId === selectedRosterId;
   const suggestedBidsSummary = summaryMode === 'suggested-bids';
-  const compactWeeklyPoints = weeklyPoints == null || weeklyPoints === 0
-    ? '0'
-    : weeklyPoints.toFixed(1);
+  const compactWeeklyProjection = projectionState === 'loading'
+    ? 'Loading… #—'
+    : projectionState === 'error' || projectionState === 'unavailable' || (weeklyPoints == null && !knownBye)
+      ? 'Unavailable #—'
+      : knownBye
+        ? 'BYE · 0 pts #—'
+        : `${weeklyPoints === 0 ? '0' : weeklyPoints!.toFixed(1)} pts ${weeklyRank != null && weeklyRank > 0 ? `#${weeklyRank}` : '#—'}`;
   const compactRosPoints = Number.isInteger(row.rosPoints)
     ? String(row.rosPoints)
     : row.rosPoints.toFixed(1);
@@ -368,7 +376,7 @@ export function WaiverPlayerCard({
                 {suggestedBidsSummary && <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 font-['Space_Mono'] text-[9px] leading-4 text-[#8b8eac]" data-testid="suggested-bids-player-context">
                   <span>{row.position} {row.posRank > 0 ? `#${row.posRank}` : '#—'}</span>
                   <span aria-hidden="true" className="text-[#454970]">·</span>
-                  <span>W{projectionWeek} {compactWeeklyPoints} pts {weeklyRank != null && weeklyRank > 0 ? `#${weeklyRank}` : '#—'}</span>
+                  <span>W{projectionWeek} {compactWeeklyProjection}</span>
                   <span aria-hidden="true" className="text-[#454970]">·</span>
                   <span>ROS {compactRosPoints} pts</span>
                 </div>}
@@ -435,6 +443,7 @@ export function WaiverPlayerCard({
           injuryStatus,
           nextWeek: playingWeek ?? null,
           nextWeekPoints: weeklyPoints ?? null,
+          nextWeekRank: weeklyRank ?? null,
           projectionState,
           byeWeek: byeWeek ?? null,
           sourceLabel,
@@ -450,6 +459,7 @@ export function WaiverPlayerCard({
           managerPredictions: showManagerPredictions ? managerPredictions : [],
           managerDetails,
           managerLabels,
+          biddingTeamStatuses,
           getPlayerName: resolvePlayerName,
           history: canonicalHistory,
         }}
@@ -878,6 +888,7 @@ export function WaiversPage() {
     )
     : new Map();
   const projectedTeams = projectAllTeams(rosters!, weeklyScoredPlayers, league, waiverContext!.elim);
+  const biddingTeamStatuses = buildBiddingTeamStatusMap(waiverContext!.elim, projectedTeams);
   const projectedPositionRanks = computeProjectedLineupGroupRanks(
     projectedTeams,
     weeklyScoredPlayers,
@@ -1145,6 +1156,7 @@ export function WaiversPage() {
               managerPredictions={predictions}
               managerDetails={managerDetails}
               managerLabels={managerLabels}
+              biddingTeamStatuses={biddingTeamStatuses}
               showManagerPredictions={predictions.length > 0}
               sourceLabel={sourceInfo.shortLabel}
               rankingSource={rankingSource}

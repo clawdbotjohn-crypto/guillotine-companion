@@ -361,7 +361,8 @@ describe('manager bid presentation', () => {
     const row = screen.getByRole('button', { name: /open details for Aggressive Alice/i });
     const heading = within(row).getByTestId('prediction-manager-heading');
     expect(heading.className).toContain('block');
-    expect(heading.textContent).toBe('Aggressive Alice');
+    expect(heading.textContent).toBe('Aggressive AliceActive · projection unavailable');
+    expect(within(heading).getByText('Active · projection unavailable')).toBeTruthy();
     expect(within(row).queryByText('Aggressive')).toBeNull();
     const layout = within(row).getByTestId('prediction-row-layout');
     const managerSide = within(row).getByTestId('prediction-manager-side');

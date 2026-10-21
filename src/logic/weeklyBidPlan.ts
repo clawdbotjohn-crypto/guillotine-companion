@@ -1,7 +1,7 @@
 import type { TeamRisk } from './analytics';
 import { parseLineupSlots, projectBestLineup, rankActiveTeams } from './analytics';
 import type { Roster } from '../api/types';
-import type { RosPlayerProjection, WeeklyScoredPlayer } from './projections';
+import { buildRosPositionRankMap, type RosPlayerProjection, type WeeklyScoredPlayer } from './projections';
 import type { WaiverPlayerRow } from './waivers';
 import { resolveStrategyBid } from './waiverStrategies';
 
@@ -194,6 +194,13 @@ export function classifyWeeklyLineupGain(gain: number): WeeklyLineupGainBand {
   return 'low';
 }
 
+/** Preserve strictly-positive gains that would otherwise round to a misleading +0.0. */
+export function formatWeeklyLineupGain(gain: number): string {
+  if (gain > 0 && gain < 0.01) return '<+0.01 pts';
+  if (gain > 0 && gain < 0.1) return `+${gain.toFixed(2)} pts`;
+  return `${gain >= 0 ? '+' : ''}${gain.toFixed(1)} pts`;
+}
+
 /**
  * Safe bidding gets cheaper by cut-sized rank bands above the Warning boundary. The first full
  * safe band is 1.0x, followed by 0.1 reductions to the approved 0.5 floor.
@@ -279,6 +286,7 @@ export function buildWeeklyBidPlan(input: WeeklyBidPlanInput): WeeklyBidPlan | n
   const initialStanding = classifyScenario(input, scenarioPlayers);
   const rows: WeeklyBidDropRow[] = [];
   const earliestDisplayedBid = new Map<string, number>();
+  const rosPositionRanks = buildRosPositionRankMap(input.rosProjections);
   const availableRows = input.availableRows.filter((row) =>
     POSITION_PLAYER_POSITIONS.has(row.position));
   const maxRows = Math.min(5, Math.max(0, input.maxPositionDrops ?? 5));
@@ -407,18 +415,21 @@ export function buildWeeklyBidPlan(input: WeeklyBidPlanInput): WeeklyBidPlan | n
 
     const standing = classifyScenario(input, scenarioPlayers);
     const recommendations = improvingIds.map((targetId): WeeklyBidRecommendation => {
-      const target = input.availableRows.find((row) => row.playerId === targetId) ?? {
-        playerId: targetId,
-        name: targetId,
-        position,
-        posRank: 0,
-        rosPoints: rosFor(targetId, input.rosProjections),
-        projectedPointsPerWeek: scoreFor(targetId, input.weeklyProjections),
-        sourceValue: rosFor(targetId, input.rosProjections),
-        starterWeeks: 0,
-        possibleStarterWeeks: 0,
-        suggestions: [],
-        predictedWinningBid: 0,
+      const existingTarget = input.availableRows.find((row) => row.playerId === targetId);
+      const target: WaiverPlayerRow = {
+        ...(existingTarget ?? {
+          playerId: targetId,
+          name: targetId,
+          position,
+          rosPoints: rosFor(targetId, input.rosProjections),
+          projectedPointsPerWeek: scoreFor(targetId, input.weeklyProjections),
+          sourceValue: rosFor(targetId, input.rosProjections),
+          starterWeeks: 0,
+          possibleStarterWeeks: 0,
+          suggestions: [],
+          predictedWinningBid: 0,
+        }),
+        posRank: rosPositionRanks.get(targetId) ?? existingTarget?.posRank ?? 0,
       };
       const standaloneAfter = classifyScenario(
         input,

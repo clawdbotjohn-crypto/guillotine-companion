@@ -19,6 +19,7 @@ import {
 } from '../api';
 import {
   buildWeeklyScoredPlayers,
+  buildBiddingTeamStatusMap,
   buildHubRosterRows,
   buildUpcomingByeWarnings,
   computeEliminations,
@@ -304,6 +305,7 @@ export function HubPage() {
     ]);
   };
   const projections = projectAllTeams(rosters, weeklyScoredPlayers, league, elimResult);
+  const biddingTeamStatuses = buildBiddingTeamStatusMap(elimResult, projections);
   const myProjection = projections.find((team) => team.rosterId === rosterId);
   const allRosterHistoricalRanks = computeAllRosterHistoricalRanks(elimResult);
   const myHistoricalTotalRank = allRosterHistoricalRanks.get(rosterId);
@@ -532,6 +534,7 @@ export function HubPage() {
           values={rosterValueMap}
           details={playerDetails}
           projectionState={playerProjectionState}
+          biddingTeamStatuses={biddingTeamStatuses}
         />
 
         {/* Recent bids (unlikely pre-season but safe to show) */}
@@ -678,6 +681,7 @@ export function HubPage() {
         values={rosterValueMap}
         details={playerDetails}
         projectionState={playerProjectionState}
+        biddingTeamStatuses={biddingTeamStatuses}
       />
 
       {/* Week-by-week scores */}
