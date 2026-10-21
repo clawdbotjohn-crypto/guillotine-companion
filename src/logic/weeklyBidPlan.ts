@@ -9,6 +9,7 @@ const POSITION_PLAYER_POSITIONS = new Set(['QB', 'RB', 'WR', 'TE']);
 const STREAMING_POSITIONS = ['DEF', 'K'] as const;
 
 export const MAX_POSITION_TARGETS_PER_DROP = 5;
+export const MAX_STREAMER_TARGETS_PER_DROP = 5;
 export const WEEKLY_LINEUP_GAIN_BANDS = {
   highMinimum: 10,
   midMinimum: 3,
@@ -384,46 +385,51 @@ export function buildWeeklyBidPlan(input: WeeklyBidPlanInput): WeeklyBidPlan | n
   }
 
   for (const position of STREAMING_POSITIONS) {
-    const current = scenarioPlayers
+    const current = originalPlayers
       .filter((playerId) => positionFor(input, playerId) === position)
       .sort((a, b) => scoreFor(a, input.weeklyProjections) - scoreFor(b, input.weeklyProjections)
         || a.localeCompare(b))[0];
     if (!current) continue;
-    const bestId = input.availablePlayerIds
-      .filter((playerId) => input.weeklyProjections.get(playerId)?.position === position)
+
+    const currentProjection = scoreFor(current, input.weeklyProjections);
+    const improvingCandidates = [...new Set(input.availablePlayerIds)]
+      .filter((playerId) => input.weeklyProjections.get(playerId)?.position === position
+        && scoreFor(playerId, input.weeklyProjections) > currentProjection)
       .sort((a, b) => scoreFor(b, input.weeklyProjections) - scoreFor(a, input.weeklyProjections)
-        || a.localeCompare(b))[0];
-    if (!bestId || scoreFor(bestId, input.weeklyProjections) <= scoreFor(current, input.weeklyProjections)) continue;
-    const baseRow = input.availableRows.find((row) => row.playerId === bestId) ?? {
-      playerId: bestId,
-      name: bestId,
-      position,
-      posRank: 0,
-      rosPoints: rosFor(bestId, input.rosProjections),
-      projectedPointsPerWeek: scoreFor(bestId, input.weeklyProjections),
-      sourceValue: rosFor(bestId, input.rosProjections),
-      starterWeeks: 0,
-      possibleStarterWeeks: 0,
-      suggestions: [],
-      predictedWinningBid: 0,
-    };
-    const standing = classifyScenario(input, scenarioPlayers);
-    const standaloneAfter = classifyScenario(
-      input,
-      originalPlayers.filter((playerId) => playerId !== current).concat(bestId),
+        || a.localeCompare(b));
+    const targetLimit = Math.min(
+      MAX_STREAMER_TARGETS_PER_DROP,
+      initialStanding.outOf,
+      improvingCandidates.length,
     );
-    const standaloneWeeklyGain = standaloneAfter.projectedTotal - initialStanding.projectedTotal;
-    rows.push({
-      kind: 'streamer',
-      dropPlayerId: current,
-      dropPosition: position,
-      scenarioBudgetBefore: scenarioBudget,
-      recommendations: [{
-        target: baseRow,
+    const improvingIds = improvingCandidates.slice(0, targetLimit);
+    if (improvingIds.length === 0) continue;
+
+    const standing = classifyScenario(input, scenarioPlayers);
+    const recommendations = improvingIds.map((targetId): WeeklyBidRecommendation => {
+      const target = input.availableRows.find((row) => row.playerId === targetId) ?? {
+        playerId: targetId,
+        name: targetId,
+        position,
+        posRank: 0,
+        rosPoints: rosFor(targetId, input.rosProjections),
+        projectedPointsPerWeek: scoreFor(targetId, input.weeklyProjections),
+        sourceValue: rosFor(targetId, input.rosProjections),
+        starterWeeks: 0,
+        possibleStarterWeeks: 0,
+        suggestions: [],
+        predictedWinningBid: 0,
+      };
+      const standaloneAfter = classifyScenario(
+        input,
+        originalPlayers.filter((playerId) => playerId !== current).concat(targetId),
+      );
+      return {
+        target,
         dropPlayerId: current,
-        weeklyGain: standaloneWeeklyGain,
-        scenarioWeeklyGain: scoreFor(bestId, input.weeklyProjections) - scoreFor(current, input.weeklyProjections),
-        rosGain: rosFor(bestId, input.rosProjections) - rosFor(current, input.rosProjections),
+        weeklyGain: standaloneAfter.projectedTotal - initialStanding.projectedTotal,
+        scenarioWeeklyGain: scoreFor(targetId, input.weeklyProjections) - currentProjection,
+        rosGain: rosFor(targetId, input.rosProjections) - rosFor(current, input.rosProjections),
         beforeRisk: standing.risk,
         afterRisk: standing.risk,
         beforeRank: initialStanding.rank,
@@ -433,7 +439,14 @@ export function buildWeeklyBidPlan(input: WeeklyBidPlanInput): WeeklyBidPlan | n
         budgetCapApplied: false,
         opponentCapApplied: false,
         safeMultiplier: null,
-      }],
+      };
+    });
+    rows.push({
+      kind: 'streamer',
+      dropPlayerId: current,
+      dropPosition: position,
+      scenarioBudgetBefore: scenarioBudget,
+      recommendations,
     });
   }
 

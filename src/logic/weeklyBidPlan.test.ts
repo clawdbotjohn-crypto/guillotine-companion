@@ -81,6 +81,42 @@ function base(overrides: Partial<WeeklyBidPlanInput> = {}): MutableInput {
   } as MutableInput;
 }
 
+function streamerInput({
+  activeTeamCount,
+  defCandidates,
+  kCandidates,
+}: {
+  activeTeamCount: number;
+  defCandidates: Array<[string, number]>;
+  kCandidates: Array<[string, number]>;
+}): MutableInput {
+  const candidates = [
+    ...defCandidates.map(([id, points]) => weekly(id, 'DEF', points)),
+    ...kCandidates.map(([id, points]) => weekly(id, 'K', points)),
+  ];
+  const opponents = Array.from({ length: activeTeamCount - 1 }, (_, index) =>
+    weekly(`stream-opponent-${index + 2}`, 'QB', 10 + index));
+  const weeklyPlayers = [
+    weekly('def-old', 'DEF', 5), weekly('k-old', 'K', 5), ...candidates, ...opponents,
+  ];
+  const rosPlayers = weeklyPlayers.map((player) =>
+    ros(player.playerId, player.position, player.points * 10));
+  const rosters = [
+    roster(1, ['def-old', 'k-old']),
+    ...opponents.map((player, index) => roster(index + 2, [player.playerId])),
+  ];
+  return base({
+    rosters,
+    activeRosterIds: new Set(rosters.map((item) => item.roster_id)),
+    lineupPositions: ['DEF', 'K'],
+    weeklyProjections: new Map(weeklyPlayers.map((player) => [player.playerId, player])),
+    rosProjections: new Map(rosPlayers.map((player) => [player.playerId, player])),
+    availableRows: candidates.map((player) => target(player.playerId, player.position, 12, 24)),
+    availablePlayerIds: candidates.map((player) => player.playerId),
+    maxPositionDrops: 0,
+  });
+}
+
 function pricingInput(
   selectedPoints: number,
   opponentPoints: number[],
@@ -410,11 +446,64 @@ describe('weekly team bid planning', () => {
     expect(repeatedTargets).toBeGreaterThan(0);
   });
 
-  it('adds at most one improving same-position $0 DEF and K replacement', () => {
-    const plan = buildWeeklyBidPlan(base({ maxPositionDrops: 0 }))!;
-    const streamers = plan.rows.filter((row) => row.kind === 'streamer');
+  it('builds at most one DEF and one K group, ordered by projection with strict improvement and $0 bids', () => {
+    const input = streamerInput({
+      activeTeamCount: 8,
+      defCandidates: [
+        ['def-worse', 4], ['def-equal', 5], ['def-b-tie', 9], ['def-top', 11], ['def-a-tie', 9],
+      ],
+      kCandidates: [['k-equal', 5], ['k-top', 8]],
+    });
+    input.rosters[0] = roster(1, ['def-old', 'def-rostered-better', 'k-old']);
+    input.weeklyProjections.set('def-rostered-better', weekly('def-rostered-better', 'DEF', 7));
+    input.rosProjections.set('def-rostered-better', ros('def-rostered-better', 'DEF', 70));
+
+    const streamers = buildWeeklyBidPlan(input)!.rows.filter((row) => row.kind === 'streamer');
     expect(streamers.map((row) => row.dropPosition)).toEqual(['DEF', 'K']);
-    expect(streamers.every((row) => row.recommendations.length === 1
-      && row.recommendations[0].suggestedBid === 0)).toBe(true);
+    expect(streamers.filter((row) => row.dropPosition === 'DEF')).toHaveLength(1);
+    expect(streamers.filter((row) => row.dropPosition === 'K')).toHaveLength(1);
+    expect(streamers[0].dropPlayerId).toBe('def-old');
+    expect(streamers[0].recommendations.map((item) => item.target.playerId)).toEqual([
+      'def-top', 'def-a-tie', 'def-b-tie',
+    ]);
+    expect(streamers[1].recommendations.map((item) => item.target.playerId)).toEqual(['k-top']);
+    expect(streamers.flatMap((row) => row.recommendations).every((item) =>
+      item.theoreticalBid === 0 && item.suggestedBid === 0)).toBe(true);
+  });
+
+  it('caps streamer targets at five when the active league and improving pool are larger', () => {
+    const plan = buildWeeklyBidPlan(streamerInput({
+      activeTeamCount: 8,
+      defCandidates: Array.from({ length: 7 }, (_, index): [string, number] => [`def-${index}`, 20 - index]),
+      kCandidates: [],
+    }))!;
+    const defense = plan.rows.find((row) => row.kind === 'streamer' && row.dropPosition === 'DEF')!;
+    expect(defense.recommendations).toHaveLength(5);
+    expect(defense.recommendations.map((item) => item.target.playerId)).toEqual([
+      'def-0', 'def-1', 'def-2', 'def-3', 'def-4',
+    ]);
+  });
+
+  it('caps streamer targets by active teams including the selected user', () => {
+    const plan = buildWeeklyBidPlan(streamerInput({
+      activeTeamCount: 3,
+      defCandidates: Array.from({ length: 6 }, (_, index): [string, number] => [`def-${index}`, 20 - index]),
+      kCandidates: [],
+    }))!;
+    const defense = plan.rows.find((row) => row.kind === 'streamer' && row.dropPosition === 'DEF')!;
+    expect(plan.activeTeamCount).toBe(3);
+    expect(defense.recommendations).toHaveLength(3);
+  });
+
+  it('caps streamer targets by the improving-candidate count', () => {
+    const plan = buildWeeklyBidPlan(streamerInput({
+      activeTeamCount: 8,
+      defCandidates: [['def-improves-a', 8], ['def-improves-b', 7], ['def-equal', 5]],
+      kCandidates: [],
+    }))!;
+    const defense = plan.rows.find((row) => row.kind === 'streamer' && row.dropPosition === 'DEF')!;
+    expect(defense.recommendations.map((item) => item.target.playerId)).toEqual([
+      'def-improves-a', 'def-improves-b',
+    ]);
   });
 });

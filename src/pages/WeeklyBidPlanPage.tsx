@@ -35,7 +35,11 @@ import {
   type RosteredPlayerOwner,
   type WaiverPlayerRow,
 } from '../logic/waivers';
-import { buildWeeklyBidPlan, type WeeklyBidRecommendation } from '../logic/weeklyBidPlan';
+import {
+  buildWeeklyBidPlan,
+  type WeeklyBidPlan,
+  type WeeklyBidRecommendation,
+} from '../logic/weeklyBidPlan';
 import { managerName } from '../logic/managerPredictionDisplay';
 import { getPlayerName, getPlayerPosition } from '../store/players';
 import { useAppStore, usePlayers } from '../store';
@@ -200,14 +204,14 @@ export function WeeklyTargetCard({
 
 export function WeeklyBidAccordionGroup({
   id,
-  label,
+  dropPlayerName,
   targetCount,
   defaultOpen = false,
   dropCard,
   children,
 }: {
   id: string;
-  label: string;
+  dropPlayerName: string;
   targetCount: number;
   defaultOpen?: boolean;
   dropCard: ReactNode;
@@ -215,25 +219,42 @@ export function WeeklyBidAccordionGroup({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const panelId = `${id}-targets`;
+  const targetCountLabel = `${targetCount} ${targetCount === 1 ? 'target' : 'targets'}`;
   return (
     <section className="min-w-0 overflow-hidden rounded-2xl border border-[#2a2e55] bg-[#0b0d20]/80" data-testid="weekly-bid-accordion">
       <div className="min-w-0">{dropCard}</div>
       <button
         type="button"
+        aria-label={`${targetCountLabel} for ${dropPlayerName}`}
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((value) => !value)}
-        className="flex min-h-11 w-full items-center justify-between gap-3 border-t border-[#2a2e55] bg-[#11142b] px-3 py-2 text-left text-xs font-semibold text-[#c7c9e7] transition-colors hover:bg-[#171a38] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#818cf8]"
+        className="flex min-h-11 w-full items-center justify-end gap-2 border-t border-[#2a2e55] bg-[#11142b] px-3 py-2 text-left font-['Space_Mono'] text-[10px] font-semibold text-[#8b8eac] transition-colors hover:bg-[#171a38] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#818cf8]"
       >
-        <span>{label}</span>
-        <span className="flex shrink-0 items-center gap-2 font-['Space_Mono'] text-[10px] text-[#8b8eac]">
-          {targetCount} {targetCount === 1 ? 'target' : 'targets'}
-          <ChevronDown className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
-        </span>
+        <span>{targetCountLabel}</span>
+        <ChevronDown className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
       </button>
       <div id={panelId} hidden={!open} className="min-w-0 space-y-3 border-t border-[#2a2e55] p-3">
         {children}
       </div>
+    </section>
+  );
+}
+
+export function WeeklyBidSummary({ plan }: { plan: WeeklyBidPlan }) {
+  const plannedPickupCount = plan.rows.filter((row) => row.kind === 'position').length;
+  return (
+    <section className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="Suggested Bids summary">
+      <Card hover={false} className="p-3"><p className="text-[9px] uppercase tracking-wider text-[#6b6e99]">Survival status</p><div className="mt-1"><StatusBadge status={plan.startingRisk} /></div></Card>
+      <Card hover={false} className="p-3"><p className="text-[9px] uppercase tracking-wider text-[#6b6e99]">Projected rank</p><p className="mt-1 font-['Space_Mono'] text-lg font-bold text-[#a5b4fc]">{plan.startingRank}/{plan.activeTeamCount}</p></Card>
+      <Card hover={false} className="p-3"><p className="text-[9px] uppercase tracking-wider text-[#6b6e99]">FAAB available</p><p className="mt-1 font-['Space_Mono'] text-lg font-bold text-[#10b981]">${plan.initialBudgetRemaining}</p></Card>
+      <Card hover={false} className="p-3">
+        <div role="group" aria-labelledby="planned-pickups-label" aria-describedby="planned-pickups-description">
+          <p id="planned-pickups-label" className="text-[9px] uppercase tracking-wider text-[#6b6e99]">Planned pickups</p>
+          <p className="mt-1 font-['Space_Mono'] text-lg font-bold">{plannedPickupCount}</p>
+          <p id="planned-pickups-description" className="sr-only">Conditional position-player pickups modeled</p>
+        </div>
+      </Card>
     </section>
   );
 }
@@ -411,7 +432,6 @@ export function WeeklyBidPlanPage() {
     || nflStateQuery.error || matchupsQuery.error || valuesModel.error || weeklyQuery.error;
   const close = () => navigate('/hub');
   const plan = model?.plan;
-  const positionMoveCount = plan?.rows.filter((row) => row.kind === 'position').length ?? 0;
   const currentRosterPlayerIds = rostersQuery.data
     ?.find((roster) => roster.roster_id === rosterId)?.players ?? [];
   const firstActionablePositionGroup = plan?.rows.find((row) =>
@@ -462,12 +482,7 @@ export function WeeklyBidPlanPage() {
         )}
         {!isLoading && !error && plan && (
           <>
-            <section className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="Suggested Bids summary">
-              <Card hover={false} className="p-3"><p className="text-[9px] uppercase tracking-wider text-[#6b6e99]">Posture</p><div className="mt-1"><StatusBadge status={plan.startingRisk} /></div></Card>
-              <Card hover={false} className="p-3"><p className="text-[9px] uppercase tracking-wider text-[#6b6e99]">Projected rank</p><p className="mt-1 font-['Space_Mono'] text-lg font-bold text-[#a5b4fc]">{plan.startingRank}/{plan.activeTeamCount}</p></Card>
-              <Card hover={false} className="p-3"><p className="text-[9px] uppercase tracking-wider text-[#6b6e99]">FAAB available</p><p className="mt-1 font-['Space_Mono'] text-lg font-bold text-[#10b981]">${plan.initialBudgetRemaining}</p></Card>
-              <Card hover={false} className="p-3"><p className="text-[9px] uppercase tracking-wider text-[#6b6e99]">Position moves</p><p className="mt-1 font-['Space_Mono'] text-lg font-bold">{positionMoveCount}</p></Card>
-            </section>
+            <WeeklyBidSummary plan={plan} />
             {plan.rows.length === 0 ? (
               <Card hover={false} className="p-6 text-center">
                 <h2 className="font-semibold">No Suggested Bids</h2>
@@ -485,7 +500,7 @@ export function WeeklyBidPlanPage() {
                     <WeeklyBidAccordionGroup
                       key={groupKey}
                       id={`weekly-bid-${row.kind}-${row.dropPlayerId}`}
-                      label={`Targets when dropping ${dropRow.name}`}
+                      dropPlayerName={dropRow.name}
                       targetCount={row.recommendations.length}
                       defaultOpen={row === firstActionablePositionGroup}
                       dropCard={(

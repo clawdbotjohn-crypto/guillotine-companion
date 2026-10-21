@@ -2,9 +2,14 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { CanonicalBidEvent } from '../logic';
-import type { WeeklyBidRecommendation } from '../logic/weeklyBidPlan';
+import type { WeeklyBidPlan, WeeklyBidRecommendation } from '../logic/weeklyBidPlan';
 import type { WaiverPlayerRow } from '../logic/waivers';
-import { WeeklyBidAccordionGroup, WeeklyDropPlayerCard, WeeklyTargetCard } from './WeeklyBidPlanPage';
+import {
+  WeeklyBidAccordionGroup,
+  WeeklyBidSummary,
+  WeeklyDropPlayerCard,
+  WeeklyTargetCard,
+} from './WeeklyBidPlanPage';
 
 const longName = 'Amon-Ra Extremely Long Synthetic Player Name';
 const target: WaiverPlayerRow = {
@@ -57,7 +62,7 @@ describe('Suggested Bids owner presentation', () => {
     const group = (
       <WeeklyBidAccordionGroup
         id="synthetic-drop"
-        label="Targets when dropping Synthetic Drop"
+        dropPlayerName="Synthetic Drop"
         targetCount={2}
         defaultOpen
         dropCard={<button type="button">Open Synthetic Drop details</button>}
@@ -66,11 +71,13 @@ describe('Suggested Bids owner presentation', () => {
       </WeeklyBidAccordionGroup>
     );
     const { rerender } = render(group);
-    const toggle = screen.getByRole('button', { name: /Targets when dropping Synthetic Drop/i });
+    const toggle = screen.getByRole('button', { name: '2 targets for Synthetic Drop' });
     const details = screen.getByRole('button', { name: 'Open Synthetic Drop details' });
     const panel = document.getElementById(toggle.getAttribute('aria-controls')!);
 
     expect(toggle.tagName).toBe('BUTTON');
+    expect(toggle.textContent).toBe('2 targets');
+    expect(toggle.textContent).not.toContain('Synthetic Drop');
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
     expect(panel?.hidden).toBe(false);
     fireEvent.click(details);
@@ -80,8 +87,66 @@ describe('Suggested Bids owner presentation', () => {
     expect(panel?.hidden).toBe(true);
 
     rerender(group);
-    expect(screen.getByRole('button', { name: /Targets when dropping Synthetic Drop/i })
+    expect(screen.getByRole('button', { name: '2 targets for Synthetic Drop' })
       .getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('uses localized singular and plural target-count grammar without visible drop-name copy', () => {
+    const { rerender } = render(
+      <WeeklyBidAccordionGroup
+        id="grammar-drop"
+        dropPlayerName="Synthetic Drop"
+        targetCount={1}
+        dropCard={<div>Synthetic Drop</div>}
+      >
+        <div>One target</div>
+      </WeeklyBidAccordionGroup>,
+    );
+    expect(screen.getByRole('button', { name: '1 target for Synthetic Drop' }).textContent)
+      .toBe('1 target');
+
+    rerender(
+      <WeeklyBidAccordionGroup
+        id="grammar-drop"
+        dropPlayerName="Synthetic Drop"
+        targetCount={3}
+        dropCard={<div>Synthetic Drop</div>}
+      >
+        <div>Three targets</div>
+      </WeeklyBidAccordionGroup>,
+    );
+    expect(screen.getByRole('button', { name: '3 targets for Synthetic Drop' }).textContent)
+      .toBe('3 targets');
+  });
+
+  it('renames summary fields and counts only conditional position-player pickup rounds', () => {
+    const plan: WeeklyBidPlan = {
+      rows: [
+        { kind: 'position', dropPlayerId: 'drop-a', dropPosition: 'RB', recommendations: [recommendation], scenarioBudgetBefore: 100 },
+        { kind: 'position', dropPlayerId: 'drop-b', dropPosition: 'WR', recommendations: [recommendation, recommendation], scenarioBudgetBefore: 80 },
+        { kind: 'streamer', dropPlayerId: 'def-old', dropPosition: 'DEF', recommendations: [recommendation], scenarioBudgetBefore: 80 },
+      ],
+      startingRisk: 'safe',
+      startingRank: 2,
+      activeTeamCount: 5,
+      initialBudgetRemaining: 100,
+      richestOtherActiveBudget: 90,
+    };
+    render(<WeeklyBidSummary plan={plan} />);
+
+    const summary = screen.getByRole('region', { name: 'Suggested Bids summary' });
+    expect(within(summary).getByText('Survival status')).toBeTruthy();
+    expect(within(summary).getByText('Projected rank')).toBeTruthy();
+    expect(within(summary).getByText('FAAB available')).toBeTruthy();
+    expect(within(summary).queryByText('Posture')).toBeNull();
+    expect(within(summary).queryByText('Position moves')).toBeNull();
+    expect(within(summary).queryByText('Bids won')).toBeNull();
+
+    const plannedPickups = within(summary).getByRole('group', {
+      name: 'Planned pickups',
+      description: 'Conditional position-player pickups modeled',
+    });
+    expect(within(plannedPickups).getByText('2')).toBeTruthy();
   });
 
   it('keeps long target names legible, preserves $0, removes collapsed prose, and opens the full Waivers details path', () => {
