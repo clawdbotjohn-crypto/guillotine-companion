@@ -1,5 +1,5 @@
-import { useMemo, type ComponentProps } from 'react';
-import { ArrowDown, ArrowLeft, ArrowUp, X } from 'lucide-react';
+import { useMemo, useState, type ComponentProps, type ReactNode } from 'react';
+import { ArrowDown, ArrowLeft, ArrowUp, ChevronDown, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
   useAllMatchups,
@@ -72,14 +72,14 @@ export function WeeklyDropPlayerCard({
 }) {
   return (
     <div
-      className="min-w-0 rounded-xl border border-[#ef4444]/55 bg-[#ef4444]/[0.06] p-1"
+      className="min-w-0 bg-[#ef4444]/[0.045]"
       data-testid="weekly-drop-card"
       data-bid-action="drop"
       role="group"
       aria-label={`Drop ${row.name}`}
     >
-      <div className="flex items-center gap-1 px-1.5 pb-1 pt-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#f87171]" aria-hidden="true">
-        <ArrowDown className="h-3 w-3" strokeWidth={2.5} />
+      <div className="flex min-h-8 items-center gap-1.5 border-b border-[#ef4444]/25 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-[#f87171]" aria-hidden="true">
+        <ArrowDown className="h-3.5 w-3.5" strokeWidth={2.5} />
         <span>Drop</span>
       </div>
       <WaiverPlayerCard
@@ -87,6 +87,7 @@ export function WeeklyDropPlayerCard({
         strategy="safe"
         summaryMode="suggested-bids"
         showCompactBidSummary={false}
+        embedded
         remainingFaab={null}
         nflTeam={nflTeam}
         age={age}
@@ -149,26 +150,23 @@ export function WeeklyTargetCard({
   const target = recommendation.target;
   const weekly = weeklyContext.get(target.playerId);
   const player = players?.get(target.playerId);
-  const impactSummary = `#${recommendation.beforeRank} → #${recommendation.afterRank} · +${recommendation.weeklyGain.toFixed(1)} lineup pts`;
   return (
     <div
-      className="min-w-0 rounded-xl border border-[#10b981]/55 bg-[#10b981]/[0.06] p-1"
+      className="min-w-0 overflow-hidden rounded-xl border border-[#10b981]/45 bg-[#10b981]/[0.045]"
       data-testid="weekly-target-card"
       data-bid-action="add"
       role="group"
       aria-label={`Add ${target.name}; league rank ${recommendation.beforeRank} to ${recommendation.afterRank}; plus ${recommendation.weeklyGain.toFixed(1)} lineup points; suggested bid $${recommendation.suggestedBid}`}
     >
-      <div className="flex min-w-0 items-center justify-between gap-2 px-1.5 pb-1 pt-0.5 text-[9px] font-bold text-[#34d399]" aria-hidden="true">
-        <span className="flex shrink-0 items-center gap-1 uppercase tracking-[0.12em]">
-          <ArrowUp className="h-3 w-3" strokeWidth={2.5} />
-          Add
-        </span>
-        <span className="min-w-0 truncate font-mono font-semibold tracking-normal text-[#a7f3d0]">{impactSummary}</span>
+      <div className="flex min-h-8 items-center gap-1.5 border-b border-[#10b981]/25 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-[#34d399]" aria-hidden="true">
+        <ArrowUp className="h-3.5 w-3.5" strokeWidth={2.5} />
+        <span>Add</span>
       </div>
       <WaiverPlayerCard
         row={targetRowWithBid(recommendation)}
         strategy="safe"
         summaryMode="suggested-bids"
+        embedded
         remainingFaab={remainingFaab}
         nflTeam={player?.team}
         age={player?.age}
@@ -186,7 +184,57 @@ export function WeeklyTargetCard({
         teamImpactContext={teamImpactContext}
         teamImpactScenario={teamImpactScenario}
       />
+      <div className="grid grid-cols-1 gap-2 border-t border-[#10b981]/25 bg-[#081c1c]/55 px-3 py-2.5 sm:grid-cols-2" data-testid="weekly-target-impact">
+        <div className="flex min-w-0 items-center justify-between gap-3 sm:block">
+          <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#8b8eac]">Next-week gain</span>
+          <span className="whitespace-nowrap font-['Space_Mono'] text-sm font-bold text-[#6ee7b7]">+{recommendation.weeklyGain.toFixed(1)} pts</span>
+        </div>
+        <div className="flex min-w-0 items-center justify-between gap-3 sm:block sm:text-right">
+          <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#8b8eac]">Overall rank</span>
+          <span className="whitespace-nowrap font-['Space_Mono'] text-sm font-bold text-[#f0f0ff]">#{recommendation.beforeRank} → #{recommendation.afterRank}</span>
+        </div>
+      </div>
     </div>
+  );
+}
+
+export function WeeklyBidAccordionGroup({
+  id,
+  label,
+  targetCount,
+  defaultOpen = false,
+  dropCard,
+  children,
+}: {
+  id: string;
+  label: string;
+  targetCount: number;
+  defaultOpen?: boolean;
+  dropCard: ReactNode;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const panelId = `${id}-targets`;
+  return (
+    <section className="min-w-0 overflow-hidden rounded-2xl border border-[#2a2e55] bg-[#0b0d20]/80" data-testid="weekly-bid-accordion">
+      <div className="min-w-0">{dropCard}</div>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen((value) => !value)}
+        className="flex min-h-11 w-full items-center justify-between gap-3 border-t border-[#2a2e55] bg-[#11142b] px-3 py-2 text-left text-xs font-semibold text-[#c7c9e7] transition-colors hover:bg-[#171a38] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#818cf8]"
+      >
+        <span>{label}</span>
+        <span className="flex shrink-0 items-center gap-2 font-['Space_Mono'] text-[10px] text-[#8b8eac]">
+          {targetCount} {targetCount === 1 ? 'target' : 'targets'}
+          <ChevronDown className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
+        </span>
+      </button>
+      <div id={panelId} hidden={!open} className="min-w-0 space-y-3 border-t border-[#2a2e55] p-3">
+        {children}
+      </div>
+    </section>
   );
 }
 
@@ -302,21 +350,6 @@ export function WeeklyBidPlanPage() {
       valueByPlayerId: new Map([...ros].map(([playerId, value]) => [playerId, value.totalPoints])),
       replacementByPosition: vorpCalibration?.replacementByPosition,
     });
-    const recommendationScenarios = new Map<string, string[]>();
-    let scenarioPlayers = [...(rosters.find((roster) => roster.roster_id === rosterId)?.players ?? [])];
-    for (const row of plan?.rows ?? []) {
-      for (const recommendation of row.recommendations) {
-        recommendationScenarios.set(
-          `${row.dropPlayerId}:${recommendation.target.playerId}`,
-          [...scenarioPlayers],
-        );
-      }
-      if (row.kind === 'position' && row.recommendations[0]) {
-        scenarioPlayers = scenarioPlayers
-          .filter((playerId) => playerId !== row.dropPlayerId)
-          .concat(row.recommendations[0].target.playerId);
-      }
-    }
     const positionRanks = new Map<string, number>();
     const positionGroups = new Map<string, RosPlayerProjection[]>();
     for (const projection of ros.values()) {
@@ -351,7 +384,6 @@ export function WeeklyBidPlanPage() {
       plan,
       elimination,
       weeklyScoredPlayers: weekly,
-      recommendationScenarios,
       rosteredRows,
       weeklyContext: buildWeeklyProjectionContext(
         weeklyQuery.data,
@@ -380,6 +412,10 @@ export function WeeklyBidPlanPage() {
   const close = () => navigate('/hub');
   const plan = model?.plan;
   const positionMoveCount = plan?.rows.filter((row) => row.kind === 'position').length ?? 0;
+  const currentRosterPlayerIds = rostersQuery.data
+    ?.find((roster) => roster.roster_id === rosterId)?.players ?? [];
+  const firstActionablePositionGroup = plan?.rows.find((row) =>
+    row.kind === 'position' && row.recommendations.length > 0);
   const teamImpactContext = rostersQuery.data && leagueQuery.data && model
     ? {
       rosters: rostersQuery.data,
@@ -437,57 +473,59 @@ export function WeeklyBidPlanPage() {
                 <h2 className="font-semibold">No Suggested Bids</h2>
               </Card>
             ) : (
-              <section aria-label="Suggested Bids" className="overflow-hidden rounded-xl border border-[#1a1e3a]">
-                <div className="grid grid-cols-[minmax(5.5rem,0.58fr)_minmax(0,2fr)] gap-2 border-b border-[#2a2e55] bg-[#0c0f22] px-3 py-2 text-[9px] font-semibold uppercase tracking-[0.12em] text-[#6b6e99] sm:grid-cols-[minmax(11rem,0.75fr)_minmax(0,2fr)] sm:gap-4 sm:px-4">
-                  <span>Who to drop</span><span>Targets</span>
-                </div>
+              <section aria-label="Suggested Bids" className="min-w-0 space-y-4">
                 {plan.rows.map((row) => {
                   const drop = playersQuery.data?.get(row.dropPlayerId);
                   const dropRow = model.rosteredRows.get(row.dropPlayerId);
                   const dropOwner = ownershipByPlayer.get(row.dropPlayerId);
                   const dropWeekly = model.weeklyContext.get(row.dropPlayerId);
                   if (!dropRow || !dropOwner) return null;
+                  const groupKey = `${row.kind}-${row.dropPlayerId}`;
                   return (
-                    <article key={`${row.kind}-${row.dropPlayerId}`} className="grid min-w-0 grid-cols-[minmax(5.5rem,0.58fr)_minmax(0,2fr)] gap-2 border-b border-[#1a1e3a] bg-[#090a18] px-3 py-4 last:border-b-0 sm:grid-cols-[minmax(11rem,0.75fr)_minmax(0,2fr)] sm:gap-4 sm:px-4" data-testid="weekly-drop-row">
-                      <WeeklyDropPlayerCard
-                        row={dropRow}
-                        owner={dropOwner}
-                        playingWeek={playingWeek}
-                        weeklyPoints={dropWeekly?.points}
-                        weeklyRank={dropWeekly?.positionRank}
-                        nflTeam={drop?.team}
-                        age={drop?.age}
-                        status={drop?.status}
-                        injuryStatus={drop?.injury_status}
-                        byeWeek={getTeamByeWeek(leagueQuery.data?.season ?? '', drop?.team)}
-                        canonicalHistory={canonicalHistoryByPlayer.get(row.dropPlayerId) ?? []}
-                        managerLabels={managerLabels}
-                        selectedRosterId={rosterId}
-                      />
-                      <div className="min-w-0">
-                        {row.recommendations.map((recommendation) => (
-                          <WeeklyTargetCard
-                            key={recommendation.target.playerId}
-                            recommendation={recommendation}
-                            playingWeek={playingWeek}
-                            remainingFaab={row.scenarioBudgetBefore}
-                            weeklyContext={model!.weeklyContext}
-                            players={playersQuery.data}
-                            season={leagueQuery.data?.season ?? ''}
-                            selectedRosterId={rosterId}
-                            canonicalHistory={canonicalHistoryByPlayer.get(recommendation.target.playerId) ?? []}
-                            managerLabels={managerLabels}
-                            teamImpactContext={teamImpactContext}
-                            teamImpactScenario={{
-                              selectedRosterPlayerIds: model.recommendationScenarios.get(
-                                `${row.dropPlayerId}:${recommendation.target.playerId}`,
-                              ) ?? [],
-                              explicitDropPlayerId: recommendation.dropPlayerId,
-                            }}
-                          />
-                        ))}
-                      </div>
-                    </article>
+                    <WeeklyBidAccordionGroup
+                      key={groupKey}
+                      id={`weekly-bid-${row.kind}-${row.dropPlayerId}`}
+                      label={`Targets when dropping ${dropRow.name}`}
+                      targetCount={row.recommendations.length}
+                      defaultOpen={row === firstActionablePositionGroup}
+                      dropCard={(
+                        <WeeklyDropPlayerCard
+                          row={dropRow}
+                          owner={dropOwner}
+                          playingWeek={playingWeek}
+                          weeklyPoints={dropWeekly?.points}
+                          weeklyRank={dropWeekly?.positionRank}
+                          nflTeam={drop?.team}
+                          age={drop?.age}
+                          status={drop?.status}
+                          injuryStatus={drop?.injury_status}
+                          byeWeek={getTeamByeWeek(leagueQuery.data?.season ?? '', drop?.team)}
+                          canonicalHistory={canonicalHistoryByPlayer.get(row.dropPlayerId) ?? []}
+                          managerLabels={managerLabels}
+                          selectedRosterId={rosterId}
+                        />
+                      )}
+                    >
+                      {row.recommendations.map((recommendation) => (
+                        <WeeklyTargetCard
+                          key={recommendation.target.playerId}
+                          recommendation={recommendation}
+                          playingWeek={playingWeek}
+                          remainingFaab={row.scenarioBudgetBefore}
+                          weeklyContext={model!.weeklyContext}
+                          players={playersQuery.data}
+                          season={leagueQuery.data?.season ?? ''}
+                          selectedRosterId={rosterId}
+                          canonicalHistory={canonicalHistoryByPlayer.get(recommendation.target.playerId) ?? []}
+                          managerLabels={managerLabels}
+                          teamImpactContext={teamImpactContext}
+                          teamImpactScenario={{
+                            selectedRosterPlayerIds: currentRosterPlayerIds,
+                            explicitDropPlayerId: recommendation.dropPlayerId,
+                          }}
+                        />
+                      ))}
+                    </WeeklyBidAccordionGroup>
                   );
                 })}
               </section>

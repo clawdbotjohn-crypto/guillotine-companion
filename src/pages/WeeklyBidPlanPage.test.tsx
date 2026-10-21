@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { CanonicalBidEvent } from '../logic';
 import type { WeeklyBidRecommendation } from '../logic/weeklyBidPlan';
 import type { WaiverPlayerRow } from '../logic/waivers';
-import { WeeklyDropPlayerCard, WeeklyTargetCard } from './WeeklyBidPlanPage';
+import { WeeklyBidAccordionGroup, WeeklyDropPlayerCard, WeeklyTargetCard } from './WeeklyBidPlanPage';
 
 const longName = 'Amon-Ra Extremely Long Synthetic Player Name';
 const target: WaiverPlayerRow = {
@@ -24,6 +24,7 @@ const recommendation: WeeklyBidRecommendation = {
   target,
   dropPlayerId: 'drop-player',
   weeklyGain: 5,
+  scenarioWeeklyGain: 5,
   rosGain: 50,
   beforeRisk: 'warning',
   afterRisk: 'safe',
@@ -52,6 +53,37 @@ const history: CanonicalBidEvent[] = [{
 }];
 
 describe('Suggested Bids owner presentation', () => {
+  it('uses a native accessible accordion with separate player-details control and preserves user state on rerender', () => {
+    const group = (
+      <WeeklyBidAccordionGroup
+        id="synthetic-drop"
+        label="Targets when dropping Synthetic Drop"
+        targetCount={2}
+        defaultOpen
+        dropCard={<button type="button">Open Synthetic Drop details</button>}
+      >
+        <div>Synthetic full-width targets</div>
+      </WeeklyBidAccordionGroup>
+    );
+    const { rerender } = render(group);
+    const toggle = screen.getByRole('button', { name: /Targets when dropping Synthetic Drop/i });
+    const details = screen.getByRole('button', { name: 'Open Synthetic Drop details' });
+    const panel = document.getElementById(toggle.getAttribute('aria-controls')!);
+
+    expect(toggle.tagName).toBe('BUTTON');
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(panel?.hidden).toBe(false);
+    fireEvent.click(details);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(panel?.hidden).toBe(true);
+
+    rerender(group);
+    expect(screen.getByRole('button', { name: /Targets when dropping Synthetic Drop/i })
+      .getAttribute('aria-expanded')).toBe('false');
+  });
+
   it('keeps long target names legible, preserves $0, removes collapsed prose, and opens the full Waivers details path', () => {
     const weeklyContext = new Map([['target-player', {
       playerId: 'target-player', position: 'WR', points: 18, positionRank: 1,
@@ -79,9 +111,11 @@ describe('Suggested Bids owner presentation', () => {
     const addGroup = screen.getByRole('group', { name: new RegExp(`^Add ${longName}`) });
     expect(addGroup.getAttribute('data-bid-action')).toBe('add');
     expect(addGroup.getAttribute('aria-label')).toContain('league rank 10 to 6; plus 5.0 lineup points; suggested bid $0');
-    expect(addGroup.className).toContain('border-[#10b981]/55');
+    expect(addGroup.className).toContain('border-[#10b981]/45');
     expect(within(addGroup).getByText('Add')).toBeTruthy();
-    expect(within(addGroup).getByText('#10 → #6 · +5.0 lineup pts')).toBeTruthy();
+    const impact = within(addGroup).getByTestId('weekly-target-impact');
+    expect(within(impact).getByText('+5.0 pts')).toBeTruthy();
+    expect(within(impact).getByText('#10 → #6')).toBeTruthy();
     const opener = within(addGroup).getByRole('button', { name: `${longName}, suggested bid $0. Open player details` });
     const renderedName = within(opener).getByText(longName);
     expect(renderedName.className).toContain('break-words');
@@ -205,10 +239,10 @@ describe('Suggested Bids owner presentation', () => {
 
     const dropGroup = screen.getByRole('group', { name: 'Drop Synthetic Defense With A Full Wrapped Name' });
     expect(dropGroup.getAttribute('data-bid-action')).toBe('drop');
-    expect(dropGroup.className).toContain('border-[#ef4444]/55');
+    expect(dropGroup.className).toContain("bg-[#ef4444]/[0.045]");
     expect(within(dropGroup).getByText('Drop')).toBeTruthy();
     const opener = within(dropGroup).getByRole('button', { name: /Synthetic Defense With A Full Wrapped Name, owned by your selected team/i });
-    expect(opener.parentElement?.parentElement?.className).toContain('border-[#2a2d4d]');
+    expect(opener.parentElement?.parentElement?.className).toContain('!border-0');
     expect(opener.parentElement?.parentElement?.className).not.toContain('border-[#10b981]/70');
     const name = within(opener).getByText('Synthetic Defense With A Full Wrapped Name');
     expect(name.className).toContain('break-words');

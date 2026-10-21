@@ -296,6 +296,25 @@ describe('weekly team bid planning', () => {
     }
   });
 
+  it('keeps independent same-band Safe values even when the higher-priced target sorts second', () => {
+    const input = pricingInput(
+      30,
+      [25, 20, 15, 10],
+      [['henry', 12], ['flowers', 11]],
+    );
+    input.availableRows = [
+      target('henry', 'QB', 52, 99),
+      target('flowers', 'QB', 91, 99),
+    ];
+
+    const recommendations = buildWeeklyBidPlan(input)!.rows[0].recommendations;
+    expect(recommendations.map((item) => item.target.playerId)).toEqual(['henry', 'flowers']);
+    expect(recommendations.map((item) => classifyWeeklyLineupGain(item.scenarioWeeklyGain)))
+      .toEqual(['high', 'high']);
+    expect(recommendations.map((item) => item.theoreticalBid)).toEqual([52, 91]);
+    expect(recommendations.map((item) => item.suggestedBid)).toEqual([52, 91]);
+  });
+
   it('uses the current class for merit, then the top-impact win class for the next round', () => {
     const weekPlayers = [
       weekly('drop-a', 'QB', 0), weekly('drop-b', 'RB', 0),
@@ -331,7 +350,44 @@ describe('weekly team bid planning', () => {
     expect(rows[1].recommendations[0].theoreticalBid).toBe(20);
   });
 
-  it('limits groups to five, keeps row and repeated-target bids monotonic, and reserves each prior row maximum', () => {
+  it('shows later-round repeated targets against the actual current roster, not prior hypothetical wins', () => {
+    const weeklyPlayers = [
+      weekly('drop-a', 'RB', 0), weekly('drop-b', 'WR', 1),
+      weekly('top-win', 'RB', 30), weekly('repeated', 'TE', 20),
+      weekly('opponent-a', 'RB', 25), weekly('opponent-b', 'RB', 15),
+    ];
+    const rosPlayers = [
+      ros('drop-a', 'RB', 10), ros('drop-b', 'WR', 20),
+      ros('top-win', 'RB', 200), ros('repeated', 'TE', 150),
+      ros('opponent-a', 'RB', 100), ros('opponent-b', 'RB', 90),
+    ];
+    const plan = buildWeeklyBidPlan(base({
+      rosters: [
+        roster(1, ['drop-a', 'drop-b']),
+        roster(2, ['opponent-a']),
+        roster(3, ['opponent-b']),
+      ],
+      activeRosterIds: new Set([1, 2, 3]),
+      lineupPositions: ['FLEX'],
+      weeklyProjections: new Map(weeklyPlayers.map((player) => [player.playerId, player])),
+      rosProjections: new Map(rosPlayers.map((player) => [player.playerId, player])),
+      availableRows: [target('top-win', 'RB', 10, 20), target('repeated', 'TE', 10, 20)],
+      availablePlayerIds: ['top-win', 'repeated'],
+      maxPositionDrops: 2,
+    }))!;
+
+    const rows = plan.rows.filter((row) => row.kind === 'position');
+    const laterRepeated = rows[1].recommendations.find((item) => item.target.playerId === 'repeated');
+    expect(rows[0].recommendations[0].target.playerId).toBe('top-win');
+    expect(laterRepeated).toMatchObject({
+      beforeRank: 3,
+      afterRank: 2,
+      weeklyGain: 19,
+      scenarioWeeklyGain: 0,
+    });
+  });
+
+  it('limits groups to five, preserves repeated-player caps, and reserves each prior row maximum', () => {
     const plan = buildWeeklyBidPlan(base({ maxPositionDrops: 3 }))!;
     const rows = plan.rows.filter((row) => row.kind === 'position');
     expect(rows[0].recommendations).toHaveLength(5);
@@ -342,7 +398,6 @@ describe('weekly team bid planning', () => {
     for (const row of rows) {
       expect(row.scenarioBudgetBefore).toBe(expectedBudget);
       const bids = row.recommendations.map((rec) => rec.suggestedBid);
-      expect(bids).toEqual([...bids].sort((a, b) => b - a));
       for (const recommendation of row.recommendations) {
         const first = earliest.get(recommendation.target.playerId);
         if (first != null) {

@@ -217,6 +217,7 @@ export function WaiverPlayerCard({
   strategy,
   summaryMode = 'default',
   showCompactBidSummary = true,
+  embedded = false,
   customValue,
   onCustomValueCommit,
   remainingFaab,
@@ -247,6 +248,8 @@ export function WaiverPlayerCard({
   strategy: DisplayStrategyKey;
   summaryMode?: 'default' | 'suggested-bids';
   showCompactBidSummary?: boolean;
+  /** Removes duplicate card chrome when a parent feature supplies the single visual boundary. */
+  embedded?: boolean;
   customValue?: number;
   onCustomValueCommit?: (value: number) => void;
   remainingFaab: number | null;
@@ -346,7 +349,7 @@ export function WaiverPlayerCard({
 
   return (
     <>
-      <Card hover className={`p-0 mb-2 overflow-hidden ${owner ? selectedTeamOwner && !suppressSelectedOwnerAccent ? 'border-[#10b981]/70' : 'border-[#2a2d4d]' : ''}`}>
+      <Card hover className={`p-0 overflow-hidden ${embedded ? '!mb-0 !rounded-none !border-0 !bg-transparent !backdrop-blur-none hover:!border-0 hover:!shadow-none' : 'mb-2'} ${!embedded && owner ? selectedTeamOwner && !suppressSelectedOwnerAccent ? 'border-[#10b981]/70' : 'border-[#2a2d4d]' : ''}`}>
         <div className="flex min-w-0 items-stretch">
           <button
             type="button"

@@ -36,10 +36,15 @@ export interface WeeklyBidPlanInput {
 export interface WeeklyBidRecommendation {
   target: WaiverPlayerRow;
   dropPlayerId: string;
+  /** User-facing standalone gain from the actual current roster for this displayed transaction. */
   weeklyGain: number;
+  /** Internal conditional-scenario gain used only for ordering and bid-band selection. */
+  scenarioWeeklyGain: number;
   rosGain: number;
+  /** Conditional planning posture; display impact always uses beforeRank/afterRank below. */
   beforeRisk: TeamRisk;
   afterRisk: TeamRisk;
+  /** User-facing standalone rank transition from the actual current roster. */
   beforeRank: number;
   afterRank: number;
   theoreticalBid: number;
@@ -250,7 +255,7 @@ function recommendationComparator(a: WeeklyBidRecommendation, b: WeeklyBidRecomm
   const transitionA = a.afterRisk === 'safe' ? 2 : a.afterRisk === 'warning' ? 1 : 0;
   const transitionB = b.afterRisk === 'safe' ? 2 : b.afterRisk === 'warning' ? 1 : 0;
   return transitionB - transitionA
-    || b.weeklyGain - a.weeklyGain
+    || b.scenarioWeeklyGain - a.scenarioWeeklyGain
     || b.rosGain - a.rosGain
     || a.target.playerId.localeCompare(b.target.playerId);
 }
@@ -290,21 +295,31 @@ export function buildWeeklyBidPlan(input: WeeklyBidPlanInput): WeeklyBidPlan | n
         && scoreFor(target.playerId, input.weeklyProjections) > dropWeek
         && rosFor(target.playerId, input.rosProjections) > dropRos)
       .map((target): WeeklyBidRecommendation => {
-        const replaced = scenarioPlayers
+        const scenarioRosterAfter = scenarioPlayers
           .filter((playerId) => playerId !== drop.playerId)
           .concat(target.playerId);
-        const after = classifyScenario(input, replaced);
-        const weeklyGain = after.projectedTotal - before.projectedTotal;
-        const priced = theoreticalBid(target, before, weeklyGain, input.eliminationsPerWeek);
+        const scenarioAfter = classifyScenario(input, scenarioRosterAfter);
+        const scenarioWeeklyGain = scenarioAfter.projectedTotal - before.projectedTotal;
+        const currentRosterAfter = originalPlayers
+          .filter((playerId) => playerId !== drop.playerId)
+          .concat(target.playerId);
+        const standaloneAfter = classifyScenario(input, currentRosterAfter);
+        const priced = theoreticalBid(
+          target,
+          before,
+          scenarioWeeklyGain,
+          input.eliminationsPerWeek,
+        );
         return {
           target,
           dropPlayerId: drop.playerId,
-          weeklyGain,
+          weeklyGain: standaloneAfter.projectedTotal - initialStanding.projectedTotal,
+          scenarioWeeklyGain,
           rosGain: rosFor(target.playerId, input.rosProjections) - dropRos,
           beforeRisk: before.risk,
-          afterRisk: after.risk,
-          beforeRank: before.rank,
-          afterRank: after.rank,
+          afterRisk: scenarioAfter.risk,
+          beforeRank: initialStanding.rank,
+          afterRank: standaloneAfter.rank,
           theoreticalBid: priced.value,
           suggestedBid: priced.value,
           budgetCapApplied: false,
@@ -312,34 +327,30 @@ export function buildWeeklyBidPlan(input: WeeklyBidPlanInput): WeeklyBidPlan | n
           safeMultiplier: priced.safeMultiplier,
         };
       })
-      // Positive ROS/raw-week upgrades that do no lineup harm remain useful bench options.
-      .filter((recommendation) => recommendation.weeklyGain >= 0)
+      // Positive ROS/raw-week upgrades that do no conditional-scenario lineup harm remain useful.
+      .filter((recommendation) => recommendation.scenarioWeeklyGain >= 0)
       .sort(recommendationComparator)
       .slice(0, MAX_POSITION_TARGETS_PER_DROP);
 
     if (meritRecommendations.length === 0) continue;
 
-    let previousDisplayedBid = Number.POSITIVE_INFINITY;
     const recommendations = meritRecommendations.map((recommendation) => {
       const duplicateCap = earliestDisplayedBid.get(recommendation.target.playerId)
         ?? Number.POSITIVE_INFINITY;
-      // Merit is calculated first. Scenario/opponent/duplicate/row monotonic caps are display guards.
+      // Each target keeps its own strategy value. Only scenario budget, opponent budget, and the
+      // same-player-across-rounds invariant may cap it; ordinal position within this group may not.
       const suggestedBid = Math.max(0, Math.min(
         recommendation.theoreticalBid,
         scenarioBudget,
         opponentHardCap,
         duplicateCap,
-        previousDisplayedBid,
       ));
       const budgetCapApplied = suggestedBid < recommendation.theoreticalBid
         && scenarioBudget <= opponentHardCap
-        && scenarioBudget <= duplicateCap
-        && scenarioBudget <= previousDisplayedBid;
+        && scenarioBudget <= duplicateCap;
       const opponentCapApplied = suggestedBid < recommendation.theoreticalBid
         && opponentHardCap < scenarioBudget
-        && opponentHardCap <= duplicateCap
-        && opponentHardCap <= previousDisplayedBid;
-      previousDisplayedBid = suggestedBid;
+        && opponentHardCap <= duplicateCap;
       return {
         ...recommendation,
         suggestedBid,
@@ -397,6 +408,11 @@ export function buildWeeklyBidPlan(input: WeeklyBidPlanInput): WeeklyBidPlan | n
       predictedWinningBid: 0,
     };
     const standing = classifyScenario(input, scenarioPlayers);
+    const standaloneAfter = classifyScenario(
+      input,
+      originalPlayers.filter((playerId) => playerId !== current).concat(bestId),
+    );
+    const standaloneWeeklyGain = standaloneAfter.projectedTotal - initialStanding.projectedTotal;
     rows.push({
       kind: 'streamer',
       dropPlayerId: current,
@@ -405,12 +421,13 @@ export function buildWeeklyBidPlan(input: WeeklyBidPlanInput): WeeklyBidPlan | n
       recommendations: [{
         target: baseRow,
         dropPlayerId: current,
-        weeklyGain: scoreFor(bestId, input.weeklyProjections) - scoreFor(current, input.weeklyProjections),
+        weeklyGain: standaloneWeeklyGain,
+        scenarioWeeklyGain: scoreFor(bestId, input.weeklyProjections) - scoreFor(current, input.weeklyProjections),
         rosGain: rosFor(bestId, input.rosProjections) - rosFor(current, input.rosProjections),
         beforeRisk: standing.risk,
         afterRisk: standing.risk,
-        beforeRank: standing.rank,
-        afterRank: standing.rank,
+        beforeRank: initialStanding.rank,
+        afterRank: standaloneAfter.rank,
         theoreticalBid: 0,
         suggestedBid: 0,
         budgetCapApplied: false,
