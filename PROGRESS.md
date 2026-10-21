@@ -1,3 +1,82 @@
+# 2026-10-21 — Recurring owner decision report freshness gate (implementation complete)
+
+## Status and evidence boundary
+
+- Dynamically discovered newest completed auction via read-only provider fetch: transaction index **6** / Decision Week **7**, latest completed waiver batch `2026-10-21T07:06:59.011Z`, with **31 complete** and **159 failed** waiver rows.
+- Immutable evidence gate check: a fresh private exact manifest `2026-10-21-post-waiver-auto-raw-manifest-2026-10-21T09-10-47Z.json` now retains Decision Week 7 post-waiver evidence outside git. No same-week frozen pre-auction prediction panel exists, and the public read-only snapshot request still resolves to exact Decision Week 5.
+- Therefore Decision Week 7 is **not scoreable**. Decision Week 5 remains the latest scoreable week. All nine report answers and all numeric conclusions remain unchanged and continue to be based on Week 5 scoreable evidence.
+- No production formula/default, deployment/workflow, merge, or provider/database mutation was performed.
+
+## Implemented
+
+- Added append-only weekly status fixture `scripts/fixtures/bidding-weekly-status-2026-10-21.json` capturing the newly completed auction, exact post-waiver retention, and explicit missing-frozen-panel state.
+- Extended `scripts/generate-bidding-analysis-presentation.ts` weekly status schema/validation to support both:
+  - `matching-frozen-pre-auction-prediction-panel-missing`
+  - `missing-immutable-post-waiver-capture-and-frozen-panel`
+- Updated freshness-note rendering and Appendix E scoreability explanation so it truthfully distinguishes:
+  - exact post-waiver outcomes retained but unscored, vs.
+  - no immutable post-waiver capture artifact yet.
+- Updated lineage labeling to reflect whether freshness is backed by exact post-waiver evidence or a missing-capture gate.
+- Updated presentation tests to load the latest weekly fixture deterministically and assert the Week 7 exact-postwaiver-but-unscoreable freshness gate while preserving nine-question/metrics invariants.
+- Regenerated `docs/analysis/bidding-strategy-accuracy-seamex-2026.{md,html,pdf}`.
+
+## Root cause / prevention / remaining unknown
+
+- Tuesday's 20:45 prospective capture cron did run but failed closed before provider reads: its configured worktree `AGENTS.md` and `docs/analysis/PREWAIVER_CAPTURE_RUNBOOK.md` prerequisites do not exist (the runbook currently lives at repository root). No cron was modified in this analysis task.
+- Repair those configured paths before Decision Week 8, retain the fail-closed cutoff guard, and alert immediately when the same-week frozen panel is absent.
+- Decision Week 7 cannot be made scoreable retrospectively because the frozen pre-auction panel is missing; exact post-waiver outcomes alone are insufficient.
+
+## Verification
+
+- Focused presentation suite: `npx vitest run scripts/__tests__/bidding-analysis-presentation.test.ts` → **17 passed**.
+- Type/lint/build: `npx tsc --noEmit`, `npm run lint` (0 errors; 1 pre-existing React warning), `npm run build` → passed.
+- Determinism: two consecutive `npm run analyze:bidding:presentation` runs were byte-identical:
+  - Markdown `d1f6b06805b30658e533555116f2da75110c0ea5a48f3b1d1574c77d2493f979`
+  - HTML `a623f2be8002b57123696afa35d7a178201e9c0298f5a9bb960ea7c5ec6a2e0b`
+  - PDF `3b3cefb0d0ad0c4c6fd304d7f27ef886e4faad9719d7f7cfcad7947294ee352b`
+- Render QA:
+  - HTML desktop (1440px) and mobile (390px) snapshot checks show no horizontal overflow and retain freshness note + nine cards.
+  - PDF rendered through Ghostscript as **24 pages** with consistent dimensions and no near-blank pages.
+- Relevant full-suite check run:
+  - `weekly-market-analysis` currently has **5 failing assertions** (top-three/leader text expectations) while unrelated suites pass; no weekly-market files were modified in this task.
+- `git diff --check` passed.
+
+---
+
+# 2026-10-14 — Recurring owner decision report freshness gate (implementation complete)
+
+## Status and evidence boundary
+
+- A fresh read-only post-waiver capture confirms Decision Week 6 is the latest completed auction: transaction index 5, completed batch `2026-10-14T07:06:49.495Z`, and capture `2026-10-14T09:10:47Z`, with 28 complete and 107 failed waiver rows. No private identifiers or raw payloads are tracked.
+- Exact pre-auction roster/transaction context exists from `2026-10-14T05:36:38.329884Z`, but no same-decision-week immutable frozen projection/prediction panel exists. The public Decision Week 6 snapshot request resolves to Decision Week 5.
+- Therefore Decision Week 6 is retained as exact post-waiver outcome evidence but is **not scoreable** for prediction accuracy. Decision Week 5 remains the latest scoreable week. All nine report sections, answer text, sample sizes, and numeric results remain based on Decision Week 5; no tenth question was added.
+- No production formula, application default, Supabase data, workflow, deployment, or merge changed. Only the review analysis branch is updated for PR #12.
+
+## Implemented
+
+- Added privacy-safe tracked fixture `scripts/fixtures/bidding-weekly-status-2026-10-14.json` with only status/timing/count metadata and the scoreability decision. It contains no league ID, manager name, raw payload, credential, snapshot UUID, URL, environment, or host value.
+- Updated the deterministic generator to validate and consume that fixture, show a compact prominent freshness/provenance note before the executive nine-answer cards, repeat the gate and unresolved capture requirement in Appendix E/source lineage, and hash the status fixture into lineage.
+- Regenerated Markdown, HTML, and the deterministic 24-page PDF. The first PDF page contains the freshness gate plus all nine executive cards without clipping.
+- Added tests that lock Week 6 outcome counts/status, Week 5 scoreability, unchanged Week 5 headline metrics, exactly nine questions, first-screen note placement, fixture lineage, privacy, and deterministic rendering.
+
+## Root cause, prevention, and unknown
+
+- **Root cause:** all six GitHub scheduled runs intended for Tuesday 20:02/20:07/20:12 Pacific were not enqueued until about Wednesday 01:30 Pacific. The fail-closed timing guard correctly skipped the late runs, so no matching immutable Week 6 prediction panel was frozen.
+- **Prevention:** use an on-time authoritative scheduler such as Pi cron or an Azure timer for pre-auction captures; keep fail-closed timing guards; treat GitHub Actions scheduling only as a best-effort fallback.
+- **Unknown:** whether a future authoritative scheduler will consistently freeze the matching immutable prediction panel before every auction. This cannot be repaired retrospectively for Decision Week 6.
+
+## Verification
+
+- Focused presentation suite: **17 passed**.
+- `npx tsc --noEmit`: passed.
+- Two consecutive full Markdown/HTML/PDF generations were byte-identical:
+  - Markdown `bb36f9c3ac2260c0023e7cff47ef5b7d39938591524b53490b5fec5c3fd74e1e`
+  - HTML `e437dcb88e42eca7b0c32d9fcc5fdcb0b1ba3fc2fb5ee9f710c28a4c3d93dc00`
+  - PDF `0715a189fc4a600dae9ef6c0230e4769ea6416da737e1247e47e9c8b71c5b0e6`
+- `git diff --check`, nine-question/nine-card output guards, malformed-value guards, and the structured weekly-fixture privacy/secret scan passed.
+
+---
+
 # 2026-10-07 — Recurring owner decision report refresh (implementation complete; uncommitted)
 
 ## Status and boundaries

@@ -1,3 +1,88 @@
+# HANDOFF — Recurring owner decision report freshness gate (2026-10-21)
+
+## Current state
+
+The weekly freshness update has been advanced for the 2026-10-21 recurrence on `analysis/bidding-strategy-accuracy` (review-only PR #12 context; no merge/deploy/mutation). The newest completed auction is now Decision Week 7, but immutable scoreability evidence did not advance: exact Week 7 post-waiver evidence is now retained privately, but no matching same-week frozen pre-auction prediction panel exists. Decision Week 5 remains the latest scoreable week, so all nine owner answers and numbers remain unchanged.
+
+## Evidence decision
+
+- Dynamic read-only auction discovery found transaction index 6 / Decision Week 7 completed at `2026-10-21T07:06:59.011Z` with 31 complete and 159 failed waiver rows.
+- Immutable evidence boundary check:
+  - fresh private exact capture manifest `2026-10-21-post-waiver-auto-raw-manifest-2026-10-21T09-10-47Z.json` retains the Decision Week 7 post-waiver source outside git, and
+  - no same-week frozen pre-auction panel exists; the public read-only snapshot request still resolves to exact Decision Week 5.
+- Scoreability gate outcome: Week 7 is not scoreable (`matching-frozen-pre-auction-prediction-panel-missing`). Week 5 remains latest scoreable.
+
+## What changed
+
+- Added append-only fixture `scripts/fixtures/bidding-weekly-status-2026-10-21.json` (privacy-safe, no IDs/names/raw payloads/credentials).
+- Extended `scripts/generate-bidding-analysis-presentation.ts` weekly fixture validation/rendering for two explicit freshness-failure modes:
+  1. missing frozen pre-auction panel with exact post-waiver outcomes retained
+  2. missing immutable post-waiver capture and missing frozen panel
+- Freshness summary and Appendix E now truthfully distinguish exact retained post-waiver outcomes from a missing-capture gate; Week 7 uses the retained-outcomes path.
+- Presentation tests now load the latest weekly-status fixture deterministically and assert Week 7 exact-postwaiver-but-unscoreable messaging while preserving nine-section structure and Week 5 metrics.
+- Regenerated `docs/analysis/bidding-strategy-accuracy-seamex-2026.{md,html,pdf}`.
+
+## Verification
+
+- `npx vitest run scripts/__tests__/bidding-analysis-presentation.test.ts` — **17 passed**.
+- `npx tsc --noEmit` — passed.
+- `npm run lint` — 0 errors (1 pre-existing warning).
+- `npm run build` — passed.
+- Two consecutive `npm run analyze:bidding:presentation` runs are byte-identical:
+  - Markdown `d1f6b06805b30658e533555116f2da75110c0ea5a48f3b1d1574c77d2493f979`
+  - HTML `a623f2be8002b57123696afa35d7a178201e9c0298f5a9bb960ea7c5ec6a2e0b`
+  - PDF `3b3cefb0d0ad0c4c6fd304d7f27ef886e4faad9719d7f7cfcad7947294ee352b`
+- HTML render QA passed at desktop 1440px and mobile 390px (no horizontal overflow).
+- PDF render QA passed via Ghostscript: 24 rendered pages, consistent dimensions, no near-blank pages.
+- Relevant broader suite check currently shows pre-existing `weekly-market-analysis` expectation drift (5 failing assertions) with no weekly-market source edits in this task.
+
+## Remaining unknowns / next exact data
+
+- The Tuesday 20:45 prospective capture cron did run, but failed closed before provider reads because its configured worktree `AGENTS.md` and `docs/analysis/PREWAIVER_CAPTURE_RUNBOOK.md` prerequisite paths do not exist; repair those paths before Decision Week 8.
+- Need both immutable artifacts for each future auction: (a) frozen same-week pre-auction prediction panel and (b) immutable post-waiver outcomes. Decision Week 7 now has only (b).
+- Until both exist, continue explicit freshness-gate disclosure and keep Week 5 as latest scoreable evidence.
+
+---
+
+# HANDOFF — Recurring owner decision report freshness gate (2026-10-14)
+
+## Current state
+
+The weekly freshness update is complete on `analysis/bidding-strategy-accuracy` for review in PR #12. Decision Week 6 exact post-waiver outcomes are retained but deliberately unscored because the matching immutable frozen pre-auction prediction panel does not exist. Decision Week 5 remains the latest scoreable evidence, so the existing nine answers and every report number are unchanged. Do not merge, deploy, dispatch workflows, or mutate Supabase.
+
+## Evidence decision
+
+- Fresh read-only post-waiver capture: `2026-10-14T09:10:47Z`. Latest completed auction is transaction index 5 / Decision Week 6; latest completed batch is `2026-10-14T07:06:49.495Z`; 28 waiver rows are complete and 107 are failed.
+- Exact pre-auction roster/transaction context exists from `2026-10-14T05:36:38.329884Z`. No same-week immutable frozen projection/prediction panel exists, and a public Decision Week 6 snapshot request resolves to Decision Week 5.
+- Scoreability gate: exact outcomes alone cannot score prediction accuracy. Week 6 remains unscored; Week 5 remains latest scoreable. Private evidence remains outside git.
+
+## What changed
+
+- Added privacy-safe `scripts/fixtures/bidding-weekly-status-2026-10-14.json`; it excludes league identifiers, manager names, raw payloads, credentials, snapshot UUIDs, URLs, environment values, and host values.
+- `scripts/generate-bidding-analysis-presentation.ts` validates/consumes the fixture, renders a prominent compact freshness note ahead of first-screen executive content, repeats the scoreability explanation in Appendix E/source lineage, and includes the fixture's stable hash in lineage.
+- Presentation tests now pin Week 6 status/counts, Week 5 scoreability, unchanged headline metrics, exactly nine questions, note placement, lineage, privacy, and deterministic output.
+- Regenerated `docs/analysis/bidding-strategy-accuracy-seamex-2026.{md,html,pdf}`. The 24-page PDF's first page contains the freshness note and all nine executive cards without clipping.
+- Updated `PROGRESS.md` and this handoff only; no product formula/default/source behavior changed.
+
+## Root cause / prevention / unknown
+
+- **Root cause:** all six GitHub scheduled runs intended for Tuesday 20:02/20:07/20:12 Pacific were enqueued only around Wednesday 01:30 Pacific. The timing guard correctly failed closed and skipped each late run; this protected provenance but left no Week 6 frozen prediction panel.
+- **Prevention:** move authoritative pre-auction capture timing to an on-time scheduler such as Pi cron or an Azure timer. Keep the timing guards. Retain GitHub Actions only as a best-effort fallback.
+- **Unknown:** whether future authoritative scheduling will consistently preserve a matching immutable panel before every auction. Week 6 cannot be made scoreable retrospectively.
+
+## Verification
+
+- `npx vitest run scripts/__tests__/bidding-analysis-presentation.test.ts` — **17 passed**.
+- `npx tsc --noEmit` — passed.
+- Two consecutive `npm run analyze:bidding:presentation` runs generated byte-identical artifacts:
+  - Markdown `bb36f9c3ac2260c0023e7cff47ef5b7d39938591524b53490b5fec5c3fd74e1e`
+  - HTML `e437dcb88e42eca7b0c32d9fcc5fdcb0b1ba3fc2fb5ee9f710c28a4c3d93dc00`
+  - PDF `0715a189fc4a600dae9ef6c0230e4769ea6416da737e1247e47e9c8b71c5b0e6`
+- PDF parse/page-count and rendered first-page inspection passed: 24 pages; no executive-content clipping or overflow.
+- `git diff --check`, nine-question/nine-card output guards, malformed-value guards, and the structured weekly-fixture privacy/secret scan passed.
+
+---
+
 # HANDOFF — Recurring owner decision report refresh (2026-10-07)
 
 ## Current state

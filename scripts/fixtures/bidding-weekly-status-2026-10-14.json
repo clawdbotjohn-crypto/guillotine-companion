@@ -1,0 +1,28 @@
+{
+  "fixtureVersion": 1,
+  "reportDate": "2026-10-14",
+  "capturedAt": "2026-10-14T09:10:47.721101Z",
+  "latestCompletedAuction": {
+    "decisionWeek": 6,
+    "transactionIndex": 5,
+    "completedBatchAt": "2026-10-14T07:06:49.495Z",
+    "completeWaiverRows": 28,
+    "failedWaiverRows": 107
+  },
+  "scoreability": {
+    "latestScoreableDecisionWeek": 5,
+    "latestCompletedDecisionWeekEligible": false,
+    "preAuctionContextCapturedAt": "2026-10-14T05:36:38.329884Z",
+    "matchingFrozenPredictionPanel": false,
+    "publicSnapshotResolvedDecisionWeek": 5,
+    "reason": "matching-frozen-pre-auction-prediction-panel-missing"
+  },
+  "captureIncident": {
+    "scheduledRunCount": 6,
+    "intendedWindow": "Tuesday 20:02-20:12 Pacific",
+    "observedEnqueueWindow": "Wednesday around 01:30 Pacific",
+    "timingGuardResult": "skipped-fail-closed",
+    "prevention": "Use an on-time authoritative scheduler such as Pi cron or an Azure timer; retain timing guards and treat GitHub Actions as a best-effort fallback."
+  },
+  "unknown": "Whether future authoritative pre-auction scheduling will consistently preserve a matching immutable prediction panel before each auction."
+}

@@ -1,0 +1,30 @@
+{
+  "fixtureVersion": 1,
+  "reportDate": "2026-10-21",
+  "capturedAt": "2026-10-21T09:10:47.356961Z",
+  "latestCompletedAuction": {
+    "decisionWeek": 7,
+    "transactionIndex": 6,
+    "completedBatchAt": "2026-10-21T07:06:59.011Z",
+    "completeWaiverRows": 31,
+    "failedWaiverRows": 159,
+    "immutablePostWaiverEvidenceAvailable": true,
+    "immutablePostWaiverCapturedAt": "2026-10-21T09:10:47.356961Z"
+  },
+  "scoreability": {
+    "latestScoreableDecisionWeek": 5,
+    "latestCompletedDecisionWeekEligible": false,
+    "preAuctionContextCapturedAt": null,
+    "matchingFrozenPredictionPanel": false,
+    "publicSnapshotResolvedDecisionWeek": 5,
+    "reason": "matching-frozen-pre-auction-prediction-panel-missing"
+  },
+  "captureIncident": {
+    "scheduledRunCount": 1,
+    "intendedWindow": "Tuesday 20:45 America/Los_Angeles prospective pre-waiver capture for Decision Week 7",
+    "observedEnqueueWindow": "2026-10-20 20:45 America/Los_Angeles; the job failed closed before provider reads because its configured worktree AGENTS.md and docs/analysis/PREWAIVER_CAPTURE_RUNBOOK.md prerequisites do not exist",
+    "timingGuardResult": "not-evaluated-prerequisite-read-failed",
+    "prevention": "Repair the prospective capture job's prerequisite paths before Decision Week 8, retain the fail-closed cutoff guard, and alert immediately when no same-week frozen prediction panel is persisted."
+  },
+  "unknown": "Decision Week 7 cannot be scored because no same-week immutable frozen pre-auction prediction panel exists; the public read-only snapshot endpoint resolves to the exact Decision Week 5 fallback."
+}

@@ -1,5 +1,7 @@
 # Nine answers at a glance
 
+> **Freshness gate:** As of 2026-10-21, Decision Week 7 outcomes were retained exactly after waivers (31 complete, 159 failed), but are not scored because the matching immutable frozen pre-auction prediction panel is missing. Decision Week 5 remains the latest scoreable week; all nine answers and numbers in this report remain based on it.
+
 1. **Predicted-bid accuracy for top versus middle bidders/players — Supported.** In the App W5 / decision W4 top-three target slice, top-five predicted bidders were not more accurate: claim-only MAE was $78.2 versus $45.5 for the deterministic middle five. _Key n: 30 direct rows; 11/11 scored claims._
 2. **What Likely/Possible/Unlikely predicts and whether narrower bands help — Directional.** Likely/Possible/Unlikely was ordered for any canonical claim, but ranking managers only by predicted dollars did not improve discrimination: the exact top 25% claimed less often than the bottom 25%. _Key n: 242 opportunities; any-claim rates 47.7% / 31.5% / 21.7%._
 3. **Bidding after a prior expensive win — Directional.** The direct reconstructed slice is descriptive and mixed; it does not support a causal claim that an expensive win suppresses the next auction. _Key n: 5 reconstructed ≥$90 anchor wins._
@@ -575,6 +577,11 @@ Continue the same manager-linked table with exact weekly snapshots, remaining-FA
 Only these rows fit a scale, using the prior week and scoring the next. The W4→W5 rows use reconstructed W4 as training evidence and immutable exact W5 as the later score. Exact nonlinear/tier/liquidity model claims remain gated until more immutable exact prior→later pairs exist.
 
 ## Source-hash lineage
+
+**Weekly freshness gate:** As of 2026-10-21, Decision Week 7 outcomes were retained exactly after waivers (31 complete, 159 failed), but are not scored because the matching immutable frozen pre-auction prediction panel is missing. Decision Week 5 remains the latest scoreable week; all nine answers and numbers in this report remain based on it.
+
+**Why Week 7 is unscored:** the matching immutable frozen pre-auction prediction panel is missing. The public snapshot resolves only to Decision Week 5. **Unknown:** Decision Week 7 cannot be scored because no same-week immutable frozen pre-auction prediction panel exists; the public read-only snapshot endpoint resolves to the exact Decision Week 5 fallback.
+
 | Source label | Evidence class | SHA-256 |
 | --- | --- | --- |
 | week-5-manager-predictions.csv | Exact Week5 | a36ccdf7afa3dc43f2145a3e2de69f21938f7a6377922025daefa371c544bc15 |
@@ -584,3 +591,4 @@ Only these rows fit a scale, using the prior week and scoring the next. The W4�
 | week-5-pre-waiver.json | Exact Week5 | cbc1f7d92a5c3c393640d09940a5b52d2130de4f174b5a6fbcac5e3fd622b38f |
 | week-5-post-waiver-classified-claims.json | Exact Week5 | 903a5ca60e7efecd752751f30f435360afe34fcb2bf3fb730b71974e76f0a80b |
 | bidding-strategy-seamex-2026.json | Canonical market fixture: reconstructed W2, W3, W4; exact W5 | 2f80c608cf94ee255223716fd3962cf4fd453f4a7000a5f7059d7ceb8651e8e8 |
+| bidding-weekly-status-2026-10-21.json | Freshness gate: exact post-waiver W7; latest scoreable W5 | 94b384becf22716447fda320c7d9510d6b248e3dcb23f1a37c97bccb23fce152 |

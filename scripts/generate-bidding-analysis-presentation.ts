@@ -33,6 +33,9 @@ import type { PrewaiverPanel } from "./prewaiver-capture.ts";
 const RECONSTRUCTED_FIXTURE_PATH =
   "scripts/fixtures/bidding-strategy-seamex-2026.json";
 const EXACT_FIXTURE_PATH = "scripts/fixtures/bidding-owner-decision-week5.json";
+const FIXTURE_DIRECTORY = "scripts/fixtures";
+const WEEKLY_STATUS_FIXTURE_PATTERN =
+  /^bidding-weekly-status-\d{4}-\d{2}-\d{2}\.json$/;
 const HTML_PATH = "docs/analysis/bidding-strategy-accuracy-seamex-2026.html";
 const MARKDOWN_PATH = "docs/analysis/bidding-strategy-accuracy-seamex-2026.md";
 const PDF_PATH = "docs/analysis/bidding-strategy-accuracy-seamex-2026.pdf";
@@ -51,6 +54,101 @@ const pct = (numerator: number, denominator: number): string =>
   denominator ? `${((100 * numerator) / denominator).toFixed(1)}%` : "—";
 const number = (value: number | null, digits = 2): string =>
   value == null || !Number.isFinite(value) ? "—" : value.toFixed(digits);
+
+export interface WeeklyReportStatus {
+  fixtureVersion: number;
+  reportDate: string;
+  capturedAt: string;
+  latestCompletedAuction: {
+    decisionWeek: number;
+    transactionIndex: number;
+    completedBatchAt: string;
+    completeWaiverRows: number;
+    failedWaiverRows: number;
+    immutablePostWaiverEvidenceAvailable: boolean;
+    immutablePostWaiverCapturedAt: string | null;
+  };
+  scoreability: {
+    latestScoreableDecisionWeek: number;
+    latestCompletedDecisionWeekEligible: boolean;
+    preAuctionContextCapturedAt: string | null;
+    matchingFrozenPredictionPanel: boolean;
+    publicSnapshotResolvedDecisionWeek: number;
+    reason:
+      | "matching-frozen-pre-auction-prediction-panel-missing"
+      | "missing-immutable-post-waiver-capture-and-frozen-panel";
+  };
+  captureIncident: {
+    scheduledRunCount: number;
+    intendedWindow: string;
+    observedEnqueueWindow: string;
+    timingGuardResult: string;
+    prevention: string;
+  };
+  unknown: string;
+}
+
+async function latestWeeklyStatusFixturePath(): Promise<string> {
+  const names = (await readdir(FIXTURE_DIRECTORY))
+    .filter((name) => WEEKLY_STATUS_FIXTURE_PATTERN.test(name))
+    .sort();
+  const latest = names.at(-1);
+  if (!latest) throw new Error("No weekly report freshness fixture found");
+  return join(FIXTURE_DIRECTORY, latest);
+}
+
+function validateWeeklyReportStatus(
+  status: WeeklyReportStatus,
+): WeeklyReportStatus {
+  const completedWeek = status.latestCompletedAuction.decisionWeek;
+  const scoreableWeek = status.scoreability.latestScoreableDecisionWeek;
+  const reason = status.scoreability.reason;
+  const reasonValid =
+    reason === "matching-frozen-pre-auction-prediction-panel-missing" ||
+    reason === "missing-immutable-post-waiver-capture-and-frozen-panel";
+  if (
+    status.fixtureVersion !== 1 ||
+    !Number.isInteger(completedWeek) ||
+    !Number.isInteger(scoreableWeek) ||
+    completedWeek <= scoreableWeek ||
+    status.scoreability.latestCompletedDecisionWeekEligible ||
+    status.scoreability.matchingFrozenPredictionPanel ||
+    status.scoreability.publicSnapshotResolvedDecisionWeek !== scoreableWeek ||
+    !reasonValid
+  ) {
+    throw new Error("Invalid weekly report freshness fixture");
+  }
+  if (
+    reason === "missing-immutable-post-waiver-capture-and-frozen-panel" &&
+    status.latestCompletedAuction.immutablePostWaiverEvidenceAvailable
+  ) {
+    throw new Error(
+      "Invalid weekly report freshness fixture: missing-capture reason conflicts with immutable post-waiver evidence",
+    );
+  }
+  return status;
+}
+
+function scoreabilityReasonDetail(status: WeeklyReportStatus): string {
+  if (
+    status.scoreability.reason ===
+    "missing-immutable-post-waiver-capture-and-frozen-panel"
+  ) {
+    return `no immutable post-waiver capture exists yet for Decision Week ${status.latestCompletedAuction.decisionWeek}, and no matching same-week immutable frozen pre-auction prediction panel exists either`;
+  }
+  return "the matching immutable frozen pre-auction prediction panel is missing";
+}
+
+function freshnessSummary(status: WeeklyReportStatus): string {
+  const completedWeek = status.latestCompletedAuction.decisionWeek;
+  const complete = status.latestCompletedAuction.completeWaiverRows;
+  const failed = status.latestCompletedAuction.failedWaiverRows;
+  const scoreableWeek = status.scoreability.latestScoreableDecisionWeek;
+  if (status.latestCompletedAuction.immutablePostWaiverEvidenceAvailable) {
+    return `As of ${status.reportDate}, Decision Week ${completedWeek} outcomes were retained exactly after waivers (${complete} complete, ${failed} failed), but are not scored because ${scoreabilityReasonDetail(status)}. Decision Week ${scoreableWeek} remains the latest scoreable week; all nine answers and numbers in this report remain based on it.`;
+  }
+  return `As of ${status.reportDate}, the latest completed auction is Decision Week ${completedWeek} (${complete} complete waivers, ${failed} failed), but no immutable post-waiver capture artifact exists yet and the matching same-week immutable frozen pre-auction prediction panel is also missing. Decision Week ${scoreableWeek} remains the latest scoreable week; all nine answers and numbers in this report remain based on it.`;
+}
 
 export function rSquared(
   rows: Array<{ actual: number; predicted: number }>,
@@ -194,7 +292,10 @@ function formatLineageClass(key: string): string {
   return key.replaceAll(/([A-Z])/g, " $1").trim() || "Lineage";
 }
 
-function lineageRows(model: OwnerDecisionReportModel): string[][] {
+function lineageRows(
+  model: OwnerDecisionReportModel,
+  weeklyStatus: WeeklyReportStatus,
+): string[][] {
   const lineage = model.exact.lineage as Record<string, unknown>;
   const rows: string[][] = [];
   for (const [key, value] of Object.entries(lineage)) {
@@ -245,6 +346,15 @@ function lineageRows(model: OwnerDecisionReportModel): string[][] {
     "bidding-strategy-seamex-2026.json",
     `Canonical market fixture: reconstructed W${reconstructedWeeks.join(", W")}; exact W${exactWeeks.join(", W")}`,
     `<code>${stableSha256(model.reconstructed)}</code>`,
+  ]);
+  const freshnessEvidenceLabel =
+    weeklyStatus.latestCompletedAuction.immutablePostWaiverEvidenceAvailable
+      ? `Freshness gate: exact post-waiver W${weeklyStatus.latestCompletedAuction.decisionWeek}`
+      : `Freshness gate: no immutable post-waiver capture yet for W${weeklyStatus.latestCompletedAuction.decisionWeek}`;
+  rows.push([
+    `bidding-weekly-status-${weeklyStatus.reportDate}.json`,
+    `${freshnessEvidenceLabel}; latest scoreable W${weeklyStatus.scoreability.latestScoreableDecisionWeek}`,
+    `<code>${stableSha256(weeklyStatus)}</code>`,
   ]);
   return rows;
 }
@@ -694,7 +804,10 @@ function renderQuestion(
   return `<section class="question" data-question-number="${question.number}" aria-labelledby="question-${question.number}"><header><p class="eyebrow">Question ${question.number} of 9</p><h2 id="question-${question.number}">${question.number}. ${escapeHtml(question.title)}</h2>${badge(question.badge)}</header><div class="answer-flow"><div data-part="direct-answer"><h3>Direct answer</h3><p>${escapeHtml(question.directAnswer)}</p></div><div data-part="key-evidence"><h3>Key evidence / n</h3><p class="key-number">${escapeHtml(question.keyNumber)}</p><p>${escapeHtml(question.evidence)}</p></div><div data-part="practical-implication"><h3>Practical implication</h3><p>${escapeHtml(question.implication)}</p></div><div data-part="unknowns-next-data"><h3>Unknowns / next exact data</h3><p>${escapeHtml(question.unknowns)}</p></div></div>${sectionExtra(model, question.number)}</section>`;
 }
 
-function appendices(model: OwnerDecisionReportModel): string {
+function appendices(
+  model: OwnerDecisionReportModel,
+  weeklyStatus: WeeklyReportStatus,
+): string {
   const prior = priorAccuracyRows(model);
   const sensitivity = priorSensitivityRows(model);
   const winnerBootstrap = priorWinnerBootstrapRows(model);
@@ -724,7 +837,7 @@ function appendices(model: OwnerDecisionReportModel): string {
       ? "—"
       : money(Math.abs(target.topAll - target.winningBid)),
   ]);
-  const lineage = lineageRows(model);
+  const lineage = lineageRows(model, weeklyStatus);
   const exactPairCount = model.exactHeldOutPairs;
   return `<section class="appendix" aria-labelledby="appendix-my-team"><h2 id="appendix-my-team">Appendix A — My team this week</h2><div class="team-card"><p><strong>Outcome:</strong> one premium acquisition for $187 from $499 pre-waiver FAAB, leaving $312.</p><p><strong>Process:</strong> 8 raw claims became 7 canonical claims. Three later claims were explicitly roster-full; that is sequencing evidence, not $0 competition.</p><p><strong>Decision:</strong> the $187 acquisition cleared the $159 observed-minimum proxy and stayed below the $244 top-credible audit estimate. Preserve FAAB; fix contingency/drop paths before the next run.</p><p><strong>Unknown:</strong> optimized lineup, injury risk, and remaining positional holes are not present in the privacy-safe evidence.</p></div></section>
 <section class="appendix" aria-labelledby="appendix-methods"><h2 id="appendix-methods">Appendix B — Methods, formulas, and scoreability</h2><ul><li><strong>Signed error:</strong> prediction − explicit submitted amount. Positive means overprediction.</li><li><strong>MAE:</strong> mean absolute error over scoreable explicit claims only. Non-bids and unknown amounts are excluded, never coded as $0.</li><li><strong>Raw prediction R²:</strong> 1 − SSE/SST on unrefit predictions; it may be negative and is not fitted regression goodness-of-fit.</li><li><strong>Fitted R²:</strong> belongs only to a declared fitted model. No exact nonlinear model is fit here.</li><li><strong>Bootstrap:</strong> prior report used deterministic cluster-aware resampling. Later exact scoring instances after reconstructed training = ${exactPairCount}; exact-prior → exact-later pair count = 0, so exact confidence intervals are not promoted.</li><li><strong>FAAB censoring:</strong> feasible prediction = min(prediction, pre-waiver FAAB). Capacity and willingness remain separate.</li></ul>${table(["Target", "Max-VORP rank", "Winner", "Median band", "High band", "Top credible", "Top all", "Top-credible AE", "Top-all AE"], bands)}<p class="note">Median/high bands were not retained as deterministic privacy-safe slices and are not backfilled. Top-credible/top-all are scored because their pre-waiver values and exact winners were retained.</p></section>
@@ -881,12 +994,13 @@ function appendices(model: OwnerDecisionReportModel): string {
       `${target.rawClaimCount} / ${target.uniqueManagerClaims} / ${target.additionalSameManagerClaims} / ${target.rosterFullClaims} / ${target.tokenClaims} / ${target.unknownContingencies}`,
     ]),
   )}</section>
-<section class="appendix" aria-labelledby="appendix-lineage"><h2 id="appendix-lineage">Appendix E — Provenance and source-hash lineage</h2><p>Exact and reconstructed evidence classes remain separate. Hashes establish byte lineage; they do not make reconstructed snapshots exact.</p>${table(["Sanitized source label", "Evidence class", "SHA-256"], lineage)}<p><strong>Alias rules:</strong> ${escapeHtml(model.exact.managerAliasRule)} ${escapeHtml(model.exact.selectionRule)}</p></section>
+<section class="appendix" aria-labelledby="appendix-lineage"><h2 id="appendix-lineage">Appendix E — Provenance and source-hash lineage</h2><div class="freshness-note"><strong>Weekly freshness gate:</strong> ${escapeHtml(freshnessSummary(weeklyStatus))}</div><p><strong>Why Week ${weeklyStatus.latestCompletedAuction.decisionWeek} is unscored:</strong> ${escapeHtml(scoreabilityReasonDetail(weeklyStatus))}. The public snapshot resolves only to Decision Week ${weeklyStatus.scoreability.publicSnapshotResolvedDecisionWeek}. <strong>Unknown:</strong> ${escapeHtml(weeklyStatus.unknown)}</p><p>Exact and reconstructed evidence classes remain separate. Hashes establish byte lineage; they do not make reconstructed snapshots exact.</p>${table(["Sanitized source label", "Evidence class", "SHA-256"], lineage)}<p><strong>Alias rules:</strong> ${escapeHtml(model.exact.managerAliasRule)} ${escapeHtml(model.exact.selectionRule)}</p></section>
 <section class="appendix" aria-labelledby="appendix-glossary"><h2 id="appendix-glossary">Appendix F — Glossary</h2><dl><dt>Canonical claim</dt><dd>One classified manager-target competitive path after duplicate and contingency handling.</dd><dt>Explicit non-bid</dt><dd>No submitted claim matched for that manager-target opportunity; it has no dollar amount.</dd><dt>Observed minimum proxy</dt><dd>One dollar above the highest observed clearing-eligible losing bid, where identifiable; not a true reservation price.</dd><dt>Token</dt><dd>A zero/near-zero claim retained separately from serious bidding.</dd><dt>Top credible / top all</dt><dd>Pre-waiver prediction bands retained by the exact audit; top all includes all modeled manager estimates.</dd><dt>Directional</dt><dd>A descriptive signal worth monitoring, not a validated reusable effect.</dd></dl></section>`;
 }
 
 export function renderBiddingPresentation(
   model: OwnerDecisionReportModel,
+  weeklyStatus: WeeklyReportStatus,
 ): string {
   if (model.questions.length !== 9)
     throw new Error("Report requires exactly nine questions");
@@ -896,8 +1010,8 @@ export function renderBiddingPresentation(
         `<article class="answer-card" data-overview-number="${question.number}"><div><span class="card-number">${question.number}</span>${badge(question.badge)}</div><h2>${escapeHtml(question.title)}</h2><p>${escapeHtml(question.directAnswer)}</p><strong>${escapeHtml(question.keyNumber)}</strong></article>`,
     )
     .join("");
-  const css = `:root{--ink:#172127;--muted:#58666d;--paper:#fffdf8;--navy:#123047;--teal:#0a6c70;--line:#d9dedc;--gold:#d2a53f;--green:#1f704c;--amber:#8a5a00;--gray:#626b70;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink);background:#eef2f1}*{box-sizing:border-box}body{margin:0;line-height:1.48}main{max-width:1240px;margin:auto;background:var(--paper);box-shadow:0 0 35px #102a3830}.hero{min-height:100vh;padding:clamp(24px,5vw,72px);background:linear-gradient(145deg,#0d293d,#164c57);color:#fff;display:flex;flex-direction:column;justify-content:center}.hero h1{font-family:Georgia,serif;font-size:clamp(2.3rem,6vw,5.4rem);line-height:.95;max-width:900px;margin:.2em 0}.hero .lede{max-width:760px;color:#d9edf0;font-size:1.05rem}.answer-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:28px}.answer-card{background:#ffffff0e;border:1px solid #ffffff2e;border-radius:14px;padding:16px;break-inside:avoid}.answer-card h2{font-size:1rem;margin:.7rem 0 .4rem}.answer-card p{font-size:.88rem;color:#e3edef}.answer-card>strong{display:block;color:#ffe7a7;font-size:.82rem}.card-number{font:700 1.25rem Georgia,serif;margin-right:8px}.badge{display:inline-block;border-radius:999px;padding:3px 9px;font-size:.72rem;font-weight:800;letter-spacing:.02em}.badge-supported{background:#d9f3e5;color:#155e3b}.badge-directional{background:#fff0c5;color:#704700}.badge-not-enough-evidence{background:#e3e7e9;color:#424b50}.question,.appendix{padding:clamp(28px,5vw,68px);border-top:1px solid var(--line)}.question>header{position:relative}.question>header .badge{position:absolute;right:0;top:0}.question h2,.appendix h2{font-family:Georgia,serif;color:var(--navy);font-size:clamp(1.65rem,3vw,2.65rem);max-width:900px}.eyebrow{text-transform:uppercase;color:var(--teal);font-size:.72rem;font-weight:900;letter-spacing:.14em}.answer-flow{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:26px 0}.answer-flow>div{border-left:4px solid var(--teal);padding:2px 16px;background:#f4f8f6}.answer-flow h3{font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;color:var(--teal)}.key-number{font-size:1.15rem;font-weight:800;color:var(--navy)}h3{color:var(--navy);margin-top:1.5rem}.table-wrap{overflow-x:auto;margin:18px 0;border:1px solid var(--line);border-radius:10px}table{border-collapse:collapse;width:100%;font-size:.82rem;background:#fff}th,td{padding:9px 10px;text-align:left;vertical-align:top;border-bottom:1px solid #e4e8e6}thead th{position:sticky;top:0;background:#eaf1ef;color:#173d47;white-space:nowrap}tbody th{font-weight:750}.direct-rows{min-width:1600px}.note{color:var(--muted);font-size:.88rem}.empty-state,.team-card{border:1px solid #d8c58e;background:#fff8e5;padding:18px;border-radius:10px}.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.stat-grid div{background:#eef5f3;border-radius:10px;padding:18px}.stat-grid strong{display:block;font:700 1.8rem Georgia,serif;color:var(--teal)}.stat-grid span{font-size:.8rem;color:var(--muted)}details{padding:12px;background:#f3f6f5;border-radius:8px}code{font-size:.72rem;overflow-wrap:anywhere}dl{display:grid;grid-template-columns:180px 1fr;gap:8px 16px}dt{font-weight:800}dd{margin:0}.appendix{background:#f8f8f4}@media(min-width:901px){.hero{padding:28px 42px;justify-content:flex-start}.hero>.eyebrow{margin:0 0 4px}.hero h1{font-size:3.4rem;line-height:.95;margin:.08em 0 .12em}.hero .lede{font-size:.9rem;line-height:1.35;margin:0}.answer-grid{gap:8px;margin-top:14px}.answer-card{padding:10px 12px}.answer-card h2{font-size:.9rem;line-height:1.2;margin:.35rem 0 .25rem}.answer-card p{font-size:.8rem;line-height:1.32;margin:0 0 .4rem}.answer-card>strong{font-size:.74rem;line-height:1.25}.answer-card .card-number{font-size:1rem}.answer-card .badge{padding:2px 7px;font-size:.65rem}}@media(max-width:900px){.answer-grid{grid-template-columns:repeat(2,1fr)}.answer-flow{grid-template-columns:1fr}.stat-grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:560px){.hero{min-height:auto;padding:28px 18px}.answer-grid{grid-template-columns:1fr}.question,.appendix{padding:28px 18px}.question>header .badge{position:static}.stat-grid{grid-template-columns:1fr}dl{grid-template-columns:1fr}.table-wrap{margin-left:-18px;margin-right:-18px;border-radius:0}}@page{size:letter;margin:.42in}@media print{body{background:#fff}main{box-shadow:none}.hero{min-height:10.1in;page-break-after:always;padding:.35in}.answer-grid{gap:8px}.answer-card{padding:10px}.answer-card p{font-size:.75rem}.question,.appendix{break-before:page;padding:.25in 0}.answer-flow{gap:8px}table{font-size:7pt}th,td{padding:4px}.table-wrap{overflow:visible}.direct-rows{min-width:0;font-size:5.4pt}.question>header .badge{position:static}.appendix{background:#fff}}`;
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Nine answers at a glance — bidding owner decisions</title><style>${css}</style></head><body><main><section class="hero" aria-labelledby="overview-title"><p class="eyebrow">Owner decision report • ${escapeHtml(model.generatedFor)}</p><h1 id="overview-title">Nine answers at a glance</h1><p class="lede">A recurring, privacy-safe decision report. Exact evidence remains separate from reconstructed history. Badges describe how far the current evidence can travel—not how interesting the question is.</p><div class="answer-grid">${cards}</div></section>${model.questions.map((question) => renderQuestion(model, question)).join("")}${appendices(model)}</main></body></html>`;
+  const css = `:root{--ink:#172127;--muted:#58666d;--paper:#fffdf8;--navy:#123047;--teal:#0a6c70;--line:#d9dedc;--gold:#d2a53f;--green:#1f704c;--amber:#8a5a00;--gray:#626b70;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink);background:#eef2f1}*{box-sizing:border-box}body{margin:0;line-height:1.48}main{max-width:1240px;margin:auto;background:var(--paper);box-shadow:0 0 35px #102a3830}.hero{min-height:100vh;padding:clamp(24px,5vw,72px);background:linear-gradient(145deg,#0d293d,#164c57);color:#fff;display:flex;flex-direction:column;justify-content:center}.hero h1{font-family:Georgia,serif;font-size:clamp(2.3rem,6vw,5.4rem);line-height:.95;max-width:900px;margin:.2em 0}.hero .lede{max-width:760px;color:#d9edf0;font-size:1.05rem}.answer-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:28px}.answer-card{background:#ffffff0e;border:1px solid #ffffff2e;border-radius:14px;padding:16px;break-inside:avoid}.answer-card h2{font-size:1rem;margin:.7rem 0 .4rem}.answer-card p{font-size:.88rem;color:#e3edef}.answer-card>strong{display:block;color:#ffe7a7;font-size:.82rem}.card-number{font:700 1.25rem Georgia,serif;margin-right:8px}.badge{display:inline-block;border-radius:999px;padding:3px 9px;font-size:.72rem;font-weight:800;letter-spacing:.02em}.badge-supported{background:#d9f3e5;color:#155e3b}.badge-directional{background:#fff0c5;color:#704700}.badge-not-enough-evidence{background:#e3e7e9;color:#424b50}.question,.appendix{padding:clamp(28px,5vw,68px);border-top:1px solid var(--line)}.question>header{position:relative}.question>header .badge{position:absolute;right:0;top:0}.question h2,.appendix h2{font-family:Georgia,serif;color:var(--navy);font-size:clamp(1.65rem,3vw,2.65rem);max-width:900px}.eyebrow{text-transform:uppercase;color:var(--teal);font-size:.72rem;font-weight:900;letter-spacing:.14em}.answer-flow{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:26px 0}.answer-flow>div{border-left:4px solid var(--teal);padding:2px 16px;background:#f4f8f6}.answer-flow h3{font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;color:var(--teal)}.key-number{font-size:1.15rem;font-weight:800;color:var(--navy)}h3{color:var(--navy);margin-top:1.5rem}.table-wrap{overflow-x:auto;margin:18px 0;border:1px solid var(--line);border-radius:10px}table{border-collapse:collapse;width:100%;font-size:.82rem;background:#fff}th,td{padding:9px 10px;text-align:left;vertical-align:top;border-bottom:1px solid #e4e8e6}thead th{position:sticky;top:0;background:#eaf1ef;color:#173d47;white-space:nowrap}tbody th{font-weight:750}.direct-rows{min-width:1600px}.note{color:var(--muted);font-size:.88rem}.freshness-note{border:1px solid #b98925;background:#fff5d8;color:#47330d;padding:10px 12px;border-radius:10px;font-size:.86rem;line-height:1.35}.hero .freshness-note{max-width:920px;margin-top:12px;background:#fff3c9;color:#3f2a00;border-color:#f1c55b}.empty-state,.team-card{border:1px solid #d8c58e;background:#fff8e5;padding:18px;border-radius:10px}.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.stat-grid div{background:#eef5f3;border-radius:10px;padding:18px}.stat-grid strong{display:block;font:700 1.8rem Georgia,serif;color:var(--teal)}.stat-grid span{font-size:.8rem;color:var(--muted)}details{padding:12px;background:#f3f6f5;border-radius:8px}code{font-size:.72rem;overflow-wrap:anywhere}dl{display:grid;grid-template-columns:180px 1fr;gap:8px 16px}dt{font-weight:800}dd{margin:0}.appendix{background:#f8f8f4}@media(min-width:901px){.hero{padding:28px 42px;justify-content:flex-start}.hero>.eyebrow{margin:0 0 4px}.hero h1{font-size:3.4rem;line-height:.95;margin:.08em 0 .12em}.hero .lede{font-size:.9rem;line-height:1.35;margin:0}.hero .freshness-note{font-size:.76rem;line-height:1.28;margin-top:8px;padding:7px 10px}.answer-grid{gap:8px;margin-top:10px}.answer-card{padding:10px 12px}.answer-card h2{font-size:.9rem;line-height:1.2;margin:.35rem 0 .25rem}.answer-card p{font-size:.8rem;line-height:1.32;margin:0 0 .4rem}.answer-card>strong{font-size:.74rem;line-height:1.25}.answer-card .card-number{font-size:1rem}.answer-card .badge{padding:2px 7px;font-size:.65rem}}@media(max-width:900px){.answer-grid{grid-template-columns:repeat(2,1fr)}.answer-flow{grid-template-columns:1fr}.stat-grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:560px){.hero{min-height:auto;padding:28px 18px}.answer-grid{grid-template-columns:1fr}.question,.appendix{padding:28px 18px}.question>header .badge{position:static}.stat-grid{grid-template-columns:1fr}dl{grid-template-columns:1fr}.table-wrap{margin-left:-18px;margin-right:-18px;border-radius:0}}@page{size:letter;margin:.42in}@media print{body{background:#fff}main{box-shadow:none}.hero{min-height:10.1in;page-break-after:always;padding:.35in}.answer-grid{grid-template-columns:repeat(3,1fr);gap:5px;margin-top:6px}.answer-card{padding:7px;break-inside:auto}.answer-card h2{font-size:.74rem;line-height:1.1;margin:.14rem 0}.answer-card p{font-size:.7rem;line-height:1.08;margin:0 0 .12rem}.answer-card>strong{font-size:.68rem;line-height:1.08}.answer-card .card-number{font-size:.75rem}.answer-card .badge{font-size:.58rem;padding:1px 4px}.question,.appendix{break-before:page;padding:.25in 0}.answer-flow{gap:8px}table{font-size:7pt}th,td{padding:4px}.table-wrap{overflow:visible}.direct-rows{min-width:0;font-size:5.4pt}.question>header .badge{position:static}.appendix{background:#fff}}`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Nine answers at a glance — bidding owner decisions</title><style>${css}</style></head><body><main><section class="hero" aria-labelledby="overview-title"><p class="eyebrow">Owner decision report • ${escapeHtml(model.generatedFor)}</p><h1 id="overview-title">Nine answers at a glance</h1><p class="lede">A recurring, privacy-safe decision report. Exact evidence remains separate from reconstructed history. Badges describe how far the current evidence can travel—not how interesting the question is.</p><div class="freshness-note" role="note"><strong>Freshness gate:</strong> ${escapeHtml(freshnessSummary(weeklyStatus))}</div><div class="answer-grid">${cards}</div></section>${model.questions.map((question) => renderQuestion(model, question)).join("")}${appendices(model, weeklyStatus)}</main></body></html>`;
 }
 
 function markdownTable(
@@ -909,7 +1023,10 @@ function markdownTable(
   return `| ${headers.map(clean).join(" | ")} |\n| ${headers.map(() => "---").join(" | ")} |\n${rows.map((row) => `| ${row.map(clean).join(" | ")} |`).join("\n")}`;
 }
 
-export function renderBiddingMarkdown(model: OwnerDecisionReportModel): string {
+export function renderBiddingMarkdown(
+  model: OwnerDecisionReportModel,
+  weeklyStatus: WeeklyReportStatus,
+): string {
   const overview = model.questions
     .map(
       (question) =>
@@ -1164,7 +1281,7 @@ ${markdownTable(
     .join("\n\n");
   const lineage = markdownTable(
     ["Source label", "Evidence class", "SHA-256"],
-    lineageRows(model).map((row) => [
+    lineageRows(model, weeklyStatus).map((row) => [
       row[0].replace(/<[^>]+>/g, ""),
       row[1],
       row[2].replace(/<[^>]+>/g, ""),
@@ -1282,6 +1399,8 @@ ${markdownTable(
   );
   return `# Nine answers at a glance
 
+> **Freshness gate:** ${freshnessSummary(weeklyStatus)}
+
 ${overview}
 
 ${sections}
@@ -1370,6 +1489,11 @@ ${heldOutTable}
 Only these rows fit a scale, using the prior week and scoring the next. The W4→W5 rows use reconstructed W4 as training evidence and immutable exact W5 as the later score. Exact nonlinear/tier/liquidity model claims remain gated until more immutable exact prior→later pairs exist.
 
 ## Source-hash lineage
+
+**Weekly freshness gate:** ${freshnessSummary(weeklyStatus)}
+
+**Why Week ${weeklyStatus.latestCompletedAuction.decisionWeek} is unscored:** ${scoreabilityReasonDetail(weeklyStatus)}. The public snapshot resolves only to Decision Week ${weeklyStatus.scoreability.publicSnapshotResolvedDecisionWeek}. **Unknown:** ${weeklyStatus.unknown}
+
 ${lineage}
 `;
 }
@@ -1468,6 +1592,12 @@ export async function generateArtifacts(
   const exact = JSON.parse(
     await readFile(EXACT_FIXTURE_PATH, "utf8"),
   ) as ExactAuditFixture;
+  const weeklyStatusFixturePath = await latestWeeklyStatusFixturePath();
+  const weeklyStatus = validateWeeklyReportStatus(
+    JSON.parse(
+      await readFile(weeklyStatusFixturePath, "utf8"),
+    ) as WeeklyReportStatus,
+  );
   const prewaiverPanel = prewaiverPanelPath
     ? (JSON.parse(await readFile(prewaiverPanelPath, "utf8")) as PrewaiverPanel)
     : undefined;
@@ -1478,8 +1608,11 @@ export async function generateArtifacts(
     prewaiverPanel,
     exactHistory,
   );
-  await writeFile(HTML_PATH, renderBiddingPresentation(model));
-  await writeFile(MARKDOWN_PATH, renderBiddingMarkdown(model));
+  await writeFile(
+    HTML_PATH,
+    renderBiddingPresentation(model, weeklyStatus),
+  );
+  await writeFile(MARKDOWN_PATH, renderBiddingMarkdown(model, weeklyStatus));
   console.log(`Wrote ${HTML_PATH}`);
   console.log(`Wrote ${MARKDOWN_PATH}`);
   if (includePdf) {

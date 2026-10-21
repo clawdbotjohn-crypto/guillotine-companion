@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { AnalysisFixture } from "../analyze-bidding-strategies.ts";
 import {
@@ -14,6 +14,7 @@ import {
   selectTopAndMiddleRows,
   type ExactAuditFixture,
   type OwnerDecisionReportModel,
+  type WeeklyReportStatus,
 } from "../generate-bidding-analysis-presentation.ts";
 
 let model: OwnerDecisionReportModel;
@@ -21,6 +22,8 @@ let html: string;
 let markdown: string;
 let exactText: string;
 let reconstructedFixture: AnalysisFixture;
+let weeklyStatus: WeeklyReportStatus;
+let weeklyStatusText: string;
 
 beforeAll(async () => {
   const reconstructed = JSON.parse(
@@ -35,9 +38,20 @@ beforeAll(async () => {
     "utf8",
   );
   const exact = JSON.parse(exactText) as ExactAuditFixture;
+  const weeklyStatusFixtureName = (await readdir("scripts/fixtures"))
+    .filter((name) => /^bidding-weekly-status-\d{4}-\d{2}-\d{2}\.json$/.test(name))
+    .sort()
+    .at(-1);
+  if (!weeklyStatusFixtureName)
+    throw new Error("No weekly status fixture found for presentation test");
+  weeklyStatusText = await readFile(
+    `scripts/fixtures/${weeklyStatusFixtureName}`,
+    "utf8",
+  );
+  weeklyStatus = JSON.parse(weeklyStatusText) as WeeklyReportStatus;
   model = buildOwnerDecisionReport(reconstructed, exact);
-  html = renderBiddingPresentation(model);
-  markdown = renderBiddingMarkdown(model);
+  html = renderBiddingPresentation(model, weeklyStatus);
+  markdown = renderBiddingMarkdown(model, weeklyStatus);
 });
 
 describe("owner-decision nine-question report", () => {
@@ -63,11 +77,54 @@ describe("owner-decision nine-question report", () => {
     );
   });
 
+  it("surfaces the weekly freshness gate without changing the nine scoreable answers", () => {
+    expect(weeklyStatus.latestCompletedAuction).toMatchObject({
+      decisionWeek: 7,
+      transactionIndex: 6,
+      completeWaiverRows: 31,
+      failedWaiverRows: 159,
+      immutablePostWaiverEvidenceAvailable: true,
+      immutablePostWaiverCapturedAt: "2026-10-21T09:10:47.356961Z",
+    });
+    expect(weeklyStatus.scoreability).toMatchObject({
+      latestScoreableDecisionWeek: 5,
+      latestCompletedDecisionWeekEligible: false,
+      matchingFrozenPredictionPanel: false,
+      publicSnapshotResolvedDecisionWeek: 5,
+      reason: "matching-frozen-pre-auction-prediction-panel-missing",
+    });
+    for (const output of [html, markdown]) {
+      expect(output).toContain(
+        "Decision Week 7 outcomes were retained exactly after waivers (31 complete, 159 failed)",
+      );
+      expect(output).toContain(
+        "matching immutable frozen pre-auction prediction panel is missing",
+      );
+      expect(output).toContain(
+        "Decision Week 5 remains the latest scoreable week",
+      );
+      expect(output).toContain("bidding-weekly-status-2026-10-21.json");
+    }
+    expect(html.indexOf("Freshness gate:")).toBeLessThan(
+      html.indexOf('data-overview-number="1"'),
+    );
+    expect(markdown.indexOf("Freshness gate:")).toBeLessThan(
+      markdown.indexOf("1. **Predicted-bid accuracy"),
+    );
+    expect(model.questions).toHaveLength(9);
+    expect(model.headlineMetrics).toMatchObject({
+      topClaimN: 11,
+      middleClaimN: 11,
+    });
+    expect(model.headlineMetrics.topClaimMae).toBeCloseTo(78.1818182, 6);
+    expect(model.headlineMetrics.middleClaimMae).toBeCloseTo(45.4545455, 6);
+  });
+
   it("uses a compact desktop overview while retaining the mobile stack", () => {
     expect(html).toContain(
       "@media(min-width:901px){.hero{padding:28px 42px;justify-content:flex-start}",
     );
-    expect(html).toContain(".answer-grid{gap:8px;margin-top:14px}");
+    expect(html).toContain(".answer-grid{gap:8px;margin-top:10px}");
     expect(html).toContain(
       ".answer-card p{font-size:.8rem;line-height:1.32;margin:0 0 .4rem}",
     );
@@ -191,15 +248,15 @@ describe("owner-decision nine-question report", () => {
   });
 
   it("is self-contained, responsive, deterministic, and privacy-safe", () => {
-    expect(renderBiddingPresentation(model)).toBe(html);
-    expect(renderBiddingMarkdown(model)).toBe(markdown);
+    expect(renderBiddingPresentation(model, weeklyStatus)).toBe(html);
+    expect(renderBiddingMarkdown(model, weeklyStatus)).toBe(markdown);
     expect(html).toContain("@media(max-width:900px)");
     expect(html).toContain("@media(max-width:560px)");
     expect(html).toContain("@media print");
     expect(html).not.toMatch(
       /<script\b|<link\b|https?:\/\/[^<"']+\.(?:js|css)/i,
     );
-    for (const text of [html, markdown, exactText]) {
+    for (const text of [html, markdown, exactText, weeklyStatusText]) {
       expect(text).not.toMatch(
         /manager_[0-9]+|roster_[0-9]+|league[_ -]?id|transaction[_ -]?id|player[_ -]?id/i,
       );
