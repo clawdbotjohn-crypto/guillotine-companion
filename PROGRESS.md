@@ -31,9 +31,9 @@
 - Focused presentation suite: `npx vitest run scripts/__tests__/bidding-analysis-presentation.test.ts` → **17 passed**.
 - Type/lint/build: `npx tsc --noEmit`, `npm run lint` (0 errors; 1 pre-existing React warning), `npm run build` → passed.
 - Determinism: two consecutive `npm run analyze:bidding:presentation` runs were byte-identical:
-  - Markdown `d1f6b06805b30658e533555116f2da75110c0ea5a48f3b1d1574c77d2493f979`
-  - HTML `a623f2be8002b57123696afa35d7a178201e9c0298f5a9bb960ea7c5ec6a2e0b`
-  - PDF `3b3cefb0d0ad0c4c6fd304d7f27ef886e4faad9719d7f7cfcad7947294ee352b`
+  - Markdown `55e9134d9e90a9c6e2b82247532793603db0c3ff825d11644acdc679e70383fd`
+  - HTML `4e43a37d231efe4b792116216d602fc498ab849e8e5650c9a78e8e96230a446f`
+  - PDF `aa65188fb07c27e1302a495ec51d4a70a070679b8dd60a9e2333d59c016d042b`
 - Render QA:
   - HTML desktop (1440px) and mobile (390px) snapshot checks show no horizontal overflow and retain freshness note + nine cards.
   - PDF rendered through Ghostscript as **24 pages** with consistent dimensions and no near-blank pages.
