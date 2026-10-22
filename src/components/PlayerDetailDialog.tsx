@@ -73,6 +73,7 @@ export function PlayerDetailDialog({ open, onClose, data }: { open: boolean; onC
   const otherBidGroups = visibleGroupedHistory.map((events) => events.filter((event) => event.outcome === 'legitimate-loss')).filter((events) => events.length > 0);
   const visibleHistoryCount = visibleGroupedHistory.reduce((total, events) => total + events.length, 0);
   const hiddenHistoryCount = data.history.length - visibleHistoryCount;
+  const historyCountNoun = data.history.length === 1 ? 'bid' : 'bids';
   const orderedPredictions = orderManagerPredictions(data.managerPredictions ?? []);
   const supportsPrediction = !data.owned && typeof data.suggestedBid === 'number' && Number.isFinite(data.suggestedBid) && data.suggestedBid > 0;
   const predictedBid = orderedPredictions.find((prediction) => (
@@ -224,8 +225,8 @@ export function PlayerDetailDialog({ open, onClose, data }: { open: boolean; onC
                   </label>
                   <p className="text-[10px] text-[#9ca3c7]" aria-live="polite">
                     {hideEliminatedHistory
-                      ? `Showing ${visibleHistoryCount} of ${data.history.length} bids · ${hiddenHistoryCount} eliminated hidden`
-                      : `Showing all ${data.history.length} bids`}
+                      ? `Showing ${visibleHistoryCount} of ${data.history.length} ${historyCountNoun} · ${hiddenHistoryCount} eliminated hidden`
+                      : `Showing all ${data.history.length} ${historyCountNoun}`}
                   </p>
                 </div>
               )}
