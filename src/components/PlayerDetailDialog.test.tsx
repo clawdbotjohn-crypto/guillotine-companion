@@ -93,6 +93,94 @@ describe('PlayerDetailDialog', () => {
     expect(within(dialog).getByText('$13')).toBeTruthy();
   });
 
+  it('omits the history filter when no history bid has eliminated status', () => {
+    render(<PlayerDetailDialog open onClose={vi.fn()} data={{
+      ...data,
+      biddingTeamStatuses: new Map<number, BiddingTeamStatus>([
+        [1, { kind: 'safe', label: 'Safe' }],
+        [2, { kind: 'danger', label: 'Danger' }],
+      ]),
+    }} />);
+
+    const dialog = screen.getByRole('dialog', { name: 'Detail Player' });
+    expect(within(dialog).queryByRole('checkbox', { name: 'Hide eliminated teams' })).toBeNull();
+    expect(within(dialog).getByText('Week 2 · Won')).toBeTruthy();
+    expect(within(dialog).getByText('Week 2 · Lost')).toBeTruthy();
+  });
+
+  it('shows complete history by default and filters only eliminated history without mutating source data or predictions', () => {
+    const sourceHistory = [
+      event('eliminated-win', 'won', 15),
+      event('active-loss', 'legitimate-loss', 13),
+    ];
+    const sourceSnapshot = sourceHistory.map((historyEvent) => ({ ...historyEvent }));
+    render(<PlayerDetailDialog open onClose={vi.fn()} data={{
+      ...data,
+      history: sourceHistory,
+      managerLabels: new Map([[1, 'Eliminated History Team'], [2, 'Danger History Team']]),
+      managerPredictions: [managerPrediction(1, 'Eliminated Predicted Team', 8, 'Likely')],
+      biddingTeamStatuses: new Map<number, BiddingTeamStatus>([
+        [1, { kind: 'eliminated', label: 'Eliminated' }],
+        [2, { kind: 'danger', label: 'Danger' }],
+      ]),
+    }} />);
+
+    const dialog = screen.getByRole('dialog', { name: 'Detail Player' });
+    const historyDetails = within(dialog).getByText('Bidding history · 2').closest('details')!;
+    const checkbox = within(historyDetails).getByRole('checkbox', { name: 'Hide eliminated teams' }) as HTMLInputElement;
+    expect(checkbox.checked).toBe(false);
+    expect(checkbox.className).toContain('focus-visible:ring-2');
+    expect(within(historyDetails).getByText('Showing all 2 bids')).toBeTruthy();
+    expect(within(historyDetails).getByText('Eliminated History Team')).toBeTruthy();
+    expect(within(historyDetails).getByText('Danger History Team')).toBeTruthy();
+    expect(within(historyDetails).getByRole('region', { name: 'Winning bids' })).toBeTruthy();
+    expect(within(historyDetails).getByRole('region', { name: 'Other bids' })).toBeTruthy();
+
+    fireEvent.click(checkbox);
+    expect(checkbox.checked).toBe(true);
+    expect(within(historyDetails).queryByText('Eliminated History Team')).toBeNull();
+    expect(within(historyDetails).getByText('Danger History Team')).toBeTruthy();
+    expect(within(historyDetails).queryByRole('region', { name: 'Winning bids' })).toBeNull();
+    expect(within(historyDetails).getByRole('region', { name: 'Other bids' })).toBeTruthy();
+    expect(within(historyDetails).getByText('Showing 1 of 2 bids · 1 eliminated hidden')).toBeTruthy();
+    expect(within(dialog).getByText('Eliminated Predicted Team')).toBeTruthy();
+    expect(sourceHistory).toEqual(sourceSnapshot);
+
+    fireEvent.click(checkbox);
+    expect(checkbox.checked).toBe(false);
+    expect(within(historyDetails).getByText('Eliminated History Team')).toBeTruthy();
+    expect(within(historyDetails).getByText('Showing all 2 bids')).toBeTruthy();
+    expect(sourceHistory).toEqual(sourceSnapshot);
+  });
+
+  it('removes empty history groups and explains an all-eliminated filtered result without implying deletion', () => {
+    const sourceHistory = [
+      event('eliminated-win', 'won', 15, '2025:2:p1'),
+      event('eliminated-loss', 'legitimate-loss', 13, '2025:3:p1'),
+    ];
+    const sourceSnapshot = sourceHistory.map((historyEvent) => ({ ...historyEvent }));
+    render(<PlayerDetailDialog open onClose={vi.fn()} data={{
+      ...data,
+      history: sourceHistory,
+      managerLabels: new Map([[1, 'Eliminated Winner'], [2, 'Eliminated Competitor']]),
+      biddingTeamStatuses: new Map<number, BiddingTeamStatus>([
+        [1, { kind: 'eliminated', label: 'Eliminated' }],
+        [2, { kind: 'eliminated', label: 'Eliminated' }],
+      ]),
+    }} />);
+
+    const dialog = screen.getByRole('dialog', { name: 'Detail Player' });
+    const historyDetails = within(dialog).getByText('Bidding history · 2').closest('details')!;
+    fireEvent.click(within(historyDetails).getByRole('checkbox', { name: 'Hide eliminated teams' }));
+
+    expect(within(historyDetails).queryByRole('region', { name: 'Winning bids' })).toBeNull();
+    expect(within(historyDetails).queryByRole('region', { name: 'Other bids' })).toBeNull();
+    expect(within(historyDetails).queryByLabelText('Week 2 waiver event')).toBeNull();
+    expect(within(historyDetails).getByText('Showing 0 of 2 bids · 2 eliminated hidden')).toBeTruthy();
+    expect(within(historyDetails).getByRole('status').textContent).toBe('No bids match this filter. All 2 history entries are from eliminated teams; no records were deleted.');
+    expect(sourceHistory).toEqual(sourceSnapshot);
+  });
+
   it('closes on Escape and removes the entire explanatory roster section for owned players', () => {
     const onClose = vi.fn();
     render(<PlayerDetailDialog open onClose={onClose} data={{ ...data, owned: true, ownerLabel: 'Rostered by Rain City Axes.' }} />);

@@ -1,7 +1,7 @@
 import { UNAVAILABLE_BIDDING_TEAM_STATUS, type BiddingTeamStatus } from '../logic';
 
 const BIDDING_TEAM_STATUS_STYLES: Record<BiddingTeamStatus['kind'], { name: string; badge: string }> = {
-  eliminated: { name: 'text-[#f87171]/80 line-through decoration-[#f87171]/70', badge: 'border-[#f87171]/35 bg-[#7f1d1d]/20 text-[#fca5a5]' },
+  eliminated: { name: 'text-[#9ca3af] line-through decoration-[#8b8eac]', badge: 'border-[#6b7280]/60 bg-[#374151]/35 text-[#d1d5db]' },
   safe: { name: 'text-[#6ee7b7]', badge: 'border-[#10b981]/35 bg-[#064e3b]/25 text-[#6ee7b7]' },
   warning: { name: 'text-[#fbbf24]', badge: 'border-[#f59e0b]/35 bg-[#78350f]/20 text-[#fbbf24]' },
   danger: { name: 'text-[#fb7185]', badge: 'border-[#f43f5e]/35 bg-[#881337]/20 text-[#fb7185]' },

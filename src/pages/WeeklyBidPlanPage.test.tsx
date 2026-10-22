@@ -119,20 +119,54 @@ describe('Suggested Bids owner presentation', () => {
       .toBe('3 targets');
   });
 
-  it('renames summary fields and counts only conditional position-player pickup rounds', () => {
-    const plan: WeeklyBidPlan = {
-      rows: [
-        { kind: 'position', dropPlayerId: 'drop-a', dropPosition: 'RB', recommendations: [recommendation], scenarioBudgetBefore: 100 },
-        { kind: 'position', dropPlayerId: 'drop-b', dropPosition: 'WR', recommendations: [recommendation, recommendation], scenarioBudgetBefore: 80 },
-        { kind: 'streamer', dropPlayerId: 'def-old', dropPosition: 'DEF', recommendations: [recommendation], scenarioBudgetBefore: 80 },
-      ],
+  it('counts each non-empty position, DEF, and K recommendation group once', () => {
+    const positionRows: WeeklyBidPlan['rows'] = [
+      { kind: 'position', dropPlayerId: 'drop-a', dropPosition: 'RB', recommendations: [recommendation], scenarioBudgetBefore: 100 },
+      { kind: 'position', dropPlayerId: 'drop-b', dropPosition: 'WR', recommendations: [recommendation, recommendation], scenarioBudgetBefore: 80 },
+      { kind: 'position', dropPlayerId: 'empty-position', dropPosition: 'TE', recommendations: [], scenarioBudgetBefore: 80 },
+    ];
+    const cases: Array<{ label: string; streamerRows: WeeklyBidPlan['rows']; expected: number }> = [
+      { label: 'neither', streamerRows: [], expected: 2 },
+      {
+        label: 'DEF only',
+        streamerRows: [{ kind: 'streamer', dropPlayerId: 'def-old', dropPosition: 'DEF', recommendations: [recommendation, recommendation], scenarioBudgetBefore: 80 }],
+        expected: 3,
+      },
+      {
+        label: 'K only',
+        streamerRows: [{ kind: 'streamer', dropPlayerId: 'k-old', dropPosition: 'K', recommendations: [recommendation, recommendation, recommendation], scenarioBudgetBefore: 80 }],
+        expected: 3,
+      },
+      {
+        label: 'both',
+        streamerRows: [
+          { kind: 'streamer', dropPlayerId: 'def-old', dropPosition: 'DEF', recommendations: [recommendation, recommendation], scenarioBudgetBefore: 80 },
+          { kind: 'streamer', dropPlayerId: 'k-old', dropPosition: 'K', recommendations: [recommendation, recommendation, recommendation], scenarioBudgetBefore: 80 },
+          { kind: 'streamer', dropPlayerId: 'empty-def', dropPosition: 'DEF', recommendations: [], scenarioBudgetBefore: 80 },
+          { kind: 'streamer', dropPlayerId: 'empty-k', dropPosition: 'K', recommendations: [], scenarioBudgetBefore: 80 },
+        ],
+        expected: 4,
+      },
+    ];
+    const makePlan = (rows: WeeklyBidPlan['rows']): WeeklyBidPlan => ({
+      rows,
       startingRisk: 'safe',
       startingRank: 2,
       activeTeamCount: 5,
       initialBudgetRemaining: 100,
       richestOtherActiveBudget: 90,
-    };
-    render(<WeeklyBidSummary plan={plan} />);
+    });
+    const { rerender } = render(<WeeklyBidSummary plan={makePlan(positionRows)} />);
+
+    for (const testCase of cases) {
+      rerender(<WeeklyBidSummary plan={makePlan([...positionRows, ...testCase.streamerRows])} />);
+      const summary = screen.getByRole('region', { name: 'Suggested Bids summary' });
+      const plannedPickups = within(summary).getByRole('group', {
+        name: 'Recommended pickups',
+        description: 'Actionable pickup groups modeled, including position players, defense, and kicker',
+      });
+      expect(within(plannedPickups).getByText(String(testCase.expected)), testCase.label).toBeTruthy();
+    }
 
     const summary = screen.getByRole('region', { name: 'Suggested Bids summary' });
     expect(within(summary).getByText('Survival status')).toBeTruthy();
@@ -141,12 +175,6 @@ describe('Suggested Bids owner presentation', () => {
     expect(within(summary).queryByText('Posture')).toBeNull();
     expect(within(summary).queryByText('Position moves')).toBeNull();
     expect(within(summary).queryByText('Bids won')).toBeNull();
-
-    const plannedPickups = within(summary).getByRole('group', {
-      name: 'Recommended pickups',
-      description: 'Conditional position-player pickups modeled',
-    });
-    expect(within(plannedPickups).getByText('2')).toBeTruthy();
   });
 
   it('keeps long target names legible, preserves $0, removes collapsed prose, and opens the full Waivers details path', () => {

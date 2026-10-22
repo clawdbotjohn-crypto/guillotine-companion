@@ -259,7 +259,10 @@ export function WeeklyBidAccordionGroup({
 }
 
 export function WeeklyBidSummary({ plan }: { plan: WeeklyBidPlan }) {
-  const plannedPickupCount = plan.rows.filter((row) => row.kind === 'position').length;
+  const plannedPickupCount = plan.rows.filter((row) => (
+    row.recommendations.length > 0
+    && (row.kind === 'position' || row.dropPosition === 'DEF' || row.dropPosition === 'K')
+  )).length;
   return (
     <section className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="Suggested Bids summary">
       <Card hover={false} className="p-3"><p className="text-[9px] uppercase tracking-wider text-[#6b6e99]">Survival status</p><div className="mt-1"><StatusBadge status={plan.startingRisk} /></div></Card>
@@ -269,7 +272,7 @@ export function WeeklyBidSummary({ plan }: { plan: WeeklyBidPlan }) {
         <div role="group" aria-labelledby="planned-pickups-label" aria-describedby="planned-pickups-description">
           <p id="planned-pickups-label" className="text-[9px] uppercase tracking-wider text-[#6b6e99]">Recommended pickups</p>
           <p className="mt-1 font-['Space_Mono'] text-lg font-bold">{plannedPickupCount}</p>
-          <p id="planned-pickups-description" className="sr-only">Conditional position-player pickups modeled</p>
+          <p id="planned-pickups-description" className="sr-only">Actionable pickup groups modeled, including position players, defense, and kicker</p>
         </div>
       </Card>
     </section>
