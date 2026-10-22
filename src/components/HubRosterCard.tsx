@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { HubRosterRow } from '../logic/hubRoster';
+import type { BiddingTeamStatus } from '../logic';
 import { Card, PositionBadge } from './ui';
 import { PlayerDetailDialog, type PlayerDetailData, type PlayerProjectionState } from './PlayerDetailDialog';
 import { formatWholeDollars } from '../logic/displayCurrency';
@@ -83,6 +84,7 @@ export function HubRosterCard({
   values = new Map(),
   details = new Map(),
   projectionState = 'loaded',
+  biddingTeamStatuses = new Map(),
 }: {
   rows: HubRosterRow[];
   week: number | null;
@@ -90,6 +92,7 @@ export function HubRosterCard({
   values?: ReadonlyMap<string, number | null>;
   details?: ReadonlyMap<string, PlayerDetailData>;
   projectionState?: PlayerProjectionState;
+  biddingTeamStatuses?: ReadonlyMap<number, BiddingTeamStatus>;
 }) {
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const starters = rows.filter((row) => row.isStarter);
@@ -121,7 +124,7 @@ export function HubRosterCard({
           </div>
         )}
       </Card>
-      {selected && <PlayerDetailDialog open data={selected} onClose={() => setSelectedPlayerId(null)} />}
+      {selected && <PlayerDetailDialog open data={{ ...selected, biddingTeamStatuses }} onClose={() => setSelectedPlayerId(null)} />}
     </>
   );
 }

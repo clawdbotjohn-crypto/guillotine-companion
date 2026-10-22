@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useId, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
-import type { CanonicalBidEvent, FreeAgentTeamImpact } from '../logic';
+import type { BiddingTeamStatus, CanonicalBidEvent, FreeAgentTeamImpact } from '../logic';
 import type { ManagerDetailData } from '../logic/managerDetails';
 import { isEligibleBuyerPrediction, orderManagerPredictions, type ManagerPredictionDisplay } from '../logic/managerPredictionDisplay';
 import { formatDisplayCurrency } from '../logic/displayCurrency';
 import { rankQuartile } from '../logic/rankingQuartiles';
 import { WaiverManagerPredictions } from './ManagerBiddingProfiles';
+import { BiddingTeamIdentity } from './BiddingTeamIdentity';
 
 export type PlayerProjectionState = 'loading' | 'error' | 'loaded' | 'unavailable';
 
@@ -27,6 +28,7 @@ export interface PlayerDetailData {
   injuryStatus?: string | null;
   nextWeek?: number | null;
   nextWeekPoints?: number | null;
+  nextWeekRank?: number | null;
   projectionState?: PlayerProjectionState;
   byeWeek?: number | null;
   sourceLabel: string;
@@ -43,13 +45,17 @@ export interface PlayerDetailData {
   managerPredictions?: ManagerPredictionDisplay[];
   managerDetails?: ReadonlyMap<number, ManagerDetailData>;
   managerLabels?: ReadonlyMap<number, string>;
+  biddingTeamStatuses?: ReadonlyMap<number, BiddingTeamStatus>;
   getPlayerName?: (playerId: string) => string;
   history: CanonicalBidEvent[];
 }
 
 export function PlayerDetailDialog({ open, onClose, data }: { open: boolean; onClose: () => void; data: PlayerDetailData }) {
   const titleId = useId();
+  const historyFilterId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
+  const [historyFilter, setHistoryFilter] = useState({ playerId: data.playerId, hideEliminated: false });
+  const hideEliminatedHistory = historyFilter.playerId === data.playerId && historyFilter.hideEliminated;
   const groupedHistory = useMemo(() => {
     const groups = new Map<string, CanonicalBidEvent[]>();
     for (const event of data.history) groups.set(event.batchKey, [...(groups.get(event.batchKey) ?? []), event]);
@@ -57,8 +63,17 @@ export function PlayerDetailDialog({ open, onClose, data }: { open: boolean; onC
       .map((events) => [...events].sort((a, b) => Number(b.outcome === 'won') - Number(a.outcome === 'won') || b.actualBid - a.actualBid || a.transactionId.localeCompare(b.transactionId)))
       .sort((a, b) => (b[0]?.createdAt ?? 0) - (a[0]?.createdAt ?? 0));
   }, [data.history]);
-  const winningGroups = groupedHistory.map((events) => events.filter((event) => event.outcome === 'won')).filter((events) => events.length > 0);
-  const otherBidGroups = groupedHistory.map((events) => events.filter((event) => event.outcome === 'legitimate-loss')).filter((events) => events.length > 0);
+  const hasEliminatedHistory = data.history.some((event) => data.biddingTeamStatuses?.get(event.managerRosterId)?.kind === 'eliminated');
+  const visibleGroupedHistory = hideEliminatedHistory
+    ? groupedHistory
+      .map((events) => events.filter((event) => data.biddingTeamStatuses?.get(event.managerRosterId)?.kind !== 'eliminated'))
+      .filter((events) => events.length > 0)
+    : groupedHistory;
+  const winningGroups = visibleGroupedHistory.map((events) => events.filter((event) => event.outcome === 'won')).filter((events) => events.length > 0);
+  const otherBidGroups = visibleGroupedHistory.map((events) => events.filter((event) => event.outcome === 'legitimate-loss')).filter((events) => events.length > 0);
+  const visibleHistoryCount = visibleGroupedHistory.reduce((total, events) => total + events.length, 0);
+  const hiddenHistoryCount = data.history.length - visibleHistoryCount;
+  const historyCountNoun = data.history.length === 1 ? 'bid' : 'bids';
   const orderedPredictions = orderManagerPredictions(data.managerPredictions ?? []);
   const supportsPrediction = !data.owned && typeof data.suggestedBid === 'number' && Number.isFinite(data.suggestedBid) && data.suggestedBid > 0;
   const predictedBid = orderedPredictions.find((prediction) => (
@@ -68,26 +83,27 @@ export function PlayerDetailDialog({ open, onClose, data }: { open: boolean; onC
   ))?.predictedBid ?? null;
   const playerStatus = data.injuryStatus || data.status || 'Unavailable';
   const projectionState = data.projectionState ?? (data.nextWeek != null ? 'loaded' : 'unavailable');
+  const knownBye = data.nextWeek != null && data.byeWeek === data.nextWeek;
+  const missingProjection = data.nextWeekPoints == null && !knownBye;
   const projectionValue = projectionState === 'loading'
     ? 'Loading…'
-    : projectionState === 'error' || projectionState === 'unavailable'
+    : projectionState === 'error' || projectionState === 'unavailable' || missingProjection
       ? 'Unavailable'
-      : (data.nextWeekPoints ?? 0).toFixed(1).replace(/\.0$/, '');
+      : `${knownBye ? 'BYE · ' : ''}${(data.nextWeekPoints ?? 0).toFixed(1).replace(/\.0$/, '')}`;
   const projectionWeek = data.nextWeek == null ? '' : ` (W${data.nextWeek})`;
+  const projectionRank = data.nextWeek == null
+    ? ''
+    : ` · ${data.position} ${!knownBye && !missingProjection && data.nextWeekRank != null && data.nextWeekRank > 0 ? `#${data.nextWeekRank}` : '#—'}`;
   const impact = data.teamImpact;
   const impactDelta = impact?.status === 'available'
     ? impact.lineupPoints.after - impact.lineupPoints.before
     : null;
-  const hasNoTeamImpact = impact?.status === 'available' && (
-    data.suggestedBid === 0
-    || (
-      !impact.incomingPlayerStarts
-      && impact.displacedStarterIds.length === 0
-      && impact.lineupPoints.before === impact.lineupPoints.after
-      && impact.overallRank.before === impact.overallRank.after
-      && impact.positionRank.before === impact.positionRank.after
-    )
-  );
+  const hasNoTeamImpact = impact?.status === 'available'
+    && !impact.incomingPlayerStarts
+    && impact.displacedStarterIds.length === 0
+    && impact.lineupPoints.before === impact.lineupPoints.after
+    && impact.overallRank.before === impact.overallRank.after
+    && impact.positionRank.before === impact.positionRank.after;
   const hasPrediction = supportsPrediction && predictedBid != null && orderedPredictions.length > 0;
   const closeDialog = useCallback(() => onClose(), [onClose]);
 
@@ -116,7 +132,7 @@ export function PlayerDetailDialog({ open, onClose, data }: { open: boolean; onC
   const renderBid = (event: CanonicalBidEvent) => (
     <div key={event.transactionId} className="flex items-start justify-between gap-3 rounded-lg bg-[#121735] p-3 text-xs">
       <div className="min-w-0">
-        <div className="truncate font-semibold text-[#f0f0ff]">{managerLabel(event)}</div>
+        <div className="font-semibold"><BiddingTeamIdentity name={managerLabel(event)} status={data.biddingTeamStatuses?.get(event.managerRosterId)} /></div>
         <div className="mt-0.5 text-[10px] text-[#9ca3c7]">Week {event.decisionWeek} · {event.outcome === 'won' ? 'Won' : 'Lost'}</div>
       </div>
       <span className="shrink-0 font-['Space_Mono'] text-sm font-bold text-[#f59e0b]">{formatDisplayCurrency(event.actualBid)}</span>
@@ -144,7 +160,7 @@ export function PlayerDetailDialog({ open, onClose, data }: { open: boolean; onC
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <section aria-label="Player profile" className="grid grid-cols-2 gap-2 pb-4 text-xs">
             <div className="min-w-0 rounded-lg bg-[#121735] p-3"><div className="text-[10px] uppercase tracking-wider text-[#6b6e99]">{data.valueLabel}</div><div className="mt-1 truncate font-['Space_Mono'] text-lg font-bold text-[#a5b4fc]">{data.valueDisplay}</div><div className="mt-1 text-[10px] text-[#6b6e99]">{data.sourceLabel}{data.positionRank != null ? ` · ${data.position} #${data.positionRank}` : ''}</div></div>
-            <div className="min-w-0 rounded-lg bg-[#121735] p-3"><div className="text-[10px] uppercase tracking-wider text-[#6b6e99]">Profile</div><div className="mt-1 text-[#f0f0ff]">Age: {data.age ?? 'Unavailable'}</div><div className="mt-1 text-[#9ca3c7]">Status: {playerStatus}</div><div className="mt-1 text-[#9ca3c7]">Bye: {data.byeWeek ?? 'Unavailable'}</div><div className="mt-1 text-[#9ca3c7]">Proj.: {projectionValue}{projectionWeek}</div></div>
+            <div className="min-w-0 rounded-lg bg-[#121735] p-3"><div className="text-[10px] uppercase tracking-wider text-[#6b6e99]">Profile</div><div className="mt-1 text-[#f0f0ff]">Age: {data.age ?? 'Unavailable'}</div><div className="mt-1 text-[#9ca3c7]">Status: {playerStatus}</div><div className="mt-1 text-[#9ca3c7]">Bye: {data.byeWeek ?? 'Unavailable'}</div><div className="mt-1 text-[#9ca3c7]">Proj.: {projectionValue}{projectionWeek}{projectionRank}</div></div>
           </section>
 
           {!data.owned && <section className="rounded-lg border border-[#20264d] p-3" aria-label="Acquisition context">
@@ -190,11 +206,41 @@ export function PlayerDetailDialog({ open, onClose, data }: { open: boolean; onC
             </section>
           )}
 
-          {!data.owned && (hasPrediction ? <details className="mt-4 rounded-lg border border-[#20264d] p-3"><summary className="cursor-pointer text-xs font-semibold uppercase tracking-wider text-[#f0f0ff]">Predicted bidding</summary><div className="mt-3"><WaiverManagerPredictions predictions={orderedPredictions} detailsByRosterId={data.managerDetails} getPlayerName={data.getPlayerName ?? (() => 'Unknown player')} /></div></details> : <section className="mt-4 rounded-lg border border-[#20264d] p-3" aria-label="Predicted bidding"><h3 className="text-xs font-semibold uppercase tracking-wider text-[#f0f0ff]">Predicted bidding</h3><p className="mt-1 text-xs text-[#9ca3c7]">None</p></section>)}
+          {!data.owned && (hasPrediction ? <details className="mt-4 rounded-lg border border-[#20264d] p-3"><summary className="cursor-pointer text-xs font-semibold uppercase tracking-wider text-[#f0f0ff]">Predicted bidding</summary><div className="mt-3"><WaiverManagerPredictions predictions={orderedPredictions} detailsByRosterId={data.managerDetails} getPlayerName={data.getPlayerName ?? (() => 'Unknown player')} biddingTeamStatuses={data.biddingTeamStatuses} /></div></details> : <section className="mt-4 rounded-lg border border-[#20264d] p-3" aria-label="Predicted bidding"><h3 className="text-xs font-semibold uppercase tracking-wider text-[#f0f0ff]">Predicted bidding</h3><p className="mt-1 text-xs text-[#9ca3c7]">None</p></section>)}
 
           {data.history.length > 0 ? <details open className="mt-4 rounded-lg border border-[#20264d] p-3">
             <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wider text-[#f0f0ff]">Bidding history · {data.history.length}</summary>
-            <div className="mt-3 space-y-4">{winningGroups.length > 0 && <section aria-label="Winning bids"><h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#10b981]">Winning bids</h4><div className="space-y-3">{winningGroups.map((events) => <div key={events[0].batchKey} aria-label={`Week ${events[0].decisionWeek} waiver event`} className="space-y-2">{events.map(renderBid)}</div>)}</div></section>}{otherBidGroups.length > 0 && <section aria-label="Other bids"><h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#a5b4fc]">Other bids</h4><div className="space-y-3">{otherBidGroups.map((events) => <div key={events[0].batchKey} aria-label={`Week ${events[0].decisionWeek} waiver event`} className="space-y-2">{events.map(renderBid)}</div>)}</div></section>}</div>
+            <div className="mt-3 space-y-4">
+              {hasEliminatedHistory && (
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#20264d] pb-3">
+                  <label htmlFor={historyFilterId} className="inline-flex min-h-9 cursor-pointer items-center gap-2 text-xs font-medium text-[#d1d5db]">
+                    <input
+                      id={historyFilterId}
+                      type="checkbox"
+                      checked={hideEliminatedHistory}
+                      onChange={(event) => setHistoryFilter({ playerId: data.playerId, hideEliminated: event.target.checked })}
+                      className="h-4 w-4 rounded border-[#6b7280] bg-[#121735] accent-[#818cf8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a5b4fc] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0d1126]"
+                    />
+                    <span>Hide eliminated teams</span>
+                  </label>
+                  <p className="text-[10px] text-[#9ca3c7]" aria-live="polite">
+                    {hideEliminatedHistory
+                      ? `Showing ${visibleHistoryCount} of ${data.history.length} ${historyCountNoun} · ${hiddenHistoryCount} eliminated hidden`
+                      : `Showing all ${data.history.length} ${historyCountNoun}`}
+                  </p>
+                </div>
+              )}
+              {visibleHistoryCount === 0 ? (
+                <p role="status" className="rounded-lg bg-[#121735] p-3 text-xs text-[#d1d5db]">
+                  No bids match this filter. All {data.history.length} history {data.history.length === 1 ? 'entry is' : 'entries are'} from eliminated teams; no records were deleted.
+                </p>
+              ) : (
+                <>
+                  {winningGroups.length > 0 && <section aria-label="Winning bids"><h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#10b981]">Winning bids</h4><div className="space-y-3">{winningGroups.map((events) => <div key={events[0].batchKey} aria-label={`Week ${events[0].decisionWeek} waiver event`} className="space-y-2">{events.map(renderBid)}</div>)}</div></section>}
+                  {otherBidGroups.length > 0 && <section aria-label="Other bids"><h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#a5b4fc]">Other bids</h4><div className="space-y-3">{otherBidGroups.map((events) => <div key={events[0].batchKey} aria-label={`Week ${events[0].decisionWeek} waiver event`} className="space-y-2">{events.map(renderBid)}</div>)}</div></section>}
+                </>
+              )}
+            </div>
           </details> : <section className="mt-4 rounded-lg border border-[#20264d] p-3" aria-label="Bidding history"><h3 className="text-xs font-semibold uppercase tracking-wider text-[#f0f0ff]">Bidding history</h3><p className="mt-1 text-xs text-[#9ca3c7]">No bidding history.</p></section>}
         </div>
       </div>

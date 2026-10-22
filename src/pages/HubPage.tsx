@@ -19,6 +19,7 @@ import {
 } from '../api';
 import {
   buildWeeklyScoredPlayers,
+  buildBiddingTeamStatusMap,
   buildHubRosterRows,
   buildUpcomingByeWarnings,
   computeEliminations,
@@ -46,6 +47,8 @@ import { HubRosterCard } from '../components/HubRosterCard';
 import { HubByeWarnings } from '../components/HubByeWarnings';
 import { HubPositionRankings } from '../components/HubPositionRankings';
 import { HubLiveScoring } from '../components/HubLiveScoring';
+import { WeeklyBidPlanEntry } from '../components/WeeklyBidPlanEntry';
+import { shouldShowWeeklyBidPlan } from '../logic/weeklyBidPlan';
 import { useSwitchSeason } from '../hooks/useSwitchSeason';
 import { Calendar } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -268,6 +271,11 @@ export function HubPage() {
       })
     : null;
   const liveScoringActive = isWeeklyScoringActive(weeklyGamesQuery.data);
+  const showWeeklyBidPlan = shouldShowWeeklyBidPlan({
+    leagueStatus: league?.status,
+    liveScoringActive,
+    playingWeek: projectionWeek,
+  });
   const liveLoading = liveSeasonEnabled
     && (
       liveMatchupsQuery.isLoading
@@ -297,6 +305,7 @@ export function HubPage() {
     ]);
   };
   const projections = projectAllTeams(rosters, weeklyScoredPlayers, league, elimResult);
+  const biddingTeamStatuses = buildBiddingTeamStatusMap(elimResult, projections);
   const myProjection = projections.find((team) => team.rosterId === rosterId);
   const allRosterHistoricalRanks = computeAllRosterHistoricalRanks(elimResult);
   const myHistoricalTotalRank = allRosterHistoricalRanks.get(rosterId);
@@ -457,6 +466,8 @@ export function HubPage() {
           onRefresh={refreshLiveScores}
         />
 
+        {showWeeklyBidPlan && <WeeklyBidPlanEntry onOpen={() => navigate('/weekly-bid-plan')} />}
+
         {/* Pre-season card */}
         <Card hover={false} className="p-6 mb-6">
           <div className="flex flex-col items-center text-center">
@@ -523,6 +534,7 @@ export function HubPage() {
           values={rosterValueMap}
           details={playerDetails}
           projectionState={playerProjectionState}
+          biddingTeamStatuses={biddingTeamStatuses}
         />
 
         {/* Recent bids (unlikely pre-season but safe to show) */}
@@ -605,6 +617,8 @@ export function HubPage() {
         onRefresh={refreshLiveScores}
       />
 
+      {showWeeklyBidPlan && <WeeklyBidPlanEntry onOpen={() => navigate('/weekly-bid-plan')} />}
+
       <UpcomingProjectionCard
         week={projectionWeek}
         projection={myProjection}
@@ -667,6 +681,7 @@ export function HubPage() {
         values={rosterValueMap}
         details={playerDetails}
         projectionState={playerProjectionState}
+        biddingTeamStatuses={biddingTeamStatuses}
       />
 
       {/* Week-by-week scores */}

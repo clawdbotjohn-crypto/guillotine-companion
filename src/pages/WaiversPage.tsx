@@ -1,7 +1,7 @@
 // Waivers page — recommended bids per strategy, weekly context, and predicted winning bid.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AlertTriangle, ShoppingCart, Info, RefreshCw, UserCheck, Plus, Settings, Trash2 } from 'lucide-react';
-import { Button, Card, Skeleton } from '../components/ui';
+import { Button, Card, PositionBadge, Skeleton } from '../components/ui';
 import { FaabOverBudgetWarning } from '../components/FaabOverBudgetWarning';
 import { buildManagerDetailData, type ManagerDetailData } from '../logic/managerDetails';
 import { PlayerDetailDialog, type PlayerProjectionState } from '../components/PlayerDetailDialog';
@@ -32,6 +32,7 @@ import {
   computeProjectedLineupGroupRanks,
   classifyCanonicalBidEvents,
   buildFreeAgentTeamImpact,
+  buildBiddingTeamStatusMap,
   type EliminationResult,
   type WeeklyScoredPlayer,
   type WaiverRankingSource,
@@ -215,6 +216,9 @@ interface TeamImpactContext {
 export function WaiverPlayerCard({
   row,
   strategy,
+  summaryMode = 'default',
+  showCompactBidSummary = true,
+  embedded = false,
   customValue,
   onCustomValueCommit,
   remainingFaab,
@@ -229,18 +233,25 @@ export function WaiverPlayerCard({
   projectionState = 'loaded',
   owner,
   selectedRosterId,
+  suppressSelectedOwnerAccent = false,
   managerPredictions = [],
   managerDetails = new Map(),
   managerLabels = new Map(),
+  biddingTeamStatuses = new Map(),
   showManagerPredictions = false,
   getPlayerName: resolvePlayerName = getPlayerName,
   sourceLabel = 'Sleeper ROS',
   rankingSource = 'sleeper',
   canonicalHistory = [],
   teamImpactContext,
+  teamImpactScenario,
 }: {
   row: WaiverPlayerRow;
   strategy: DisplayStrategyKey;
+  summaryMode?: 'default' | 'suggested-bids';
+  showCompactBidSummary?: boolean;
+  /** Removes duplicate card chrome when a parent feature supplies the single visual boundary. */
+  embedded?: boolean;
   customValue?: number;
   onCustomValueCommit?: (value: number) => void;
   remainingFaab: number | null;
@@ -255,15 +266,21 @@ export function WaiverPlayerCard({
   projectionState?: PlayerProjectionState;
   owner?: RosteredPlayerOwner;
   selectedRosterId?: number | null;
+  suppressSelectedOwnerAccent?: boolean;
   managerPredictions?: ManagerPredictionDisplay[];
   showManagerPredictions?: boolean;
   managerDetails?: ReadonlyMap<number, ManagerDetailData>;
   managerLabels?: ReadonlyMap<number, string>;
+  biddingTeamStatuses?: ReadonlyMap<number, import('../logic').BiddingTeamStatus>;
   getPlayerName?: (playerId: string) => string;
   sourceLabel?: string;
   rankingSource?: WaiverRankingSource;
   canonicalHistory?: import('../logic').CanonicalBidEvent[];
   teamImpactContext?: TeamImpactContext;
+  teamImpactScenario?: {
+    selectedRosterPlayerIds: readonly string[];
+    explicitDropPlayerId: string;
+  };
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const suggestion = strategy === 'custom' ? undefined : row.suggestions.find((item) => item.strategy === strategy);
@@ -279,19 +296,31 @@ export function WaiverPlayerCard({
     if (normalized !== value) onCustomValueCommit?.(normalized);
   };
   const projectionWeek = playingWeek == null ? '—' : playingWeek;
+  const knownBye = playingWeek != null && byeWeek === playingWeek;
   const weeklyProjection = projectionState === 'loading'
     ? 'Loading…'
-    : projectionState === 'error' || projectionState === 'unavailable'
+    : projectionState === 'error' || projectionState === 'unavailable' || (weeklyPoints == null && !knownBye)
       ? 'Unavailable'
-      : `${weeklyPoints == null || weeklyPoints === 0 ? '0' : weeklyPoints.toFixed(1)} pts`;
+      : `${knownBye ? 'BYE · ' : ''}${weeklyPoints == null || weeklyPoints === 0 ? '0' : weeklyPoints.toFixed(1)} pts`;
   const weeklyMeta = playingWeek != null
-    ? `W${projectionWeek} ${weeklyProjection}${byeWeek != null ? ` · Bye W${byeWeek}` : ''}`
+    ? `W${projectionWeek} ${weeklyProjection}${byeWeek != null && !knownBye ? ` · Bye W${byeWeek}` : ''}`
     : projectionState === 'loading'
       ? 'Projection loading…'
       : projectionState === 'error'
         ? 'Projection unavailable'
         : byeWeek != null ? `Bye W${byeWeek}` : null;
   const selectedTeamOwner = owner?.rosterId === selectedRosterId;
+  const suggestedBidsSummary = summaryMode === 'suggested-bids';
+  const compactWeeklyProjection = projectionState === 'loading'
+    ? 'Loading… #—'
+    : projectionState === 'error' || projectionState === 'unavailable' || (weeklyPoints == null && !knownBye)
+      ? 'Unavailable #—'
+      : knownBye
+        ? 'BYE · 0 pts #—'
+        : `${weeklyPoints === 0 ? '0' : weeklyPoints!.toFixed(1)} pts ${weeklyRank != null && weeklyRank > 0 ? `#${weeklyRank}` : '#—'}`;
+  const compactRosPoints = Number.isInteger(row.rosPoints)
+    ? String(row.rosPoints)
+    : row.rosPoints.toFixed(1);
   const sourceMetric = formatWaiverSourceMetric(row, rankingSource);
   const orderedPredictions = orderManagerPredictions(managerPredictions);
   const eligiblePredictions = orderedPredictions.filter(isEligibleBuyerPrediction);
@@ -313,6 +342,8 @@ export function WaiverPlayerCard({
       league: teamImpactContext.league,
       elimination: teamImpactContext.elimination,
       weeklyProjections: teamImpactContext.weeklyProjections,
+      selectedRosterPlayerIds: teamImpactScenario?.selectedRosterPlayerIds,
+      explicitDropPlayerId: teamImpactScenario?.explicitDropPlayerId,
     });
   }, [
     detailsOpen,
@@ -321,11 +352,12 @@ export function WaiverPlayerCard({
     row.position,
     selectedRosterId,
     teamImpactContext,
+    teamImpactScenario,
   ]);
 
   return (
     <>
-      <Card hover className={`p-0 mb-2 overflow-hidden ${owner ? selectedTeamOwner ? 'border-[#10b981]/70' : 'border-[#2a2d4d]' : ''}`}>
+      <Card hover className={`p-0 overflow-hidden ${embedded ? '!mb-0 !rounded-none !border-0 !bg-transparent !backdrop-blur-none hover:!border-0 hover:!shadow-none' : 'mb-2'} ${!embedded && owner ? selectedTeamOwner && !suppressSelectedOwnerAccent ? 'border-[#10b981]/70' : 'border-[#2a2d4d]' : ''}`}>
         <div className="flex min-w-0 items-stretch">
           <button
             type="button"
@@ -336,19 +368,27 @@ export function WaiverPlayerCard({
           >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
-                <div className="flex min-w-0 items-center gap-1.5">
-                  <span className="min-w-0 truncate text-sm font-semibold text-[#f0f0ff]">{row.name}</span>
+                <div className={`flex min-w-0 items-center gap-1.5 ${suggestedBidsSummary ? 'flex-wrap' : ''}`}>
+                  {suggestedBidsSummary && <PositionBadge position={row.position} className="shrink-0" />}
+                  <span className={`min-w-0 text-sm font-semibold text-[#f0f0ff] ${suggestedBidsSummary ? 'break-words leading-5' : 'truncate'}`}>{row.name}</span>
                   {owner && <span role="img" aria-label="Rostered" className={`shrink-0 ${selectedTeamOwner ? 'text-[#6ee7b7]' : 'text-[#8b8eac]'}`}><UserCheck size={14} strokeWidth={1.75} aria-hidden="true" /></span>}
                 </div>
-                <div className="mt-0.5 truncate text-[10px] text-[#6b6e99]">
+                {suggestedBidsSummary && <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 font-['Space_Mono'] text-[9px] leading-4 text-[#8b8eac]" data-testid="suggested-bids-player-context">
+                  <span>{row.position} {row.posRank > 0 ? `#${row.posRank}` : '#—'}</span>
+                  <span aria-hidden="true" className="text-[#454970]">·</span>
+                  <span>W{projectionWeek} {compactWeeklyProjection}</span>
+                  <span aria-hidden="true" className="text-[#454970]">·</span>
+                  <span>ROS {compactRosPoints} pts</span>
+                </div>}
+                {!suggestedBidsSummary && <div className="mt-0.5 truncate text-[10px] text-[#6b6e99]">
                   {row.position} #{row.posRank} · {nflTeam || 'FA'}{playingWeek != null && weeklyRank != null ? ` · W${projectionWeek} #${weeklyRank}` : ''}
-                </div>
-                {weeklyMeta && <div className="mt-1 truncate text-[10px] text-[#8b8eac]">{weeklyMeta}</div>}
+                </div>}
+                {!suggestedBidsSummary && weeklyMeta && <div className="mt-1 truncate text-[10px] text-[#8b8eac]">{weeklyMeta}</div>}
               </div>
-              {strategy !== 'custom' && <div className="w-[8.75rem] shrink-0 rounded-lg bg-[#0c0f22] px-2.5 py-2 text-right" data-testid="compact-bid-summary">
+              {strategy !== 'custom' && showCompactBidSummary && <div className={`${suggestedBidsSummary ? 'min-w-[3.5rem]' : 'w-[8.75rem]'} shrink-0 rounded-lg bg-[#0c0f22] px-2.5 py-2 text-right`} data-testid="compact-bid-summary">
                 <div data-testid="suggested-bid-row" className="flex items-baseline justify-end gap-1.5 whitespace-nowrap">
-                  <span className="text-[9px] text-[#6b6e99]">{owner ? 'Current value' : 'Suggested bid'}</span>
-                  <span className="inline-flex items-center justify-end gap-1 font-['Space_Mono'] text-base font-bold tabular-nums text-[#10b981]">
+                  {!suggestedBidsSummary && <span className="text-[9px] text-[#6b6e99]">{owner ? 'Current value' : 'Suggested bid'}</span>}
+                  <span aria-label={!owner && suggestedBidsSummary ? `Suggested bid ${formatDisplayCurrency(value)}` : undefined} className="inline-flex items-center justify-end gap-1 font-['Space_Mono'] text-base font-bold tabular-nums text-[#10b981]">
                     {!owner && value > 0 && remainingFaab != null && value > remainingFaab && <FaabOverBudgetWarning />}
                     <span>{formatDisplayCurrency(value)}</span>
                   </span>
@@ -403,6 +443,7 @@ export function WaiverPlayerCard({
           injuryStatus,
           nextWeek: playingWeek ?? null,
           nextWeekPoints: weeklyPoints ?? null,
+          nextWeekRank: weeklyRank ?? null,
           projectionState,
           byeWeek: byeWeek ?? null,
           sourceLabel,
@@ -418,6 +459,7 @@ export function WaiverPlayerCard({
           managerPredictions: showManagerPredictions ? managerPredictions : [],
           managerDetails,
           managerLabels,
+          biddingTeamStatuses,
           getPlayerName: resolvePlayerName,
           history: canonicalHistory,
         }}
@@ -846,6 +888,7 @@ export function WaiversPage() {
     )
     : new Map();
   const projectedTeams = projectAllTeams(rosters!, weeklyScoredPlayers, league, waiverContext!.elim);
+  const biddingTeamStatuses = buildBiddingTeamStatusMap(waiverContext!.elim, projectedTeams);
   const projectedPositionRanks = computeProjectedLineupGroupRanks(
     projectedTeams,
     weeklyScoredPlayers,
@@ -1113,6 +1156,7 @@ export function WaiversPage() {
               managerPredictions={predictions}
               managerDetails={managerDetails}
               managerLabels={managerLabels}
+              biddingTeamStatuses={biddingTeamStatuses}
               showManagerPredictions={predictions.length > 0}
               sourceLabel={sourceInfo.shortLabel}
               rankingSource={rankingSource}

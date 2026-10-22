@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowDown, ArrowUp, Minus, X } from 'lucide-react';
 import type { Roster, SleeperUser } from '../api';
-import type { ManagerBiddingProfile, ManagerBidEvidence, ManagerBidStyle } from '../logic';
+import type { BiddingTeamStatus, ManagerBiddingProfile, ManagerBidEvidence, ManagerBidStyle } from '../logic';
 import type { ManagerDetailData, ManagerTeamNeed } from '../logic/managerDetails';
 import { currentFaab, managerName, orderManagerPredictions, type ManagerPredictionDisplay } from '../logic/managerPredictionDisplay';
 import { faabQuartile, faabQuartileLabel, type FaabQuartileBand } from '../logic/rankingQuartiles';
 import { Button, Card, Skeleton, StatusBadge } from './ui';
 import { CURRENT_TEAM_HIGHLIGHT_CLASS } from './ui/teamHighlight';
+import { BiddingTeamIdentity } from './BiddingTeamIdentity';
 
 const EMPTY_DETAILS: ManagerDetailData = { upcomingByes: [], teamNeeds: [] };
 
@@ -194,6 +195,7 @@ export function ManagerDetailsModal({
   getPlayerName,
   onClose,
   isEliminated = false,
+  biddingTeamStatus,
 }: {
   profile: ManagerBiddingProfile;
   manager: string;
@@ -203,6 +205,7 @@ export function ManagerDetailsModal({
   getPlayerName: (playerId: string) => string;
   onClose: () => void;
   isEliminated?: boolean;
+  biddingTeamStatus?: BiddingTeamStatus;
 }) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -260,8 +263,10 @@ export function ManagerDetailsModal({
         <header className="flex shrink-0 items-start justify-between gap-4 border-b border-[#2d3262] px-4 py-4 sm:px-5">
           <div className="min-w-0">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <h2 id={`manager-dialog-${profile.managerRosterId}`} className="min-w-0 truncate font-['Orbitron'] text-base font-bold text-[#f0f0ff]">{manager}</h2>
-              {isEliminated && <StatusBadge status="eliminated" />}
+              <h2 id={`manager-dialog-${profile.managerRosterId}`} className="min-w-0 font-['Orbitron'] text-base font-bold text-[#f0f0ff]">
+                {biddingTeamStatus ? <BiddingTeamIdentity name={manager} status={biddingTeamStatus} /> : manager}
+              </h2>
+              {isEliminated && !biddingTeamStatus && <StatusBadge status="eliminated" />}
             </div>
             <div className="mt-2"><ManagerStyleBadge profile={profile} /></div>
           </div>
@@ -295,11 +300,13 @@ export function ManagerPredictionRow({
   details = EMPTY_DETAILS,
   activeFaabAmounts,
   getPlayerName,
+  biddingTeamStatus,
 }: {
   prediction: ManagerPredictionDisplay;
   details?: ManagerDetailData;
   activeFaabAmounts?: readonly number[];
   getPlayerName: (playerId: string) => string;
+  biddingTeamStatus?: BiddingTeamStatus;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const faabAmounts = activeFaabAmounts ?? [prediction.currentFaab];
@@ -314,7 +321,7 @@ export function ManagerPredictionRow({
         <span className="flex items-start justify-between gap-3" data-testid="prediction-row-layout">
           <span className="min-w-0" data-testid="prediction-manager-side">
             <span className="block min-w-0" data-testid="prediction-manager-heading">
-              <span className="block min-w-0 truncate text-xs font-semibold text-[#f0f0ff]">{prediction.managerName}</span>
+              <span className="block min-w-0 text-xs font-semibold"><BiddingTeamIdentity name={prediction.managerName} status={biddingTeamStatus} /></span>
             </span>
             <span className={`mt-2 block text-[10px] font-semibold ${likelihoodTextClass(prediction.likelihood)}`}>{prediction.likelihood} bidder</span>
           </span>
@@ -346,6 +353,7 @@ export function ManagerPredictionRow({
           activeFaabAmounts={faabAmounts}
           details={details}
           getPlayerName={getPlayerName}
+          biddingTeamStatus={biddingTeamStatus}
           onClose={() => setIsOpen(false)}
         />
       )}
@@ -357,10 +365,12 @@ export function WaiverManagerPredictions({
   predictions,
   detailsByRosterId = new Map(),
   getPlayerName,
+  biddingTeamStatuses = new Map(),
 }: {
   predictions: ManagerPredictionDisplay[];
   detailsByRosterId?: ReadonlyMap<number, ManagerDetailData>;
   getPlayerName: (playerId: string) => string;
+  biddingTeamStatuses?: ReadonlyMap<number, BiddingTeamStatus>;
 }) {
   const orderedPredictions = orderManagerPredictions(predictions);
   const activeFaabAmounts = orderedPredictions.map((prediction) => prediction.currentFaab);
@@ -373,6 +383,7 @@ export function WaiverManagerPredictions({
           details={detailsByRosterId.get(prediction.rosterId)}
           activeFaabAmounts={activeFaabAmounts}
           getPlayerName={getPlayerName}
+          biddingTeamStatus={biddingTeamStatuses.get(prediction.rosterId)}
         />
       ))}
     </div>
