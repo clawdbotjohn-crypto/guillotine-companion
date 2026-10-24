@@ -1,16 +1,16 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, ArrowLeftRight } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { useAppStore } from '../store/appStore';
 
 export function TopHeader() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { leagueName, leagueSeason, reset } = useAppStore();
+  const { leagueName, leagueSeason, clearSelection } = useAppStore();
 
   const isTeamProfile = location.pathname.startsWith('/teams/');
 
   const handleHome = () => {
-    reset();
+    clearSelection();
     navigate('/');
   };
 
@@ -23,7 +23,7 @@ export function TopHeader() {
         height: '48px',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'space-between',
+        justifyContent: 'flex-start',
         padding: '0 12px',
         background: '#0a0d1a',
         borderBottom: '1px solid #2a2e55',
@@ -59,7 +59,7 @@ export function TopHeader() {
             gap: '6px',
             minWidth: 0,
           }}
-          aria-label="Switch league"
+          aria-label="Go to home"
         >
           <span
             style={{
@@ -95,22 +95,6 @@ export function TopHeader() {
         </button>
       </div>
 
-      {/* Right side */}
-      <button
-        onClick={handleHome}
-        style={{
-          background: 'none',
-          border: 'none',
-          padding: '6px',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          borderRadius: '6px',
-        }}
-        aria-label="Switch league"
-      >
-        <ArrowLeftRight size={18} color="#6b6e99" />
-      </button>
     </header>
   );
 }

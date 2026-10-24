@@ -1,4 +1,4 @@
-export { useAppStore } from './appStore';
+export { useAppStore, type RecentLeague } from './appStore';
 export {
   useCustomRankingStore,
   getCustomRankingsForScope,
