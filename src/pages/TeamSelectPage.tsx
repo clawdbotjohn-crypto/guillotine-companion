@@ -6,7 +6,7 @@ import { useLeagueUsers, useRosters } from '../api';
 
 export function TeamSelectPage() {
   const navigate = useNavigate();
-  const { leagueId, leagueName, setTeam } = useAppStore();
+  const { leagueId, leagueName, userId, setTeam, clearSelection } = useAppStore();
 
   const { data: users, isLoading: usersLoading } = useLeagueUsers(leagueId);
   const { data: rosters, isLoading: rostersLoading } = useRosters(leagueId);
@@ -37,8 +37,12 @@ export function TeamSelectPage() {
         {/* Header */}
         <div className="flex items-center gap-3 mb-8">
           <button
-            onClick={() => navigate('/leagues')}
+            onClick={() => {
+              if (userId) navigate('/leagues');
+              else { clearSelection(); navigate('/'); }
+            }}
             className="text-[#4a4d77] hover:text-[#a5b4fc] transition-colors"
+            aria-label={userId ? 'Back to leagues' : 'Back to home'}
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
