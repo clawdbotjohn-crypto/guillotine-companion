@@ -1,17 +1,17 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Trophy, ChevronRight, ArrowLeft, Loader2 } from 'lucide-react';
-import dayjs from 'dayjs';
 import { Card, Skeleton } from '../components/ui';
 import { useAppStore } from '../store';
 import { useUserLeagues } from '../api';
 import { getLeagueRosters, getLeagueUsers } from '../api/client';
 import { isGuillotineLeague } from '../logic';
+import { getCurrentNflSeason } from '../logic/season';
 
 export function LeaguePickerPage() {
   const navigate = useNavigate();
-  const { username, userId, setLeague, reset } = useAppStore();
-  const currentSeason = dayjs().month() >= 2 ? dayjs().year().toString() : (dayjs().year() - 1).toString();
+  const { username, userId, setLeague, clearSelection } = useAppStore();
+  const currentSeason = getCurrentNflSeason();
 
   const { data: leagues, isLoading, isError } = useUserLeagues(userId, currentSeason);
 
@@ -57,8 +57,9 @@ export function LeaguePickerPage() {
         {/* Header */}
         <div className="flex items-center gap-3 mb-8">
           <button
-            onClick={() => { reset(); navigate('/'); }}
+            onClick={() => { clearSelection(); navigate('/'); }}
             className="text-[#4a4d77] hover:text-[#a5b4fc] transition-colors"
+            aria-label="Back to home"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>

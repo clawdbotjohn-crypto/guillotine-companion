@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, User, ChevronRight } from 'lucide-react';
 import { Card, Skeleton } from '../components/ui';
 import { useAppStore } from '../store';
@@ -6,7 +6,9 @@ import { useLeagueUsers, useRosters } from '../api';
 
 export function TeamSelectPage() {
   const navigate = useNavigate();
-  const { leagueId, leagueName, setTeam } = useAppStore();
+  const [searchParams] = useSearchParams();
+  const changingTeam = searchParams.get('from') === 'hub';
+  const { leagueId, leagueName, userId, setTeam, clearSelection } = useAppStore();
 
   const { data: users, isLoading: usersLoading } = useLeagueUsers(leagueId);
   const { data: rosters, isLoading: rostersLoading } = useRosters(leagueId);
@@ -37,14 +39,19 @@ export function TeamSelectPage() {
         {/* Header */}
         <div className="flex items-center gap-3 mb-8">
           <button
-            onClick={() => navigate('/leagues')}
+            onClick={() => {
+              if (changingTeam) navigate('/hub');
+              else if (userId) navigate('/leagues');
+              else { clearSelection(); navigate('/'); }
+            }}
             className="text-[#4a4d77] hover:text-[#a5b4fc] transition-colors"
+            aria-label={changingTeam ? 'Back to hub' : userId ? 'Back to leagues' : 'Back to home'}
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
             <h1 className="font-['Orbitron'] text-lg font-bold uppercase tracking-wider text-[#f0f0ff]">
-              Your Team
+              {changingTeam ? 'Change Team' : 'Your Team'}
             </h1>
             <p className="text-sm text-[#6b6e99]">{leagueName || 'Select your team'}</p>
           </div>
@@ -63,27 +70,28 @@ export function TeamSelectPage() {
         {/* Team list */}
         <div className="space-y-2">
           {teams.map((team) => (
-            <Card
+            <button
+              type="button"
               key={team.rosterId}
               onClick={() => handleSelect(team)}
-              className="p-4 flex items-center justify-between group"
+              className="group flex w-full items-center justify-between rounded-xl border border-[#2a2e55] bg-[rgba(14,16,37,0.8)] p-4 text-left backdrop-blur-[12px] transition-[border-color,box-shadow] hover:border-[#6366f1] hover:shadow-[0_4px_20px_rgba(99,102,241,0.15)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6366f1]"
             >
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-[#161a3a] flex items-center justify-center">
+              <span className="flex min-w-0 items-center gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#161a3a]">
                   {team.avatar ? (
                     <img
                       src={`https://sleepercdn.com/avatars/thumbs/${team.avatar}`}
                       alt=""
-                      className="w-9 h-9 rounded-full"
+                      className="h-9 w-9 rounded-full"
                     />
                   ) : (
-                    <User className="w-4 h-4 text-[#4a4d77]" />
+                    <User className="h-4 w-4 text-[#4a4d77]" />
                   )}
-                </div>
-                <span className="text-[#f0f0ff] font-medium text-sm">{team.displayName}</span>
-              </div>
-              <ChevronRight className="w-4 h-4 text-[#4a4d77] group-hover:text-[#6366f1] transition-colors" />
-            </Card>
+                </span>
+                <span className="truncate text-sm font-medium text-[#f0f0ff]">{team.displayName}</span>
+              </span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-[#4a4d77] transition-colors group-hover:text-[#6366f1]" />
+            </button>
           ))}
         </div>
       </div>
