@@ -72,21 +72,40 @@ describe('app store persistence migration', () => {
     expect(normalizeRecentLeagues([null, 'bad', { leagueId: IDS[0] }])).toEqual([]);
   });
 
-  it('upgrades the legacy selected league into the minimal recent-league shape', () => {
+  it('migrates the current PR shape and remembers its active team only for the matching league', () => {
     expect(migratePersistedAppState({
       activeStrategy: 'max-vorp',
       leagueId: IDS[1],
-      leagueName: 'Legacy Selected League',
+      leagueName: 'Current Selected League',
       leagueSeason: '2026',
       rosterId: 9,
-      teamName: 'Private Team Metadata',
+      teamName: 'Synthetic Team Nine',
+      recentLeagues: [
+        { leagueId: IDS[0], name: 'Other League', season: '2026' },
+        { leagueId: IDS[1], name: 'Current Selected League', season: '2026' },
+      ],
     })).toMatchObject({
-      recentLeagues: [{
-        leagueId: IDS[1],
-        name: 'Legacy Selected League',
-        season: '2026',
-      }],
+      recentLeagues: [
+        { leagueId: IDS[0], name: 'Other League', season: '2026' },
+        {
+          leagueId: IDS[1],
+          name: 'Current Selected League',
+          season: '2026',
+          rememberedTeam: { rosterId: 9, name: 'Synthetic Team Nine' },
+        },
+      ],
     });
+  });
+
+  it('drops malformed remembered-team metadata atomically', () => {
+    expect(normalizeRecentLeagues([
+      {
+        leagueId: IDS[0],
+        name: 'Safe League',
+        season: '2026',
+        rememberedTeam: { rosterId: 'not-a-number', name: 'Stale Team' },
+      },
+    ])).toEqual([{ leagueId: IDS[0], name: 'Safe League', season: '2026' }]);
   });
 });
 
@@ -114,8 +133,9 @@ describe('recent leagues', () => {
     expect(useAppStore.getState().recentLeagues.filter((entry) => entry.leagueId === IDS[4])).toHaveLength(1);
   });
 
-  it('persists across a simulated new browser session', async () => {
+  it('persists the league and its remembered team across a simulated new browser session', async () => {
     useAppStore.getState().setLeague(IDS[0], 'Persistent Synthetic League', '2026');
+    useAppStore.getState().setTeam(12, 'Persistent Synthetic Team');
     const persisted = localStorage.getItem('guillotine-companion-store');
     expect(persisted).toContain('Persistent Synthetic League');
 
@@ -127,11 +147,39 @@ describe('recent leagues', () => {
       leagueId: IDS[0],
       name: 'Persistent Synthetic League',
       season: '2026',
+      rememberedTeam: { rosterId: 12, name: 'Persistent Synthetic Team' },
     }]);
   });
 
-  it('removes and restores one local entry without affecting the active league', () => {
+  it('keeps remembered teams isolated per league when the active team changes', () => {
+    useAppStore.getState().setLeague(IDS[0], 'League A', '2026');
+    useAppStore.getState().setTeam(3, 'Team A');
+    useAppStore.getState().setLeague(IDS[1], 'League B', '2026');
+    useAppStore.getState().setTeam(7, 'Team B');
+
+    expect(useAppStore.getState().recentLeagues).toEqual([
+      {
+        leagueId: IDS[1],
+        name: 'League B',
+        season: '2026',
+        rememberedTeam: { rosterId: 7, name: 'Team B' },
+      },
+      {
+        leagueId: IDS[0],
+        name: 'League A',
+        season: '2026',
+        rememberedTeam: { rosterId: 3, name: 'Team A' },
+      },
+    ]);
+
+    useAppStore.getState().setTeam(8, 'Changed Team B');
+    expect(useAppStore.getState().recentLeagues[1].rememberedTeam).toEqual({ rosterId: 3, name: 'Team A' });
+    expect(useAppStore.getState().recentLeagues[0].rememberedTeam).toEqual({ rosterId: 8, name: 'Changed Team B' });
+  });
+
+  it('removes and restores one local entry with its team without affecting the active league', () => {
     useAppStore.getState().setLeague(IDS[0], 'Synthetic League', '2026');
+    useAppStore.getState().setTeam(4, 'Synthetic Team');
     const saved = useAppStore.getState().recentLeagues[0];
     useAppStore.getState().removeRecentLeague(IDS[0]);
 

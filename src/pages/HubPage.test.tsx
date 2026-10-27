@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { TeamProjection } from '../logic/analytics';
 import { formatCurrentRank, formatProjectedCurrentRank } from '../logic/analytics';
-import { TeamValueStatCard, UpcomingProjectionCard } from './HubPage';
+import { HubTeamSelectorButton, TeamValueStatCard, UpcomingProjectionCard } from './HubPage';
 import { formatHistoricalWeekRank } from '../logic/rankFormat';
 import {
   getConstrainedTooltipPosition,
@@ -11,6 +11,17 @@ import {
 } from '../logic/tooltipPosition';
 
 describe('Hub rank contexts', () => {
+  it('exposes the selected team as an obvious keyboard-accessible change-team control', () => {
+    let opened = false;
+    render(<HubTeamSelectorButton teamName="Synthetic Team" onOpen={() => { opened = true; }} />);
+
+    const button = screen.getByRole('button', { name: 'Change team, currently Synthetic Team' });
+    expect(button.textContent).toContain('Synthetic Team');
+    expect(button.textContent).toContain('Change');
+    fireEvent.click(button);
+    expect(opened).toBe(true);
+  });
+
   it('uses the projected survivor standing and post-elimination count', () => {
     const projection: TeamProjection = {
       rosterId: 12,

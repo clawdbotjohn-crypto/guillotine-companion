@@ -4,7 +4,7 @@ import { BarChart3, Shield, Users, ShoppingCart, ChevronRight, Trash2, Trophy } 
 import { Button, Card } from '../components/ui';
 import { useAppStore, type RecentLeague } from '../store';
 import { useSleeperUser } from '../api';
-import { getLeague } from '../api/client';
+import { getLeague, getLeagueRosters, getLeagueUsers } from '../api/client';
 import { isGuillotineLeague } from '../logic';
 import { getCurrentNflSeason, isValidSleeperLeagueId } from '../logic/season';
 
@@ -25,8 +25,10 @@ export function HomePage() {
   const {
     setUser,
     setLeague,
+    setTeam,
     startUsernameDiscovery,
     startLeagueDiscovery,
+    clearRememberedTeam,
     removeRecentLeague,
     restoreRecentLeague,
     recentLeagues,
@@ -58,6 +60,8 @@ export function HomePage() {
 
   const openLeague = async (rawLeagueId: string, source: 'direct' | 'saved') => {
     const nextLeagueId = rawLeagueId.trim();
+    const rememberedTeam = recentLeagues.find((league) => league.leagueId === nextLeagueId)
+      ?.rememberedTeam;
     const request = ++requestSequence.current;
     startLeagueDiscovery();
     setDiscoveryMode('league');
@@ -90,7 +94,35 @@ export function HomePage() {
         return;
       }
 
+      let validatedTeam: typeof rememberedTeam = undefined;
+      if (rememberedTeam) {
+        const [rostersResult, usersResult] = await Promise.allSettled([
+          getLeagueRosters(league.league_id),
+          getLeagueUsers(league.league_id),
+        ]);
+        if (rostersResult.status === 'fulfilled') {
+          const roster = rostersResult.value
+            .find((entry) => entry.roster_id === rememberedTeam.rosterId);
+          if (roster) {
+            const user = usersResult.status === 'fulfilled'
+              ? usersResult.value.find((entry) => entry.user_id === roster.owner_id)
+              : undefined;
+            validatedTeam = {
+              rosterId: roster.roster_id,
+              name: user?.display_name || rememberedTeam.name,
+            };
+          }
+        }
+      }
+
+      if (request !== requestSequence.current) return;
       setLeague(league.league_id, league.name, league.season);
+      if (validatedTeam) {
+        setTeam(validatedTeam.rosterId, validatedTeam.name);
+        navigate('/hub');
+        return;
+      }
+      if (rememberedTeam) clearRememberedTeam(league.league_id);
       navigate('/team-select');
     } catch {
       if (request === requestSequence.current) {

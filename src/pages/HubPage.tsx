@@ -50,7 +50,7 @@ import { HubLiveScoring } from '../components/HubLiveScoring';
 import { WeeklyBidPlanEntry } from '../components/WeeklyBidPlanEntry';
 import { shouldShowWeeklyBidPlan } from '../logic/weeklyBidPlan';
 import { useSwitchSeason } from '../hooks/useSwitchSeason';
-import { Calendar } from 'lucide-react';
+import { Calendar, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { formatHistoricalWeekRank } from '../logic/rankFormat';
 import { usePlayerValues } from '../hooks/usePlayerValues';
@@ -58,6 +58,31 @@ import type { PlayerDetailData, PlayerProjectionState } from '../components/Play
 import { formatWholeDollars } from '../logic/displayCurrency';
 import { managerName } from '../logic/managerPredictionDisplay';
 import { buildLeagueContext, buildMaxVorpCalibration } from '../logic/waivers';
+
+export function HubTeamSelectorButton({
+  teamName,
+  onOpen,
+}: {
+  teamName: string;
+  onOpen: () => void;
+}) {
+  return (
+    <h1 className="max-w-full">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="group flex max-w-full items-center gap-2 rounded-lg px-1 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6366f1]"
+        aria-label={`Change team, currently ${teamName}`}
+      >
+        <span className="min-w-0 truncate font-['Orbitron'] text-lg font-bold uppercase tracking-wider text-[#f0f0ff] underline decoration-[rgba(99,102,241,0.45)] decoration-1 underline-offset-4 transition-colors group-hover:text-[#a5b4fc]">
+          {teamName}
+        </span>
+        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-[#818cf8]">Change</span>
+        <ChevronRight className="h-4 w-4 shrink-0 text-[#818cf8]" aria-hidden="true" />
+      </button>
+    </h1>
+  );
+}
 
 export function UpcomingProjectionCard({
   week, projection, isLoading = false, unavailableReason,
@@ -441,10 +466,11 @@ export function HubPage() {
       <div className="px-6 py-6 pb-24 max-w-lg mx-auto">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="font-['Orbitron'] text-lg font-bold uppercase tracking-wider text-[#f0f0ff]">
-            {teamName}
-          </h1>
-          <p className="text-xs text-[#6b6e99] mt-0.5">{leagueName}</p>
+          <HubTeamSelectorButton
+            teamName={teamName || 'Selected team'}
+            onOpen={() => navigate('/team-select?from=hub')}
+          />
+          <p className="mt-0.5 text-xs text-[#6b6e99]">{leagueName}</p>
         </div>
 
         {/* Season Picker */}
@@ -592,10 +618,11 @@ export function HubPage() {
     <div className="px-6 py-6 pb-24 max-w-lg mx-auto">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="font-['Orbitron'] text-lg font-bold uppercase tracking-wider text-[#f0f0ff]">
-          {teamName}
-        </h1>
-        <p className="text-xs text-[#6b6e99] mt-0.5">{leagueName}</p>
+        <HubTeamSelectorButton
+          teamName={teamName || 'Selected team'}
+          onOpen={() => navigate('/team-select?from=hub')}
+        />
+        <p className="mt-0.5 text-xs text-[#6b6e99]">{leagueName}</p>
       </div>
 
       {/* Season Picker */}

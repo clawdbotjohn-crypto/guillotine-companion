@@ -2,12 +2,14 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import type { League, SleeperUser } from '../api/types';
+import type { League, Roster, SleeperUser } from '../api/types';
 import { useAppStore } from '../store';
 import { getCurrentNflSeason } from '../logic/season';
 
 const mockUseSleeperUser = vi.fn();
 const mockGetLeague = vi.fn();
+const mockGetLeagueRosters = vi.fn();
+const mockGetLeagueUsers = vi.fn();
 
 vi.mock('../api', () => ({
   useSleeperUser: (username: string | null) => mockUseSleeperUser(username),
@@ -15,6 +17,8 @@ vi.mock('../api', () => ({
 
 vi.mock('../api/client', () => ({
   getLeague: (leagueId: string) => mockGetLeague(leagueId),
+  getLeagueRosters: (leagueId: string) => mockGetLeagueRosters(leagueId),
+  getLeagueUsers: (leagueId: string) => mockGetLeagueUsers(leagueId),
 }));
 
 import { HomePage } from './HomePage';
@@ -40,6 +44,25 @@ function league(overrides: Partial<League> = {}): League {
   };
 }
 
+function roster(rosterId: number, ownerId = 'synthetic-owner'): Roster {
+  return {
+    roster_id: rosterId,
+    owner_id: ownerId,
+    players: [],
+    starters: [],
+    settings: { wins: 0, losses: 0, fpts: 0, waiver_budget_used: 0 },
+  };
+}
+
+function user(userId = 'synthetic-owner', displayName = 'Synthetic Manager'): SleeperUser {
+  return {
+    user_id: userId,
+    username: 'synthetic-manager',
+    display_name: displayName,
+    avatar: null,
+  };
+}
+
 function renderHome() {
   return render(
     <MemoryRouter initialEntries={['/']}>
@@ -47,6 +70,7 @@ function renderHome() {
         <Route path="/" element={<HomePage />} />
         <Route path="/team-select" element={<h1>Team selection</h1>} />
         <Route path="/leagues" element={<h1>League picker</h1>} />
+        <Route path="/hub" element={<h1>League hub</h1>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -61,6 +85,8 @@ describe('HomePage league discovery', () => {
     localStorage.clear();
     useAppStore.getState().reset();
     mockGetLeague.mockReset();
+    mockGetLeagueRosters.mockReset();
+    mockGetLeagueUsers.mockReset();
     mockUseSleeperUser.mockReset();
     mockUseSleeperUser.mockReturnValue({ data: undefined, isLoading: false, isError: false });
   });
@@ -237,6 +263,49 @@ describe('HomePage league discovery', () => {
       name: 'Renamed Synthetic League',
       season: getCurrentNflSeason(),
     }]);
+  });
+
+  it('revalidates and restores a remembered saved-league team before opening the hub', async () => {
+    useAppStore.getState().setLeague(LEAGUE_ID, 'Saved Synthetic League', getCurrentNflSeason());
+    useAppStore.getState().setTeam(6, 'Remembered Manager');
+    useAppStore.getState().clearSelection();
+    mockGetLeague.mockResolvedValue(league({ name: 'Renamed Synthetic League' }));
+    mockGetLeagueRosters.mockResolvedValue([roster(6)]);
+    mockGetLeagueUsers.mockResolvedValue([user('synthetic-owner', 'Refreshed Manager')]);
+    renderHome();
+
+    fireEvent.click(screen.getByRole('button', { name: `Open Saved Synthetic League, ${getCurrentNflSeason()}` }));
+
+    expect(await screen.findByRole('heading', { name: 'League hub' })).toBeTruthy();
+    expect(mockGetLeagueRosters).toHaveBeenCalledWith(LEAGUE_ID);
+    expect(mockGetLeagueUsers).toHaveBeenCalledWith(LEAGUE_ID);
+    expect(useAppStore.getState()).toMatchObject({
+      leagueId: LEAGUE_ID,
+      rosterId: 6,
+      teamName: 'Refreshed Manager',
+      recentLeagues: [{
+        leagueId: LEAGUE_ID,
+        name: 'Renamed Synthetic League',
+        season: getCurrentNflSeason(),
+        rememberedTeam: { rosterId: 6, name: 'Refreshed Manager' },
+      }],
+    });
+  });
+
+  it('falls back to team selection and clears stale remembered metadata when the roster is missing', async () => {
+    useAppStore.getState().setLeague(LEAGUE_ID, 'Saved Synthetic League', getCurrentNflSeason());
+    useAppStore.getState().setTeam(6, 'Stale Manager');
+    useAppStore.getState().clearSelection();
+    mockGetLeague.mockResolvedValue(league());
+    mockGetLeagueRosters.mockResolvedValue([roster(7, 'other-owner')]);
+    mockGetLeagueUsers.mockResolvedValue([user('other-owner', 'Other Manager')]);
+    renderHome();
+
+    fireEvent.click(screen.getByRole('button', { name: `Open Saved Synthetic League, ${getCurrentNflSeason()}` }));
+
+    expect(await screen.findByRole('heading', { name: 'Team selection' })).toBeTruthy();
+    expect(useAppStore.getState()).toMatchObject({ rosterId: null, teamName: null });
+    expect(useAppStore.getState().recentLeagues[0].rememberedTeam).toBeUndefined();
   });
 
   it('deletes a saved league locally and offers an accessible undo without provider calls', async () => {

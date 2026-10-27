@@ -5,10 +5,16 @@ import { persist } from 'zustand/middleware';
 import { DEFAULT_WAIVER_STRATEGY, WAIVER_STRATEGY_REGISTRY } from '../logic/waiverStrategies';
 import type { DisplayStrategyKey } from '../logic/waiverDisplay';
 
+export interface RememberedTeam {
+  rosterId: number;
+  name: string;
+}
+
 export interface RecentLeague {
   leagueId: string;
   name: string;
   season: string;
+  rememberedTeam?: RememberedTeam;
 }
 
 export const RECENT_LEAGUE_LIMIT = 6;
@@ -38,12 +44,22 @@ interface AppState {
   setLeague: (id: string, name: string, season: string) => void;
   switchSeason: (leagueId: string, name: string, season: string) => void;
   setTeam: (rosterId: number, teamName: string) => void;
+  clearRememberedTeam: (leagueId: string) => void;
   removeRecentLeague: (leagueId: string) => void;
   restoreRecentLeague: (league: RecentLeague) => void;
   setStrategy: (s: AppState['activeStrategy']) => void;
   setShowEliminatedTeams: (show: boolean) => void;
   clearSelection: () => void;
   reset: () => void;
+}
+
+function readRememberedTeam(value: unknown): RememberedTeam | null {
+  if (!value || typeof value !== 'object') return null;
+  const team = value as Record<string, unknown>;
+  const rosterId = team.rosterId;
+  const name = typeof team.name === 'string' ? team.name.trim() : '';
+  if (!Number.isSafeInteger(rosterId) || (rosterId as number) <= 0 || !name) return null;
+  return { rosterId: rosterId as number, name };
 }
 
 function readRecentLeague(value: unknown): RecentLeague | null {
@@ -57,7 +73,10 @@ function readRecentLeague(value: unknown): RecentLeague | null {
   const name = typeof entry.name === 'string' ? entry.name.trim() : '';
   const season = typeof entry.season === 'string' ? entry.season.trim() : '';
   if (!leagueId || !/^\d{16,20}$/.test(leagueId) || !name || !/^\d{4}$/.test(season)) return null;
-  return { leagueId, name, season };
+  const rememberedTeam = readRememberedTeam(entry.rememberedTeam);
+  return rememberedTeam
+    ? { leagueId, name, season, rememberedTeam }
+    : { leagueId, name, season };
 }
 
 export function normalizeRecentLeagues(value: unknown): RecentLeague[] {
@@ -89,11 +108,17 @@ export function migratePersistedAppState(persistedState: unknown): unknown {
     name: state.leagueName,
     season: state.leagueSeason,
   };
+  const activeTeam = readRememberedTeam({ rosterId: state.rosterId, name: state.teamName });
+  const recentLeagues = normalizeRecentLeagues(
+    state.recentLeagues ?? savedLeagues ?? [legacySelectedLeague],
+  ).map((league) => (
+    activeTeam && league.leagueId === state.leagueId
+      ? { ...league, rememberedTeam: activeTeam }
+      : league
+  ));
   const migrated = {
     ...stateWithoutLegacySavedLeagues,
-    recentLeagues: normalizeRecentLeagues(
-      state.recentLeagues ?? savedLeagues ?? [legacySelectedLeague],
-    ),
+    recentLeagues,
   };
   // Preserve every explicit recognized choice. Only legacy aliases, missing values, and invalid
   // values migrate; old implicit defaults cannot otherwise be distinguished from user choices.
@@ -136,20 +161,43 @@ export const useAppStore = create<AppState>()(
       setUser: (username, userId) => set({ username, userId }),
 
       setLeague: (id, name, season) =>
-        set((state) => ({
-          leagueId: id,
-          leagueName: name,
-          leagueSeason: season,
-          rootLeagueId: id,
-          rosterId: null,
-          teamName: null,
-          recentLeagues: upsertRecentLeague(state.recentLeagues, { leagueId: id, name, season }),
-        })),
+        set((state) => {
+          const existing = normalizeRecentLeagues(state.recentLeagues)
+            .find((league) => league.leagueId === id);
+          const league = existing?.rememberedTeam
+            ? { leagueId: id, name, season, rememberedTeam: existing.rememberedTeam }
+            : { leagueId: id, name, season };
+          return {
+            leagueId: id,
+            leagueName: name,
+            leagueSeason: season,
+            rootLeagueId: id,
+            rosterId: null,
+            teamName: null,
+            recentLeagues: upsertRecentLeague(state.recentLeagues, league),
+          };
+        }),
 
       switchSeason: (leagueId, name, season) =>
         set({ leagueId, leagueName: name, leagueSeason: season, rosterId: null, teamName: null }),
 
-      setTeam: (rosterId, teamName) => set({ rosterId, teamName }),
+      setTeam: (rosterId, teamName) => set((state) => ({
+        rosterId,
+        teamName,
+        recentLeagues: normalizeRecentLeagues(state.recentLeagues).map((league) => (
+          league.leagueId === state.leagueId
+            ? { ...league, rememberedTeam: { rosterId, name: teamName } }
+            : league
+        )),
+      })),
+
+      clearRememberedTeam: (leagueId) => set((state) => ({
+        recentLeagues: normalizeRecentLeagues(state.recentLeagues).map((league) => {
+          if (league.leagueId !== leagueId || !league.rememberedTeam) return league;
+          const { rememberedTeam: _rememberedTeam, ...leagueWithoutTeam } = league;
+          return leagueWithoutTeam;
+        }),
+      })),
 
       removeRecentLeague: (leagueId) => set((state) => ({
         recentLeagues: normalizeRecentLeagues(state.recentLeagues)
@@ -170,7 +218,7 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'guillotine-companion-store',
-      version: 3,
+      version: 4,
       migrate: (persistedState) => migratePersistedAppState(persistedState) as AppState,
       merge: (persistedState, currentState) => {
         const migrated = migratePersistedAppState(persistedState);

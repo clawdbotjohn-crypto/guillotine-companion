@@ -91,6 +91,7 @@ describe('LeaguePickerPage username discovery', () => {
         leagueId: LEAGUE_ID,
         name: 'Synthetic Picker League',
         season: getCurrentNflSeason(),
+        rememberedTeam: { rosterId: 5, name: 'Synthetic Manager' },
       }],
     });
   });

@@ -40,6 +40,7 @@ describe('TopHeader league navigation', () => {
       leagueId: LEAGUE_ID,
       name: 'Synthetic Header League',
       season: '2026',
+      rememberedTeam: { rosterId: 2, name: 'Synthetic Team' },
     }]);
   });
 });
