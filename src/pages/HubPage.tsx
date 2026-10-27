@@ -71,7 +71,7 @@ export function HubTeamSelectorButton({
       <button
         type="button"
         onClick={onOpen}
-        className="group flex max-w-full items-center gap-2 rounded-lg px-1 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6366f1]"
+        className="group flex min-h-11 max-w-full items-center gap-2 rounded-lg px-1 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6366f1]"
         aria-label={`Change team, currently ${teamName}`}
       >
         <span className="min-w-0 truncate font-['Orbitron'] text-lg font-bold uppercase tracking-wider text-[#f0f0ff] underline decoration-[rgba(99,102,241,0.45)] decoration-1 underline-offset-4 transition-colors group-hover:text-[#a5b4fc]">
