@@ -77,7 +77,6 @@ export function HubTeamSelectorButton({
         <span className="min-w-0 truncate font-['Orbitron'] text-lg font-bold uppercase tracking-wider text-[#f0f0ff] underline decoration-[rgba(99,102,241,0.45)] decoration-1 underline-offset-4 transition-colors group-hover:text-[#a5b4fc]">
           {teamName}
         </span>
-        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-[#818cf8]">Change</span>
         <ChevronRight className="h-4 w-4 shrink-0 text-[#818cf8]" aria-hidden="true" />
       </button>
     </h1>

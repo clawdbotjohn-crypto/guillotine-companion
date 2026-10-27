@@ -11,13 +11,13 @@ import {
 } from '../logic/tooltipPosition';
 
 describe('Hub rank contexts', () => {
-  it('exposes the selected team as an obvious keyboard-accessible change-team control', () => {
+  it('uses only the selected team name as the visible keyboard-accessible change-team control', () => {
     let opened = false;
     render(<HubTeamSelectorButton teamName="Synthetic Team" onOpen={() => { opened = true; }} />);
 
     const button = screen.getByRole('button', { name: 'Change team, currently Synthetic Team' });
     expect(button.textContent).toContain('Synthetic Team');
-    expect(button.textContent).toContain('Change');
+    expect(button.textContent).not.toContain('Change');
     fireEvent.click(button);
     expect(opened).toBe(true);
   });
