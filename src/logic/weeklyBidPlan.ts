@@ -9,7 +9,10 @@ const POSITION_PLAYER_POSITIONS = new Set(['QB', 'RB', 'WR', 'TE']);
 const STREAMING_POSITIONS = ['DEF', 'K'] as const;
 const IMPACT_EPSILON = 1e-9;
 
+export const MAX_POSITION_DROP_ROUNDS = 5;
 export const MAX_POSITION_TARGETS_PER_DROP = 5;
+export const MAX_REACHABLE_POSITION_ROSTER_STATES =
+  (MAX_POSITION_TARGETS_PER_DROP + 1) ** MAX_POSITION_DROP_ROUNDS;
 export const MAX_STREAMER_TARGETS_PER_DROP = 5;
 export const WEEKLY_LINEUP_GAIN_BANDS = {
   highMinimum: 10,
@@ -310,10 +313,82 @@ function theoreticalBid(
 function recommendationComparator(a: WeeklyBidRecommendation, b: WeeklyBidRecommendation): number {
   const transitionA = a.afterRisk === 'safe' ? 2 : a.afterRisk === 'warning' ? 1 : 0;
   const transitionB = b.afterRisk === 'safe' ? 2 : b.afterRisk === 'warning' ? 1 : 0;
-  return transitionB - transitionA
+  // Pickup merit is transaction VORP first. Survival and immediate lineup impact only break
+  // equal-VORP ties; gross cross-position points may never outrank positional scarcity.
+  return b.rosGain - a.rosGain
+    || transitionB - transitionA
     || b.weeklyGain - a.weeklyGain
-    || b.rosGain - a.rosGain
     || a.target.playerId.localeCompare(b.target.playerId);
+}
+
+export interface ReachablePositionClaimGroup {
+  dropPlayerId: string;
+  targetPlayerIds: readonly string[];
+}
+
+function canonicalRoster(playerIds: readonly string[]): string[] {
+  return [...new Set(playerIds)].sort((a, b) => a.localeCompare(b));
+}
+
+function expandReachablePositionRosterStates(
+  states: readonly (readonly string[])[],
+  group: ReachablePositionClaimGroup,
+): string[][] {
+  const next = new Map<string, string[]>();
+  const add = (players: readonly string[]) => {
+    const canonical = canonicalRoster(players);
+    next.set(canonical.join('\u0000'), canonical);
+  };
+  const targets = [...new Set(group.targetPlayerIds)]
+    .slice(0, MAX_POSITION_TARGETS_PER_DROP);
+  for (const state of states) {
+    add(state); // Every claim group may miss.
+    if (!state.includes(group.dropPlayerId)) continue;
+    for (const targetPlayerId of targets) {
+      if (state.includes(targetPlayerId)) continue;
+      add(state.filter((playerId) => playerId !== group.dropPlayerId).concat(targetPlayerId));
+    }
+  }
+  return [...next.values()];
+}
+
+/**
+ * Enumerate every materially reachable roster after bounded position-player claim groups. Each
+ * group contributes its miss outcome plus at most one displayed alternative. An alternative is
+ * unreachable when its drop is gone or its target was already won, and equivalent rosters are
+ * canonicalized and deduplicated after every round.
+ */
+export function buildReachablePositionRosterStates(
+  initialPlayerIds: readonly string[],
+  groups: readonly ReachablePositionClaimGroup[],
+): string[][] {
+  let states = [canonicalRoster(initialPlayerIds)];
+  for (const group of groups.slice(0, MAX_POSITION_DROP_ROUNDS)) {
+    states = expandReachablePositionRosterStates(states, group);
+  }
+  return states;
+}
+
+function preservesLineupAndRankInEveryReachableState(
+  input: WeeklyBidPlanInput,
+  states: readonly (readonly string[])[],
+  dropPlayerId: string,
+  targetPlayerId: string,
+): boolean {
+  let executableStateCount = 0;
+  for (const state of states) {
+    // Already-won targets (and already-dropped players) make this later claim unreachable, not a
+    // second acquisition or a phantom drop. They therefore do not participate in its safety proof.
+    if (!state.includes(dropPlayerId) || state.includes(targetPlayerId)) continue;
+    executableStateCount++;
+    const before = classifyScenario(input, state);
+    const after = classifyScenario(
+      input,
+      state.filter((playerId) => playerId !== dropPlayerId).concat(targetPlayerId),
+    );
+    if (after.projectedTotal < before.projectedTotal || after.rank > before.rank) return false;
+  }
+  return executableStateCount > 0;
 }
 
 /** Build the advisory-only, sequential weekly scenario. No persistence or provider writes occur. */
@@ -337,8 +412,12 @@ export function buildWeeklyBidPlan(input: WeeklyBidPlanInput): WeeklyBidPlan | n
   const rosPositionRanks = buildRosPositionRankMap(input.rosProjections);
   const availableRows = input.availableRows.filter((row) =>
     POSITION_PLAYER_POSITIONS.has(row.position));
-  const maxRows = Math.min(5, Math.max(0, input.maxPositionDrops ?? 5));
+  const maxRows = Math.min(
+    MAX_POSITION_DROP_ROUNDS,
+    Math.max(0, input.maxPositionDrops ?? MAX_POSITION_DROP_ROUNDS),
+  );
   const dropQueue = buildStablePositionDropQueue(input, originalPlayers);
+  let reachablePositionStates = buildReachablePositionRosterStates(originalPlayers, []);
 
   for (const drop of dropQueue) {
     if (rows.filter((row) => row.kind === 'position').length >= maxRows) break;
@@ -351,19 +430,30 @@ export function buildWeeklyBidPlan(input: WeeklyBidPlanInput): WeeklyBidPlan | n
         const durable = durableSwapValue(input, drop.playerId, target.playerId);
         // A displayed swap must preserve durable position-adjusted value. Requiring at least one
         // strict weekly/durable improvement below also avoids useless equal-for-equal cards.
-        if (!durable || durable.gain < -IMPACT_EPSILON) return null;
+        if (!durable || durable.gain < 0) return null;
 
         const currentRosterAfter = originalPlayers
           .filter((playerId) => playerId !== drop.playerId)
           .concat(target.playerId);
         const standaloneAfter = classifyScenario(input, currentRosterAfter);
         const weeklyGain = standaloneAfter.projectedTotal - initialStanding.projectedTotal;
-        if (weeklyGain < -IMPACT_EPSILON || standaloneAfter.rank > initialStanding.rank) return null;
+        if (weeklyGain < 0 || standaloneAfter.rank > initialStanding.rank) return null;
         if (weeklyGain <= IMPACT_EPSILON && durable.gain <= IMPACT_EPSILON) return null;
 
-        const scenarioRosterAfter = scenarioPlayers
-          .filter((playerId) => playerId !== drop.playerId && playerId !== target.playerId)
-          .concat(target.playerId);
+        // Independent actual-roster guards above are a cheap fail-closed prefilter. Only then pay
+        // for the bounded all-miss/all-hit/mixed outcome-tree proof.
+        if (!preservesLineupAndRankInEveryReachableState(
+          input,
+          reachablePositionStates,
+          drop.playerId,
+          target.playerId,
+        )) return null;
+
+        const scenarioCanExecute = scenarioPlayers.includes(drop.playerId)
+          && !scenarioPlayers.includes(target.playerId);
+        const scenarioRosterAfter = scenarioCanExecute
+          ? scenarioPlayers.filter((playerId) => playerId !== drop.playerId).concat(target.playerId)
+          : scenarioPlayers;
         const scenarioAfter = classifyScenario(input, scenarioRosterAfter);
         const scenarioWeeklyGain = scenarioAfter.projectedTotal - before.projectedTotal;
         // Merit and price are always standalone from the actual roster. The optimistic scenario is
@@ -436,13 +526,22 @@ export function buildWeeklyBidPlan(input: WeeklyBidPlanInput): WeeklyBidPlan | n
       }
     }
 
-    // Re-optimize with the designated top-impact win, but reserve the costliest displayed
-    // alternative. This conservative path keeps every one-win-per-drop combination feasible.
+    // Add miss plus each mutually-exclusive displayed win to the full bounded state tree.
+    reachablePositionStates = expandReachablePositionRosterStates(reachablePositionStates, {
+      dropPlayerId: drop.playerId,
+      targetPlayerIds: recommendations.map((recommendation) => recommendation.target.playerId),
+    });
+
+    // Retain the designated top recommendation only for the existing budget/impact narrative. A
+    // repeated target that was already won is unreachable on this path and must not drop twice.
     const assumedWin = recommendations[0];
     const roundReservation = Math.max(0, ...recommendations.map((item) => item.suggestedBid));
-    scenarioPlayers = scenarioPlayers
-      .filter((playerId) => playerId !== drop.playerId)
-      .concat(assumedWin.target.playerId);
+    if (scenarioPlayers.includes(drop.playerId)
+      && !scenarioPlayers.includes(assumedWin.target.playerId)) {
+      scenarioPlayers = scenarioPlayers
+        .filter((playerId) => playerId !== drop.playerId)
+        .concat(assumedWin.target.playerId);
+    }
     scenarioBudget = Math.max(0, scenarioBudget - roundReservation);
   }
 
@@ -506,7 +605,7 @@ export function buildWeeklyBidPlan(input: WeeklyBidPlanInput): WeeklyBidPlan | n
       };
     });
     const independentlySafe = recommendations.filter((recommendation) =>
-      recommendation.weeklyGain >= -IMPACT_EPSILON
+      recommendation.weeklyGain >= 0
       && recommendation.afterRank <= recommendation.beforeRank);
     if (independentlySafe.length === 0) continue;
     rows.push({
