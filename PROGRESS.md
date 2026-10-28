@@ -1,17 +1,27 @@
 # Guillotine Companion — Current Progress
 
-## P0 — Suggested Bids independently non-worsening swaps (implemented 2026-10-28)
+## P0 — Suggested Bids no-harm outcome tree + transaction VORP (implemented 2026-10-28)
 
-**Owner source:** Discord `1565045421162889416`. The reported card dropped a starting RB for backup QBs while displaying `-7.7 pts` and Overall `#2 → #5`.
+**Original owner source:** Discord `1565045421162889416`. The reported card dropped a starting RB for backup QBs while displaying `-7.7 pts` and Overall `#2 → #5`.
 
-- [x] Confirmed three interacting root causes: drop VORP only ordered original-roster cuts; transaction eligibility compared gross weekly/ROS totals across unlike positions; and later-card eligibility/pricing used an optimistic roster containing assumed earlier wins even though visible impact was standalone.
-- [x] Every position-player card is now independently evaluated from the actual current roster. It must have nonnegative optimized next-week gain, non-worse Overall Rank, and non-declining durable value.
-- [x] Durable cross-position value now compares like with like: `(target same-source ROS − target-position replacement) − (drop same-source ROS − drop-position replacement)`. Missing/partial calibration fails cross-position swaps closed; same-position comparisons remain valid because the shared baseline cancels.
-- [x] FLEX/SUPER_FLEX remain supported by the optimized lineup evaluator; valid cross-position rebalancing is not globally banned.
-- [x] Eligibility, ordering, and pricing use standalone gain/risk. Sequential assumed wins remain only for budget reservation and scenario bookkeeping.
-- [x] Added privacy-safe synthetic regressions for the reported RB→backup-QB shape, unguaranteed earlier wins, all-card gain/rank invariants, same-position upgrades, safe cross-position FLEX/SUPER_FLEX rebalancing, complete/partial/missing VORP calibration, and existing duplicate/budget/streamer behavior.
-- [x] Implementation commit `bc8fa61ec51b700d1e2f986d16a777934b015517` passed 22 focused, 390 frontend, and 61 API tests; typecheck, production build, changed-file lint, diff, privacy, and secret gates passed.
-- [ ] Review-only PR natural CI, exact Azure preview URL, and hosted 1280×900/390×844 QA remain to be recorded.
+**Owner clarification — Discord `1565047528997527744`:**
+
+> Yeah each round of drops should look at both best and worst case scenarios. So there is no chance that you end up hurting your team if certain bids go through. So the only reason it would make sense to drop a starting RB rd 3 for a QB would be if a better RB was guaranteed to be won earlier. But also I'm curious why the last couple rounds are all QB only suggestions? Is QB VORP high?
+
+**Owner clarification — Discord `1565050012399046859`:**
+
+> Ok pickup suggestions should be VORP based as well. Otherwise it will be a full team of QBs.
+
+- [x] Preserved the standalone no-harm invariant: every displayed position card independently has nonnegative optimized next-week lineup impact, non-worse Overall Rank, and nonnegative durable transaction VORP from the actual current roster.
+- [x] Pickup eligibility and primary ordering now use one same-source transaction formula: `targetVorp = targetValue - replacement[targetPosition]`; `dropVorp = dropValue - replacement[dropPosition]`; `transactionGain = targetVorp - dropVorp`; require `transactionGain >= 0`. Survival/risk, weekly impact, then player ID are deterministic tie-breaks. Gross weekly/ROS/source values never rank cross-position pickups.
+- [x] Missing/partial calibration fails cross-position transactions closed. Same-position `targetValue - dropValue` remains valid when the shared replacement baseline is absent because it cancels exactly.
+- [x] Each later position round is checked against every reachable roster from prior displayed groups. Each group contributes a miss or exactly one displayed alternative; already-won targets and missing drops make that later execution unreachable; canonical roster IDs deduplicate equivalent states. A card survives only if every state where it can execute preserves optimized next-week points and Overall Rank.
+- [x] The outcome tree is deterministically bounded by five position rounds × five targets: at most `(5 + 1)^5 = 7,776` stored states after round five and `6^4 = 1,296` states entering the final card check. Complete/fail-closed VORP and independent safety prefilter candidates before state evaluation.
+- [x] Preserved FLEX/SUPER_FLEX rebalancing, bid caps/reservations, duplicate-target semantics, DST/K streamer behavior, advisory/no-write behavior, and current-main features.
+- [x] Privacy-safe tests cover original-safe/all-hit-safe/mixed-harm rejection; explicit all-miss/all-hit/mixed subsets; multi-alternative/duplicate-target reachability; QB gross-points versus VORP ordering; VORP-primary/tie-break ordering; same-position fallback; complete/partial calibration; FLEX/SUPER_FLEX; original screenshot shape; caps/duplicates; and no negative points/worse rank.
+- [x] Required starting PR head was `14041a450ff01e7660cd03ea142917bd4612afaf` on exact base `97bef73b09a6766784a5f9a608eaa012e683c2fc`; outcome/VORP implementation commit is `dd1b19d149fe764414443d636c368a8ffdcb75dc`.
+- [x] Local gates: 27 focused, 395 full frontend across 47 files, and 61 API tests; typecheck; production build; changed-file Oxlint with 0 warnings/errors; `git diff --check`; bounded privacy/secret/scope review.
+- [ ] Natural exact-head CI/Azure preview and hosted 1280×900/390×844 QA are recorded in the PR/status after push; no workflow dispatch or manual deploy is permitted.
 
 **Gate:** Review-only. Do not merge, auto-merge, delete branches/environments, deploy, dispatch workflows, or mutate live/provider data.
 

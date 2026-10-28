@@ -1,60 +1,43 @@
-# HANDOFF — Suggested Bids independently non-worsening swaps
+# HANDOFF — Suggested Bids no-harm outcome tree + transaction VORP
 
-## Status
+## Status / owner requirements
 
-Implemented on isolated branch `fix/suggested-bids-non-worsening` from exact main base `97bef73b09a6766784a5f9a608eaa012e683c2fc`. Owner source: Discord `1565045421162889416`.
+Existing review-only PR #28 branch `fix/suggested-bids-non-worsening` started exactly at `14041a450ff01e7660cd03ea142917bd4612afaf` on main base `97bef73b09a6766784a5f9a608eaa012e683c2fc`. Outcome/VORP implementation commit: `dd1b19d149fe764414443d636c368a8ffdcb75dc`.
 
-The branch is review-only. Do not merge, auto-merge, delete its branch/environment, deploy, dispatch workflows, or mutate provider/database/live-user state. Unrelated PR #24 was not modified or used.
+Owner clarification Discord `1565047528997527744` requires every drop round to account for best, worst, and mixed prior outcomes so an unguaranteed earlier win can never justify team harm. Owner clarification Discord `1565050012399046859` requires pickup suggestions themselves to be VORP-based so gross QB totals cannot dominate the roster. The full verbatim wording is preserved in `PROGRESS.md`.
 
-## Confirmed root cause
+## Implemented semantics
 
-1. `buildStablePositionDropQueue` used raw same-source positional VORP only to order original-roster drops; it did not prove a target-for-drop transaction preserved durable value.
-2. Eligibility compared the target's gross weekly and ROS totals directly with the drop's gross totals. Gross totals across QB/RB/WR/TE are not position-adjusted and can make a plentiful backup QB look more valuable than a scarce starting RB.
-3. Later cards were admitted and priced when `scenarioWeeklyGain >= 0` after earlier top targets were optimistically inserted. The card's visible gain/rank were separately calculated against the real roster, allowing contradictory harmful cards such as `-7.7 pts`, `#2 → #5`.
+For every position-player target/drop pair, using one source for both player values:
 
-## Formula before / after
+- `targetVorp = targetValue - replacement[targetPosition]`
+- `dropVorp = dropValue - replacement[dropPosition]`
+- `transactionGain = targetVorp - dropVorp`
+- require `transactionGain >= 0`
 
-Before:
+Cross-position transactions fail closed unless both player values and both native-position baselines are finite. Same-position fallback may use `targetValue - dropValue` because the identical baseline cancels. Recommendations sort first by transaction gain, then deterministic survival/risk, optimized weekly impact, and player ID—not gross weekly/ROS/source value across positions.
 
-- Drop ordering only: `drop raw VORP = drop value − same-position replacement`.
-- Eligibility: `target weekly > drop weekly && target gross ROS > drop gross ROS && conditional scenario gain >= 0`.
-- Pricing: conditional risk/gain after assumed earlier wins.
+The original actual-roster guard remains: a displayed card independently must preserve optimized next-week points, not worsen Overall Rank, and improve weekly points or durable transaction VORP. FLEX/SUPER_FLEX therefore still permit legitimate cross-position rebalancing.
 
-After, for every displayed transaction independently:
+For each later position round, prior displayed groups expand to every materially reachable roster. Each prior group has a miss outcome or exactly one displayed target win. A target already present or a drop already gone makes that particular later execution unreachable; it is never double-added/double-dropped. Roster IDs are sorted, deduplicated, and keyed canonically after every group. The later card must preserve optimized weekly points and Overall Rank in every reachable state where it can execute.
 
-- `standalone roster = actual current roster − drop + target`.
-- Require `optimizedWeekly(standalone) − optimizedWeekly(actual) >= 0`.
-- Require `afterOverallRank <= beforeOverallRank`.
-- With complete per-transaction calibration, durable delta is `(targetValue − replacement[targetPosition]) − (dropValue − replacement[dropPosition])`; require delta `>= 0` and require weekly or durable strict improvement.
-- Conservative fallback: if target/drop values or either native-position baseline is absent, reject cross-position swaps. A same-position swap may use `targetValue − dropValue` because its unknown common baseline cancels exactly. Never compare gross ROS with net VORP.
-- Eligibility, sorting, and pricing use standalone impact/risk. Sequential state is retained only for truthful budget reservation/scenario bookkeeping.
+Caps remain five position rounds and five displayed targets per round. Therefore the tree stores at most `6^5 = 7,776` states after the fifth group, while the final round evaluates cards against at most `6^4 = 1,296` prior states. Durable VORP and standalone safety prefilter before outcome-state evaluation.
 
-The existing optimizer continues to model native slots, FLEX, and SUPER_FLEX; therefore independently safe/useful cross-position roster rebalancing remains available.
+Bid caps/reservation, repeated-target display semantics, DST/K streamer logic, advisory/no-write behavior, and current-main features remain unchanged.
 
-## Code and tests
+## Files / validation
 
-Changed only:
+Changed in the outcome/VORP completion:
 
 - `src/logic/weeklyBidPlan.ts`
 - `src/logic/weeklyBidPlan.test.ts`
 - `PROGRESS.md`
 - `HANDOFF.md`
 
-Synthetic tests cover the reported starting-RB→backup-QB failure shape, an unsafe later card that only works after an unguaranteed earlier win, every-card weekly/rank invariants, same-position fallback, safe FLEX/SUPER_FLEX cross-position rebalancing, complete/partial/missing positional calibration, and existing cap/budget/streamer semantics.
+Regression coverage includes original-safe/all-hit-safe/mixed-harm rejection; explicit all-miss/all-hit/mixed subsets; multiple alternatives and duplicate-target unreachability; high-gross-QB/lower-VORP ordering; transaction-VORP primary and deterministic ties; same-position fallback; complete/partial calibration; FLEX/SUPER_FLEX; original screenshot shape; caps/duplicates; and all-card nonnegative-points/non-worse-rank invariants. The synthetic maximum 5×5 plan and all 7,776 canonical states complete under a generous five-second non-stalling ceiling.
 
-## Validation / hosted QA
+Local gates passed: 27/27 focused Suggested Bids tests; 395/395 frontend tests across 47 files; 61/61 API tests; TypeScript typecheck; production build; changed-file Oxlint (0 warnings/errors); `git diff --check`; bounded privacy/secret/scope review. Final PR head, natural CI checks, exact Azure preview URL, and hosted QA are recorded in PR #28/status because a commit cannot contain its own SHA.
 
-Implementation commit: `bc8fa61ec51b700d1e2f986d16a777934b015517`.
+## Boundaries
 
-Local gates passed:
-
-- focused Suggested Bids: 22/22
-- full frontend: 390/390 across 47 files
-- API: 61/61
-- TypeScript typecheck: passed
-- production build: passed
-- changed-file Oxlint: 0 warnings / 0 errors
-- `git diff --check`: passed
-- bounded privacy/secret review: only synthetic player/team IDs; no screenshot, private league/user IDs, credentials, or secret values added
-
-Final PR head, PR URL, natural CI, exact preview URL, and hosted desktop/mobile QA evidence are recorded in the PR description/status because a commit cannot contain its own final SHA.
+PR #28 remains review-only. Do not merge/auto-merge, push main, delete the branch/environment, manually deploy or dispatch workflows, or mutate provider/database/live-user data.
