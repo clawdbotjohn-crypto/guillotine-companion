@@ -64,7 +64,7 @@ Local validation:
 - `git diff --check`: passed
 - bounded diff/privacy/secret/scope review: only intended PR #28 logic/tests/docs; synthetic identifiers only; no private data, credentials, artifacts, provider/DB/live-user changes
 
-Exact implementation commit/head: `b79277f6a2eae8adae1f34a0278053e4ac559152`. Natural CI/Azure, exact preview URL, hosted 1280×900 and 390×844 QA, and final PR state are pending the required push. A commit cannot contain its own final SHA, so the exact final documentation head must be recorded in PR #28/status after push.
+Exact implementation commit/head: `b79277f6a2eae8adae1f34a0278053e4ac559152`. The first pushed documentation head was `5d5bb27f77f61553bc0ffdd87702e34d710d2233`; natural exact-head CI and Azure deployment passed. Exact preview URL: `https://nice-moss-07ec56310-28.centralus.7.azurestaticapps.net`. Hosted privacy-safe synthetic QA passed at 1280×900 and 390×844: bench WR appeared before starting RB; non-nested counts were coherent (4 vs 1) without explanatory prose; primaries were distinct (Marginal Alpha then Exceptional Safe); pickup cards remained transaction-VORP ordered; every card had nonnegative next-week gain and unchanged/improved rank; and neither viewport had horizontal overflow or console errors. Browser local/session storage, Cache Storage, and IndexedDB were cleared and all preview tabs closed afterward. Final post-QA docs-head checks and PR state are recorded in PR #28 because a commit cannot contain its own SHA.
 
 ## Residual caveat
 
