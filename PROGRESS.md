@@ -12,6 +12,13 @@
 
 > Ok pickup suggestions should be VORP based as well. Otherwise it will be a full team of QBs.
 
+**Owner primary-sequencing clarification — Discord `1565087484512305283`:**
+
+> Nice, the results look more reasonable now. One thing I see is the top suggestion (Aarond Jones) is suggested for every player. Likely we have the logic correct with who to grab and drop, but should do a last pass that says "ok from rd 1 the top target (highest value and then highest order among same cost) is gone for sure, so remove him from later rounds, then 2nd rd the #2 overall target is gone after that". Does that make sense? So the top target from each round would be removed from later rounds. Does our logic support that? Or do you see any issues with that?
+
+- [x] For each successfully emitted position-player row, `recommendations[0]` after the existing transaction-VORP comparator/ties is the canonical primary. It is consumed before the next row and excluded from every later recommendation/fallback; the next eligible target promotes under the same comparator. No candidate is consumed for a skipped/empty row, and DST/K streamer logic is not affected.
+- [x] Primary consumption is an additional display-availability rule, not a replacement for the safety outcome tree. The prior group still models team-wins (roster changes) and team-loses (roster unchanged), while the processed primary is unavailable for later display in both. This assumes the Suggested Bids claim was validly submitted and reached processing; it deliberately does not consume unsubmitted or invalid claims.
+- [x] Same-round alternatives remain visible and may recur later unless they become a prior primary or existing branch-specific reachability makes them unavailable in a modeled roster state.
 - [x] Preserved the standalone no-harm invariant: every displayed position card independently has nonnegative optimized next-week lineup impact, non-worse Overall Rank, and nonnegative durable transaction VORP from the actual current roster.
 - [x] Pickup eligibility and primary ordering now use one same-source transaction formula: `targetVorp = targetValue - replacement[targetPosition]`; `dropVorp = dropValue - replacement[dropPosition]`; `transactionGain = targetVorp - dropVorp`; require `transactionGain >= 0`. Survival/risk, weekly impact, then player ID are deterministic tie-breaks. Gross weekly/ROS/source values never rank cross-position pickups.
 - [x] Missing/partial calibration fails cross-position transactions closed. Same-position `targetValue - dropValue` remains valid when the shared replacement baseline is absent because it cancels exactly.
@@ -20,8 +27,9 @@
 - [x] Preserved FLEX/SUPER_FLEX rebalancing, bid caps/reservations, duplicate-target semantics, DST/K streamer behavior, advisory/no-write behavior, and current-main features.
 - [x] Privacy-safe tests cover original-safe/all-hit-safe/mixed-harm rejection; explicit all-miss/all-hit/mixed subsets; multi-alternative/duplicate-target reachability; QB gross-points versus VORP ordering; VORP-primary/tie-break ordering; same-position fallback; complete/partial calibration; FLEX/SUPER_FLEX; original screenshot shape; caps/duplicates; and no negative points/worse rank.
 - [x] Required starting PR head was `14041a450ff01e7660cd03ea142917bd4612afaf` on exact base `97bef73b09a6766784a5f9a608eaa012e683c2fc`; outcome/VORP implementation commit is `dd1b19d149fe764414443d636c368a8ffdcb75dc`.
-- [x] Local gates: 27 focused, 395 full frontend across 47 files, and 61 API tests; typecheck; production build; changed-file Oxlint with 0 warnings/errors; `git diff --check`; bounded privacy/secret/scope review.
-- [ ] Natural exact-head CI/Azure preview and hosted 1280×900/390×844 QA are recorded in the PR/status after push; no workflow dispatch or manual deploy is permitted.
+- [x] Primary-sequencing implementation commit: `9187cd6168a76b6cda2d4648684f6a2902af02e2` (follow-up started at required head `21f0340486ca3c655d9462667bed2b5dccef5b60`; required base `97bef73b09a6766784a5f9a608eaa012e683c2fc`). Files: `src/logic/weeklyBidPlan.ts`, `src/logic/weeklyBidPlan.test.ts`, `PROGRESS.md`, and `HANDOFF.md`.
+- [x] Follow-up local gates: 30/30 focused, 398/398 full frontend across 47 files, and 61/61 API tests; typecheck; production build; changed-file Oxlint with 0 warnings/errors; `git diff --check`; bounded privacy/secret/scope review.
+- [ ] Natural exact-head CI/Azure preview and hosted 1280×900/390×844 QA are recorded in the PR/status after push; no workflow dispatch or manual deploy is permitted. Exact final head is recorded in PR #28/status because a commit cannot contain its own SHA.
 
 **Gate:** Review-only. Do not merge, auto-merge, delete branches/environments, deploy, dispatch workflows, or mutate live/provider data.
 

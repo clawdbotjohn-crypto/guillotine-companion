@@ -2,9 +2,9 @@
 
 ## Status / owner requirements
 
-Existing review-only PR #28 branch `fix/suggested-bids-non-worsening` started exactly at `14041a450ff01e7660cd03ea142917bd4612afaf` on main base `97bef73b09a6766784a5f9a608eaa012e683c2fc`. Outcome/VORP implementation commit: `dd1b19d149fe764414443d636c368a8ffdcb75dc`.
+Existing review-only PR #28 branch `fix/suggested-bids-non-worsening` started this follow-up exactly at required head `21f0340486ca3c655d9462667bed2b5dccef5b60` on required main base `97bef73b09a6766784a5f9a608eaa012e683c2fc`. Earlier outcome/VORP implementation commit: `dd1b19d149fe764414443d636c368a8ffdcb75dc`.
 
-Owner clarification Discord `1565047528997527744` requires every drop round to account for best, worst, and mixed prior outcomes so an unguaranteed earlier win can never justify team harm. Owner clarification Discord `1565050012399046859` requires pickup suggestions themselves to be VORP-based so gross QB totals cannot dominate the roster. The full verbatim wording is preserved in `PROGRESS.md`.
+Owner clarification Discord `1565047528997527744` requires every drop round to account for best, worst, and mixed prior outcomes so an unguaranteed earlier win can never justify team harm. Discord `1565050012399046859` requires pickup suggestions themselves to be VORP-based so gross QB totals cannot dominate the roster. The exact primary-sequencing owner source is Discord `1565087484512305283`: each completed position row's first target is gone after processing and must not repeat later. Full verbatim wording is preserved in `PROGRESS.md`.
 
 ## Implemented semantics
 
@@ -21,9 +21,13 @@ The original actual-roster guard remains: a displayed card independently must pr
 
 For each later position round, prior displayed groups expand to every materially reachable roster. Each prior group has a miss outcome or exactly one displayed target win. A target already present or a drop already gone makes that particular later execution unreachable; it is never double-added/double-dropped. Roster IDs are sorted, deduplicated, and keyed canonically after every group. The later card must preserve optimized weekly points and Overall Rank in every reachable state where it can execute.
 
-Caps remain five position rounds and five displayed targets per round. Therefore the tree stores at most `6^5 = 7,776` states after the fifth group, while the final round evaluates cards against at most `6^4 = 1,296` prior states. Durable VORP and standalone safety prefilter before outcome-state evaluation.
+For every successfully emitted position row, `recommendations[0]` after the existing transaction-VORP comparator/ties is now consumed before candidate generation for the next row. Consumed primary IDs are excluded from all later recommendations, including fallbacks, so the next eligible target promotes. The outcome tree still keeps both team-wins (changed roster) and team-loses (unchanged roster) branches; consumption is an additional display-availability constraint in both, not a replacement for safety reachability. This specifically assumes the Suggested Bids claim was validly submitted and reached processing—the player is then gone to this team or another manager—and does not generalize to unsubmitted or invalid claims.
 
-Bid caps/reservation, repeated-target display semantics, DST/K streamer logic, advisory/no-write behavior, and current-main features remain unchanged.
+Only an emitted row's canonical primary is consumed. Same-round alternatives remain visible and can recur later unless they become a later primary or existing branch-specific reachability excludes them. Empty/skipped rows consume nothing. DST/K streamers do not use this position-primary set.
+
+Caps remain five position rounds and five displayed targets per round. Therefore the safety tree can still store at most `6^5 = 7,776` states after the fifth group, while the final round evaluates cards against at most `6^4 = 1,296` prior states. Durable VORP and standalone safety prefilter before outcome-state evaluation.
+
+Bid/budget/opponent/duplicate caps and reservation, standalone best/worst/mixed no-harm, calibration fallback, FLEX/SUPER_FLEX, DST/K streamer logic, advisory/no-write behavior, and current-main features remain unchanged.
 
 ## Files / validation
 
@@ -34,9 +38,9 @@ Changed in the outcome/VORP completion:
 - `PROGRESS.md`
 - `HANDOFF.md`
 
-Regression coverage includes original-safe/all-hit-safe/mixed-harm rejection; explicit all-miss/all-hit/mixed subsets; multiple alternatives and duplicate-target unreachability; high-gross-QB/lower-VORP ordering; transaction-VORP primary and deterministic ties; same-position fallback; complete/partial calibration; FLEX/SUPER_FLEX; original screenshot shape; caps/duplicates; and all-card nonnegative-points/non-worse-rank invariants. The synthetic maximum 5×5 plan and all 7,776 canonical states complete under a generous five-second non-stalling ceiling.
+Regression coverage includes the Aaron-Jones-shaped repeated-primary fixture; promotion to distinct Round 2/3 primaries; exclusion from every later fallback; processed-claim win/loss roster branches; recurring same-round alternatives; deterministic equal-cost/equal-value ordering; original-safe/all-hit-safe/mixed-harm rejection; explicit all-miss/all-hit/mixed subsets; multiple alternatives and duplicate-target unreachability; high-gross-QB/lower-VORP ordering; transaction-VORP primary and deterministic ties; same-position fallback; complete/partial calibration; FLEX/SUPER_FLEX; original screenshot shape; caps/duplicates; and all-card nonnegative-points/non-worse-rank invariants. The synthetic maximum 5×5 safety enumerator and all 7,776 canonical states remain covered under a generous five-second non-stalling ceiling; display-row recommendation counts now reflect consumed primaries and branch-specific reachability without weakening that bound.
 
-Local gates passed: 27/27 focused Suggested Bids tests; 395/395 frontend tests across 47 files; 61/61 API tests; TypeScript typecheck; production build; changed-file Oxlint (0 warnings/errors); `git diff --check`; bounded privacy/secret/scope review. Final PR head, natural CI checks, exact Azure preview URL, and hosted QA are recorded in PR #28/status because a commit cannot contain its own SHA.
+Primary-sequencing implementation commit: `9187cd6168a76b6cda2d4648684f6a2902af02e2`. Local gates passed: 30/30 focused Suggested Bids tests; 398/398 frontend tests across 47 files; 61/61 API tests; TypeScript typecheck; production build; changed-file Oxlint (0 warnings/errors); `git diff --check`; bounded privacy/secret/scope review. Exact final PR head, natural CI checks, Azure preview URL, and hosted QA are recorded in PR #28/status because a commit cannot contain its own SHA.
 
 ## Boundaries
 
