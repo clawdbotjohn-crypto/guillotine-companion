@@ -44,7 +44,7 @@ Synthetic tests cover the reported starting-RB→backup-QB failure shape, an uns
 
 ## Validation / hosted QA
 
-Implementation commit: .
+Implementation commit: `bc8fa61ec51b700d1e2f986d16a777934b015517`.
 
 Local gates passed:
 
@@ -54,7 +54,7 @@ Local gates passed:
 - TypeScript typecheck: passed
 - production build: passed
 - changed-file Oxlint: 0 warnings / 0 errors
-- : passed
+- `git diff --check`: passed
 - bounded privacy/secret review: only synthetic player/team IDs; no screenshot, private league/user IDs, credentials, or secret values added
 
 Final PR head, PR URL, natural CI, exact preview URL, and hosted desktop/mobile QA evidence are recorded in the PR description/status because a commit cannot contain its own final SHA.

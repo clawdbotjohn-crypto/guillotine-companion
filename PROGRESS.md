@@ -10,7 +10,7 @@
 - [x] FLEX/SUPER_FLEX remain supported by the optimized lineup evaluator; valid cross-position rebalancing is not globally banned.
 - [x] Eligibility, ordering, and pricing use standalone gain/risk. Sequential assumed wins remain only for budget reservation and scenario bookkeeping.
 - [x] Added privacy-safe synthetic regressions for the reported RB→backup-QB shape, unguaranteed earlier wins, all-card gain/rank invariants, same-position upgrades, safe cross-position FLEX/SUPER_FLEX rebalancing, complete/partial/missing VORP calibration, and existing duplicate/budget/streamer behavior.
-- [x] Implementation commit  passed 22 focused, 390 frontend, and 61 API tests; typecheck, production build, changed-file lint, diff, privacy, and secret gates passed.
+- [x] Implementation commit `bc8fa61ec51b700d1e2f986d16a777934b015517` passed 22 focused, 390 frontend, and 61 API tests; typecheck, production build, changed-file lint, diff, privacy, and secret gates passed.
 - [ ] Review-only PR natural CI, exact Azure preview URL, and hosted 1280×900/390×844 QA remain to be recorded.
 
 **Gate:** Review-only. Do not merge, auto-merge, delete branches/environments, deploy, dispatch workflows, or mutate live/provider data.
