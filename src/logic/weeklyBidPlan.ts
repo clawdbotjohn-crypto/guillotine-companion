@@ -7,6 +7,7 @@ import { resolveStrategyBid } from './waiverStrategies';
 
 const POSITION_PLAYER_POSITIONS = new Set(['QB', 'RB', 'WR', 'TE']);
 const STREAMING_POSITIONS = ['DEF', 'K'] as const;
+const IMPACT_EPSILON = 1e-9;
 
 export const MAX_POSITION_TARGETS_PER_DROP = 5;
 export const MAX_STREAMER_TARGETS_PER_DROP = 5;
@@ -81,6 +82,12 @@ export interface StableDropCandidate {
   weeklyPoints: number;
 }
 
+export interface DurableSwapValue {
+  /** Net position-adjusted change. Same-position fallback is raw because the baseline cancels. */
+  gain: number;
+  mode: 'position-adjusted-vorp' | 'same-position-fallback';
+}
+
 function remainingBudget(initialBudget: number, roster: Roster | undefined): number {
   if (!roster) return 0;
   return Math.max(0, initialBudget - (roster.settings.waiver_budget_used ?? 0));
@@ -105,6 +112,47 @@ function rosFor(
 function positionFor(input: WeeklyBidPlanInput, playerId: string): string | undefined {
   return input.weeklyProjections.get(playerId)?.position
     ?? input.rosProjections.get(playerId)?.position;
+}
+
+function finitePlayerValue(input: WeeklyBidPlanInput, playerId: string): number | null {
+  if (input.valueByPlayerId) {
+    const explicit = input.valueByPlayerId.get(playerId);
+    return Number.isFinite(explicit) ? explicit! : null;
+  }
+  const ros = input.rosProjections.get(playerId)?.totalPoints;
+  return Number.isFinite(ros) ? ros! : null;
+}
+
+/**
+ * Compare durable values without mixing gross cross-position points with net VORP. When both
+ * native-position baselines are present, the transaction delta is:
+ *   (targetValue - targetReplacement) - (dropValue - dropReplacement).
+ * If calibration is incomplete, only same-position swaps are comparable because the unknown
+ * shared baseline cancels exactly. Cross-position swaps fail closed.
+ */
+export function durableSwapValue(
+  input: WeeklyBidPlanInput,
+  dropPlayerId: string,
+  targetPlayerId: string,
+): DurableSwapValue | null {
+  const dropPosition = positionFor(input, dropPlayerId);
+  const targetPosition = positionFor(input, targetPlayerId);
+  const dropValue = finitePlayerValue(input, dropPlayerId);
+  const targetValue = finitePlayerValue(input, targetPlayerId);
+  if (!dropPosition || !targetPosition || dropValue == null || targetValue == null) return null;
+
+  const dropReplacement = input.replacementByPosition?.get(dropPosition);
+  const targetReplacement = input.replacementByPosition?.get(targetPosition);
+  if (Number.isFinite(dropReplacement) && Number.isFinite(targetReplacement)) {
+    return {
+      gain: (targetValue - targetReplacement!) - (dropValue - dropReplacement!),
+      mode: 'position-adjusted-vorp',
+    };
+  }
+  if (dropPosition === targetPosition) {
+    return { gain: targetValue - dropValue, mode: 'same-position-fallback' };
+  }
+  return null;
 }
 
 function classifyScenario(
@@ -219,11 +267,11 @@ export function safeCutDistanceMultiplier(
 }
 
 /**
- * Merit pricing starts at the current scenario's maximum, then steps down by lineup-gain band:
+ * Merit pricing starts from the actual current roster's risk maximum, then steps down by standalone lineup-gain band:
  * Danger: 1.5 Aggressive -> 1 Aggressive -> 1 Safe.
  * Warning: 1 Aggressive -> 1 Safe -> 0.5 Safe.
  * Safe: its existing cut-distance Safe multiplier -> 0.5 Safe -> 0.5 Safe (the floor).
- * The resulting class is intentionally absent: it affects ordering and the next round only.
+ * The resulting standalone class affects recommendation ordering, but assumed prior wins do not affect price.
  */
 function theoreticalBid(
   row: WaiverPlayerRow,
@@ -263,7 +311,7 @@ function recommendationComparator(a: WeeklyBidRecommendation, b: WeeklyBidRecomm
   const transitionA = a.afterRisk === 'safe' ? 2 : a.afterRisk === 'warning' ? 1 : 0;
   const transitionB = b.afterRisk === 'safe' ? 2 : b.afterRisk === 'warning' ? 1 : 0;
   return transitionB - transitionA
-    || b.scenarioWeeklyGain - a.scenarioWeeklyGain
+    || b.weeklyGain - a.weeklyGain
     || b.rosGain - a.rosGain
     || a.target.playerId.localeCompare(b.target.playerId);
 }
@@ -297,36 +345,43 @@ export function buildWeeklyBidPlan(input: WeeklyBidPlanInput): WeeklyBidPlan | n
     if (!scenarioPlayers.includes(drop.playerId)) continue;
 
     const before = classifyScenario(input, scenarioPlayers);
-    const dropWeek = scoreFor(drop.playerId, input.weeklyProjections);
-    const dropRos = rosFor(drop.playerId, input.rosProjections);
     const meritRecommendations = availableRows
-      .filter((target) => !scenarioPlayers.includes(target.playerId)
-        && scoreFor(target.playerId, input.weeklyProjections) > dropWeek
-        && rosFor(target.playerId, input.rosProjections) > dropRos)
-      .map((target): WeeklyBidRecommendation => {
-        const scenarioRosterAfter = scenarioPlayers
-          .filter((playerId) => playerId !== drop.playerId)
-          .concat(target.playerId);
-        const scenarioAfter = classifyScenario(input, scenarioRosterAfter);
-        const scenarioWeeklyGain = scenarioAfter.projectedTotal - before.projectedTotal;
+      .filter((target) => !originalPlayers.includes(target.playerId))
+      .map((target): WeeklyBidRecommendation | null => {
+        const durable = durableSwapValue(input, drop.playerId, target.playerId);
+        // A displayed swap must preserve durable position-adjusted value. Requiring at least one
+        // strict weekly/durable improvement below also avoids useless equal-for-equal cards.
+        if (!durable || durable.gain < -IMPACT_EPSILON) return null;
+
         const currentRosterAfter = originalPlayers
           .filter((playerId) => playerId !== drop.playerId)
           .concat(target.playerId);
         const standaloneAfter = classifyScenario(input, currentRosterAfter);
+        const weeklyGain = standaloneAfter.projectedTotal - initialStanding.projectedTotal;
+        if (weeklyGain < -IMPACT_EPSILON || standaloneAfter.rank > initialStanding.rank) return null;
+        if (weeklyGain <= IMPACT_EPSILON && durable.gain <= IMPACT_EPSILON) return null;
+
+        const scenarioRosterAfter = scenarioPlayers
+          .filter((playerId) => playerId !== drop.playerId && playerId !== target.playerId)
+          .concat(target.playerId);
+        const scenarioAfter = classifyScenario(input, scenarioRosterAfter);
+        const scenarioWeeklyGain = scenarioAfter.projectedTotal - before.projectedTotal;
+        // Merit and price are always standalone from the actual roster. The optimistic scenario is
+        // retained only for sequential budget planning after this independently-safe card exists.
         const priced = theoreticalBid(
           target,
-          before,
-          scenarioWeeklyGain,
+          initialStanding,
+          Math.max(0, weeklyGain),
           input.eliminationsPerWeek,
         );
         return {
           target,
           dropPlayerId: drop.playerId,
-          weeklyGain: standaloneAfter.projectedTotal - initialStanding.projectedTotal,
+          weeklyGain: Math.max(0, weeklyGain),
           scenarioWeeklyGain,
-          rosGain: rosFor(target.playerId, input.rosProjections) - dropRos,
-          beforeRisk: before.risk,
-          afterRisk: scenarioAfter.risk,
+          rosGain: durable.gain,
+          beforeRisk: initialStanding.risk,
+          afterRisk: standaloneAfter.risk,
           beforeRank: initialStanding.rank,
           afterRank: standaloneAfter.rank,
           theoreticalBid: priced.value,
@@ -336,8 +391,7 @@ export function buildWeeklyBidPlan(input: WeeklyBidPlanInput): WeeklyBidPlan | n
           safeMultiplier: priced.safeMultiplier,
         };
       })
-      // Positive ROS/raw-week upgrades that do no conditional-scenario lineup harm remain useful.
-      .filter((recommendation) => recommendation.scenarioWeeklyGain >= 0)
+      .filter((recommendation): recommendation is WeeklyBidRecommendation => recommendation != null)
       .sort(recommendationComparator)
       .slice(0, MAX_POSITION_TARGETS_PER_DROP);
 
@@ -413,7 +467,6 @@ export function buildWeeklyBidPlan(input: WeeklyBidPlanInput): WeeklyBidPlan | n
     const improvingIds = improvingCandidates.slice(0, targetLimit);
     if (improvingIds.length === 0) continue;
 
-    const standing = classifyScenario(input, scenarioPlayers);
     const recommendations = improvingIds.map((targetId): WeeklyBidRecommendation => {
       const existingTarget = input.availableRows.find((row) => row.playerId === targetId);
       const target: WaiverPlayerRow = {
@@ -441,8 +494,8 @@ export function buildWeeklyBidPlan(input: WeeklyBidPlanInput): WeeklyBidPlan | n
         weeklyGain: standaloneAfter.projectedTotal - initialStanding.projectedTotal,
         scenarioWeeklyGain: scoreFor(targetId, input.weeklyProjections) - currentProjection,
         rosGain: rosFor(targetId, input.rosProjections) - rosFor(current, input.rosProjections),
-        beforeRisk: standing.risk,
-        afterRisk: standing.risk,
+        beforeRisk: initialStanding.risk,
+        afterRisk: standaloneAfter.risk,
         beforeRank: initialStanding.rank,
         afterRank: standaloneAfter.rank,
         theoreticalBid: 0,
@@ -452,12 +505,16 @@ export function buildWeeklyBidPlan(input: WeeklyBidPlanInput): WeeklyBidPlan | n
         safeMultiplier: null,
       };
     });
+    const independentlySafe = recommendations.filter((recommendation) =>
+      recommendation.weeklyGain >= -IMPACT_EPSILON
+      && recommendation.afterRank <= recommendation.beforeRank);
+    if (independentlySafe.length === 0) continue;
     rows.push({
       kind: 'streamer',
       dropPlayerId: current,
       dropPosition: position,
       scenarioBudgetBefore: scenarioBudget,
-      recommendations,
+      recommendations: independentlySafe,
     });
   }
 

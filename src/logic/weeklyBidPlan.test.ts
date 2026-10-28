@@ -5,6 +5,7 @@ import type { WaiverPlayerRow } from './waivers';
 import {
   buildStablePositionDropQueue,
   buildWeeklyBidPlan,
+  durableSwapValue,
   classifyWeeklyLineupGain,
   formatWeeklyLineupGain,
   safeCutDistanceMultiplier,
@@ -59,7 +60,7 @@ function base(overrides: Partial<WeeklyBidPlanInput> = {}): MutableInput {
     ros('def-old', 'DEF', 30), ros('def-new', 'DEF', 35),
     ros('k-old', 'K', 40), ros('k-new', 'K', 42),
   ];
-  return {
+  const result = {
     selectedRosterId: 1,
     rosters: [
       roster(1, ['drop-a', 'drop-b', 'drop-c', 'drop-d', 'drop-e', 'drop-f', 'def-old', 'k-old']),
@@ -80,6 +81,15 @@ function base(overrides: Partial<WeeklyBidPlanInput> = {}): MutableInput {
     eliminationsPerWeek: 1,
     ...overrides,
   } as MutableInput;
+  if (!Object.prototype.hasOwnProperty.call(overrides, 'valueByPlayerId')) {
+    result.valueByPlayerId = new Map(
+      [...result.rosProjections].map(([playerId, projection]) => [playerId, projection.totalPoints]),
+    );
+  }
+  if (!Object.prototype.hasOwnProperty.call(overrides, 'replacementByPosition')) {
+    result.replacementByPosition = new Map([['QB', 0], ['RB', 0], ['WR', 0], ['TE', 0]]);
+  }
+  return result;
 }
 
 function streamerInput({
@@ -164,6 +174,7 @@ describe('weekly team bid planning', () => {
     expect(plan.rows.some((row) => row.dropPlayerId === 'injured-star')).toBe(false);
 
     input.rosProjections.set('target-a', ros('target-a', 'RB', 5));
+    (input.valueByPlayerId as Map<string, number>).set('target-a', 5);
     const withoutRosImprovement = buildWeeklyBidPlan(input)!;
     expect(withoutRosImprovement.rows.flatMap((row) => row.recommendations)
       .some((rec) => rec.target.playerId === 'target-a')).toBe(false);
@@ -229,15 +240,18 @@ describe('weekly team bid planning', () => {
     ]);
   });
 
-  it('applies sequential assumed wins, subtracts the visible bid, and reclassifies', () => {
+  it('reserves sequential budget while keeping later eligibility and price independent', () => {
     const plan = buildWeeklyBidPlan(base({ maxPositionDrops: 2 }))!;
     const rows = plan.rows.filter((row) => row.kind === 'position');
     expect(rows).toHaveLength(2);
     expect(rows[1].scenarioBudgetBefore).toBe(
-      rows[0].scenarioBudgetBefore - rows[0].recommendations[0].suggestedBid,
+      rows[0].scenarioBudgetBefore
+        - Math.max(...rows[0].recommendations.map((item) => item.suggestedBid)),
     );
-    expect(rows[1].recommendations[0].beforeRisk).toBe(rows[0].recommendations[0].afterRisk);
-    expect(rows[1].recommendations.every((rec) => rec.target.playerId !== rows[0].recommendations[0].target.playerId)).toBe(true);
+    expect(rows[1].recommendations.every((rec) =>
+      rec.beforeRisk === rows[0].recommendations[0].beforeRisk)).toBe(true);
+    expect(rows[1].recommendations.some((rec) =>
+      rec.target.playerId === rows[0].recommendations[0].target.playerId)).toBe(true);
   });
 
   it('caps at actual scenario budget, preserves qualifying $0 recommendations, and caps by richest active opponent + $1', () => {
@@ -297,6 +311,7 @@ describe('weekly team bid planning', () => {
       availablePlayerIds: ['qb-upgrade', 'rb-upgrade'],
       valueByPlayerId: new Map([
         ['scarce-qb', 40], ['low-ros-rb', 10], ['injured-star', 500],
+        ['qb-upgrade', 200], ['rb-upgrade', 150],
       ]),
       replacementByPosition: new Map([['QB', 100], ['RB', 0], ['WR', 0]]),
       maxPositionDrops: 3,
@@ -358,7 +373,7 @@ describe('weekly team bid planning', () => {
     expect(recommendations.map((item) => item.suggestedBid)).toEqual([52, 91]);
   });
 
-  it('uses the current class for merit, then the top-impact win class for the next round', () => {
+  it('prices every round from the actual current roster rather than an assumed earlier win', () => {
     const weekPlayers = [
       weekly('drop-a', 'QB', 0), weekly('drop-b', 'RB', 0),
       weekly('escape', 'QB', 50), weekly('next-rb', 'RB', 15),
@@ -389,8 +404,8 @@ describe('weekly team bid planning', () => {
     expect(rows[0].recommendations[0]).toMatchObject({
       beforeRisk: 'at-risk', afterRisk: 'safe', theoreticalBid: 60,
     });
-    expect(rows[1].recommendations[0].beforeRisk).toBe('safe');
-    expect(rows[1].recommendations[0].theoreticalBid).toBe(20);
+    expect(rows[1].recommendations[0].beforeRisk).toBe('at-risk');
+    expect(rows[1].recommendations[0].theoreticalBid).toBe(60);
   });
 
   it('shows later-round repeated targets against the actual current roster, not prior hypothetical wins', () => {
@@ -451,6 +466,129 @@ describe('weekly team bid planning', () => {
       expectedBudget = Math.max(0, expectedBudget - Math.max(0, ...bids));
     }
     expect(repeatedTargets).toBeGreaterThan(0);
+  });
+
+
+
+  it('rejects the reported starting-RB to backup-QB harmful shape', () => {
+    const weeklyPlayers = [
+      weekly('starting-rb', 'RB', 8), weekly('starting-qb', 'QB', 24),
+      weekly('backup-qb', 'QB', 15), weekly('opponent-high', 'QB', 40),
+      weekly('opponent-low', 'QB', 20),
+    ];
+    const rosPlayers = [
+      ros('starting-rb', 'RB', 70), ros('starting-qb', 'QB', 200),
+      ros('backup-qb', 'QB', 160), ros('opponent-high', 'QB', 200),
+      ros('opponent-low', 'QB', 100),
+    ];
+    const plan = buildWeeklyBidPlan(base({
+      rosters: [
+        roster(1, ['starting-rb', 'starting-qb']), roster(2, ['opponent-high']),
+        roster(3, ['opponent-low']),
+      ],
+      activeRosterIds: new Set([1, 2, 3]),
+      lineupPositions: ['QB', 'RB'],
+      weeklyProjections: new Map(weeklyPlayers.map((player) => [player.playerId, player])),
+      rosProjections: new Map(rosPlayers.map((player) => [player.playerId, player])),
+      availableRows: [target('backup-qb', 'QB', 10, 20)],
+      availablePlayerIds: ['backup-qb'],
+      valueByPlayerId: new Map(rosPlayers.map((player) => [player.playerId, player.totalPoints])),
+      replacementByPosition: new Map([['QB', 150], ['RB', 20]]),
+      maxPositionDrops: 2,
+    }))!;
+
+    expect(plan.rows.flatMap((row) => row.recommendations)).toHaveLength(0);
+  });
+
+  it('does not admit a later card only because an earlier target was assumed won', () => {
+    const weeklyPlayers = [
+      weekly('starter-qb', 'QB', 30), weekly('starter-rb', 'RB', 10),
+      weekly('weak-bench', 'WR', 0), weekly('first-win', 'RB', 40),
+      weekly('backup-qb', 'QB', 20), weekly('opponent', 'QB', 25),
+    ];
+    const rosPlayers = [
+      ros('starter-qb', 'QB', 150), ros('starter-rb', 'RB', 30),
+      ros('weak-bench', 'WR', 1), ros('first-win', 'RB', 200),
+      ros('backup-qb', 'QB', 100), ros('opponent', 'QB', 100),
+    ];
+    const plan = buildWeeklyBidPlan(base({
+      rosters: [roster(1, ['starter-qb', 'starter-rb', 'weak-bench']), roster(2, ['opponent'])],
+      activeRosterIds: new Set([1, 2]),
+      lineupPositions: ['QB', 'RB'],
+      weeklyProjections: new Map(weeklyPlayers.map((player) => [player.playerId, player])),
+      rosProjections: new Map(rosPlayers.map((player) => [player.playerId, player])),
+      availableRows: [
+        target('first-win', 'RB', 10, 20), target('backup-qb', 'QB', 10, 20),
+      ],
+      availablePlayerIds: ['first-win', 'backup-qb'],
+      valueByPlayerId: new Map(rosPlayers.map((player) => [player.playerId, player.totalPoints])),
+      replacementByPosition: new Map([['QB', 0], ['RB', 0], ['WR', 0]]),
+      maxPositionDrops: 3,
+    }))!;
+
+    expect(plan.rows.flatMap((row) => row.recommendations)
+      .some((recommendation) => recommendation.target.playerId === 'backup-qb'
+        && recommendation.dropPlayerId === 'starter-rb')).toBe(false);
+    expect(plan.rows.flatMap((row) => row.recommendations).every((recommendation) =>
+      recommendation.weeklyGain >= 0 && recommendation.afterRank <= recommendation.beforeRank)).toBe(true);
+  });
+
+  it('uses complete positional VORP and fails incomplete cross-position calibration closed', () => {
+    const input = base({ maxPositionDrops: 0 });
+    expect(durableSwapValue(input, 'drop-a', 'target-f')).toEqual({
+      gain: 80,
+      mode: 'position-adjusted-vorp',
+    });
+
+    const partial = { ...input, replacementByPosition: new Map([['RB', 0]]) };
+    expect(durableSwapValue(partial, 'drop-a', 'target-f')).toBeNull();
+    expect(durableSwapValue(partial, 'drop-a', 'target-a')).toEqual({
+      gain: 110,
+      mode: 'position-adjusted-vorp',
+    });
+
+    const missing = { ...input, replacementByPosition: undefined };
+    expect(durableSwapValue(missing, 'drop-a', 'target-f')).toBeNull();
+    expect(durableSwapValue(missing, 'drop-a', 'target-a')).toEqual({
+      gain: 110,
+      mode: 'same-position-fallback',
+    });
+  });
+
+  it('allows independently safe cross-position rebalancing through FLEX and SUPER_FLEX', () => {
+    const weeklyPlayers = [
+      weekly('fixed-rb', 'RB', 20), weekly('flex-wr', 'WR', 15), weekly('drop-te', 'TE', 10),
+      weekly('target-qb', 'QB', 18), weekly('opponent', 'QB', 45),
+    ];
+    const rosPlayers = [
+      ros('fixed-rb', 'RB', 150), ros('flex-wr', 'WR', 120), ros('drop-te', 'TE', 120),
+      ros('target-qb', 'QB', 100), ros('opponent', 'QB', 200),
+    ];
+    const plan = buildWeeklyBidPlan(base({
+      rosters: [roster(1, ['fixed-rb', 'flex-wr', 'drop-te']), roster(2, ['opponent'])],
+      activeRosterIds: new Set([1, 2]),
+      lineupPositions: ['RB', 'FLEX', 'SUPER_FLEX'],
+      weeklyProjections: new Map(weeklyPlayers.map((player) => [player.playerId, player])),
+      rosProjections: new Map(rosPlayers.map((player) => [player.playerId, player])),
+      availableRows: [target('target-qb', 'QB', 10, 20)],
+      availablePlayerIds: ['target-qb'],
+      valueByPlayerId: new Map(rosPlayers.map((player) => [player.playerId, player.totalPoints])),
+      replacementByPosition: new Map([['RB', 80], ['WR', 70], ['TE', 100], ['QB', 50]]),
+      maxPositionDrops: 3,
+    }))!;
+    const recommendation = plan.rows.flatMap((row) => row.recommendations)
+      .find((item) => item.dropPlayerId === 'drop-te' && item.target.playerId === 'target-qb');
+    expect(recommendation).toMatchObject({ weeklyGain: 8, rosGain: 30 });
+    expect(recommendation!.afterRank).toBeLessThanOrEqual(recommendation!.beforeRank);
+  });
+
+  it('keeps a useful same-position upgrade when positional calibration is absent', () => {
+    const input = pricingInput(10, [30, 5], [['upgrade', 5]]);
+    input.replacementByPosition = undefined;
+    const recommendation = buildWeeklyBidPlan(input)!.rows[0].recommendations[0];
+    expect(recommendation).toMatchObject({
+      dropPlayerId: 'drop', weeklyGain: 5, rosGain: 90, beforeRank: 2, afterRank: 2,
+    });
   });
 
   it('builds at most one DEF and one K group, ordered by projection with strict improvement and $0 bids', () => {
