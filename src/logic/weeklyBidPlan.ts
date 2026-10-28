@@ -79,7 +79,9 @@ export interface WeeklyBidPlan {
 export interface StableDropCandidate {
   playerId: string;
   position: string;
-  /** Raw, intentionally un-floored ROS VORP used only for internal drop ordering. */
+  /** Optimized next-week lineup points lost by removing this player from the original roster. */
+  removalCost: number;
+  /** Same-source, intentionally un-floored ROS positional VORP used as durable keep value. */
   internalVorp: number;
   rosPoints: number;
   weeklyPoints: number;
@@ -194,47 +196,59 @@ function classifyScenario(
 }
 
 /**
- * Stable original-roster drop queue. Same-source player values and current-stage positional
- * baselines from the existing VORP calibration supply scarcity context; mixing ROS-point and market-
- * value units would not. The internal subtraction deliberately does not floor negative VORP at zero:
- * a below-replacement player should sort ahead of a merely low-ROS player at a scarce position.
- * Raw ROS is the fallback when calibration is unavailable and the first tiebreaker, so temporary
- * weekly injuries/byes cannot outweigh season-long keep value. Scenario acquisitions are impossible
- * here because the queue is built once from originalPlayerIds.
+ * Build one immutable drop queue from the original roster. Real next-week droppability comes first:
+ * removalCost is the optimized lineup total before removal minus the re-optimized total afterward,
+ * in projected fantasy points. Durable keep value is the second key: same-source ROS player value
+ * minus that position's same-source replacement baseline. Both values are intentionally un-floored.
+ *
+ * A finite 0-point injury/bye projection therefore has zero removal cost but is still protected by
+ * ROS VORP and transaction-VORP eligibility. Missing/non-finite weekly data receives +Infinity
+ * removal cost; missing positional calibration receives +Infinity keep value. Those conservative
+ * sentinels sort unknowns last without mixing incomparable gross cross-position totals. Player ID is
+ * the only final tiebreaker. The tuple is computed once, before any hypothetical waiver outcome.
  */
 export function buildStablePositionDropQueue(
   input: WeeklyBidPlanInput,
   originalPlayerIds: readonly string[],
 ): StableDropCandidate[] {
-  const candidates = originalPlayerIds
-    .map((playerId) => {
+  const slots = parseLineupSlots([...input.lineupPositions]);
+  const originalTotal = projectBestLineup(
+    [...originalPlayerIds],
+    input.weeklyProjections,
+    slots,
+  ).total;
+
+  return originalPlayerIds
+    .map((playerId): StableDropCandidate | null => {
       const position = positionFor(input, playerId);
       if (!position || !POSITION_PLAYER_POSITIONS.has(position)) return null;
+      const weeklyPoints = input.weeklyProjections.get(playerId)?.points;
+      const value = finitePlayerValue(input, playerId);
+      const replacement = input.replacementByPosition?.get(position);
+      const withoutTotal = projectBestLineup(
+        originalPlayerIds.filter((candidateId) => candidateId !== playerId),
+        input.weeklyProjections,
+        slots,
+      ).total;
+      const finiteRemovalInputs = Number.isFinite(weeklyPoints)
+        && Number.isFinite(originalTotal)
+        && Number.isFinite(withoutTotal);
       return {
         playerId,
         position,
+        removalCost: finiteRemovalInputs
+          ? Math.max(0, originalTotal - withoutTotal)
+          : Number.POSITIVE_INFINITY,
+        internalVorp: value != null && Number.isFinite(replacement)
+          ? value - replacement!
+          : Number.POSITIVE_INFINITY,
         rosPoints: rosFor(playerId, input.rosProjections),
-        weeklyPoints: scoreFor(playerId, input.weeklyProjections),
+        weeklyPoints: Number.isFinite(weeklyPoints) ? weeklyPoints! : 0,
       };
     })
-    .filter((candidate): candidate is Omit<StableDropCandidate, 'internalVorp'> => candidate != null);
-  // Never compare calibrated net VORP for some players against gross ROS for others. A partial
-  // calibration falls back to ROS for the entire stable queue.
-  const useVorp = candidates.length > 0 && candidates.every(({ playerId, position }) =>
-    Number.isFinite(input.valueByPlayerId?.get(playerId))
-      && Number.isFinite(input.replacementByPosition?.get(position)));
-
-  return candidates
-    .map((candidate): StableDropCandidate => ({
-      ...candidate,
-      internalVorp: useVorp
-        ? input.valueByPlayerId!.get(candidate.playerId)!
-          - input.replacementByPosition!.get(candidate.position)!
-        : candidate.rosPoints,
-    }))
-    .sort((a, b) => a.internalVorp - b.internalVorp
-      || a.rosPoints - b.rosPoints
-      || a.weeklyPoints - b.weeklyPoints
+    .filter((candidate): candidate is StableDropCandidate => candidate != null)
+    .sort((a, b) => a.removalCost - b.removalCost
+      || a.internalVorp - b.internalVorp
       || a.playerId.localeCompare(b.playerId));
 }
 
@@ -369,14 +383,83 @@ export function buildReachablePositionRosterStates(
   return states;
 }
 
-function preservesLineupAndRankInEveryReachableState(
+export type PositionTransactionEligibilityReason =
+  | 'eligible'
+  | 'missing-durable-comparison'
+  | 'negative-transaction-vorp'
+  | 'original-lineup-harm'
+  | 'original-rank-harm'
+  | 'no-positive-improvement'
+  | 'reachable-outcome-lineup-harm'
+  | 'reachable-outcome-rank-harm'
+  | 'no-reachable-outcome';
+
+export interface PositionTransactionDiagnosis {
+  eligible: boolean;
+  reason: PositionTransactionEligibilityReason;
+  transactionVorp: number | null;
+  weeklyGain: number | null;
+}
+
+/** Explain the exact existing safety/VORP gate for one drop-target pair. */
+export function diagnosePositionTransaction(
   input: WeeklyBidPlanInput,
-  states: readonly (readonly string[])[],
+  originalPlayerIds: readonly string[],
+  reachableStates: readonly (readonly string[])[],
   dropPlayerId: string,
   targetPlayerId: string,
-): boolean {
+): PositionTransactionDiagnosis {
+  const durable = durableSwapValue(input, dropPlayerId, targetPlayerId);
+  if (!durable) {
+    return {
+      eligible: false,
+      reason: 'missing-durable-comparison',
+      transactionVorp: null,
+      weeklyGain: null,
+    };
+  }
+  if (durable.gain < 0) {
+    return {
+      eligible: false,
+      reason: 'negative-transaction-vorp',
+      transactionVorp: durable.gain,
+      weeklyGain: null,
+    };
+  }
+
+  const initialStanding = classifyScenario(input, originalPlayerIds);
+  const currentRosterAfter = originalPlayerIds
+    .filter((playerId) => playerId !== dropPlayerId)
+    .concat(targetPlayerId);
+  const standaloneAfter = classifyScenario(input, currentRosterAfter);
+  const weeklyGain = standaloneAfter.projectedTotal - initialStanding.projectedTotal;
+  if (weeklyGain < 0) {
+    return {
+      eligible: false,
+      reason: 'original-lineup-harm',
+      transactionVorp: durable.gain,
+      weeklyGain,
+    };
+  }
+  if (standaloneAfter.rank > initialStanding.rank) {
+    return {
+      eligible: false,
+      reason: 'original-rank-harm',
+      transactionVorp: durable.gain,
+      weeklyGain,
+    };
+  }
+  if (weeklyGain <= IMPACT_EPSILON && durable.gain <= IMPACT_EPSILON) {
+    return {
+      eligible: false,
+      reason: 'no-positive-improvement',
+      transactionVorp: durable.gain,
+      weeklyGain,
+    };
+  }
+
   let executableStateCount = 0;
-  for (const state of states) {
+  for (const state of reachableStates) {
     // Already-won targets (and already-dropped players) make this later claim unreachable, not a
     // second acquisition or a phantom drop. They therefore do not participate in its safety proof.
     if (!state.includes(dropPlayerId) || state.includes(targetPlayerId)) continue;
@@ -386,9 +469,29 @@ function preservesLineupAndRankInEveryReachableState(
       input,
       state.filter((playerId) => playerId !== dropPlayerId).concat(targetPlayerId),
     );
-    if (after.projectedTotal < before.projectedTotal || after.rank > before.rank) return false;
+    if (after.projectedTotal < before.projectedTotal) {
+      return {
+        eligible: false,
+        reason: 'reachable-outcome-lineup-harm',
+        transactionVorp: durable.gain,
+        weeklyGain,
+      };
+    }
+    if (after.rank > before.rank) {
+      return {
+        eligible: false,
+        reason: 'reachable-outcome-rank-harm',
+        transactionVorp: durable.gain,
+        weeklyGain,
+      };
+    }
   }
-  return executableStateCount > 0;
+  return {
+    eligible: executableStateCount > 0,
+    reason: executableStateCount > 0 ? 'eligible' : 'no-reachable-outcome',
+    transactionVorp: durable.gain,
+    weeklyGain,
+  };
 }
 
 /** Build the advisory-only, sequential weekly scenario. No persistence or provider writes occur. */
@@ -434,28 +537,22 @@ export function buildWeeklyBidPlan(input: WeeklyBidPlanInput): WeeklyBidPlan | n
       .filter((target) => !originalPlayers.includes(target.playerId)
         && !consumedPositionPrimaryTargetIds.has(target.playerId))
       .map((target): WeeklyBidRecommendation | null => {
-        const durable = durableSwapValue(input, drop.playerId, target.playerId);
-        // A displayed swap must preserve durable position-adjusted value. Requiring at least one
-        // strict weekly/durable improvement below also avoids useless equal-for-equal cards.
-        if (!durable || durable.gain < 0) return null;
+        const diagnosis = diagnosePositionTransaction(
+          input,
+          originalPlayers,
+          reachablePositionStates,
+          drop.playerId,
+          target.playerId,
+        );
+        if (!diagnosis.eligible
+          || diagnosis.transactionVorp == null
+          || diagnosis.weeklyGain == null) return null;
 
         const currentRosterAfter = originalPlayers
           .filter((playerId) => playerId !== drop.playerId)
           .concat(target.playerId);
         const standaloneAfter = classifyScenario(input, currentRosterAfter);
-        const weeklyGain = standaloneAfter.projectedTotal - initialStanding.projectedTotal;
-        if (weeklyGain < 0 || standaloneAfter.rank > initialStanding.rank) return null;
-        if (weeklyGain <= IMPACT_EPSILON && durable.gain <= IMPACT_EPSILON) return null;
-
-        // Independent actual-roster guards above are a cheap fail-closed prefilter. Only then pay
-        // for the bounded all-miss/all-hit/mixed outcome-tree proof.
-        if (!preservesLineupAndRankInEveryReachableState(
-          input,
-          reachablePositionStates,
-          drop.playerId,
-          target.playerId,
-        )) return null;
-
+        const weeklyGain = diagnosis.weeklyGain;
         const scenarioCanExecute = scenarioPlayers.includes(drop.playerId)
           && !scenarioPlayers.includes(target.playerId);
         const scenarioRosterAfter = scenarioCanExecute
@@ -476,7 +573,7 @@ export function buildWeeklyBidPlan(input: WeeklyBidPlanInput): WeeklyBidPlan | n
           dropPlayerId: drop.playerId,
           weeklyGain: Math.max(0, weeklyGain),
           scenarioWeeklyGain,
-          rosGain: durable.gain,
+          rosGain: diagnosis.transactionVorp,
           beforeRisk: initialStanding.risk,
           afterRisk: standaloneAfter.risk,
           beforeRank: initialStanding.rank,

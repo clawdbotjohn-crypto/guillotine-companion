@@ -1,49 +1,75 @@
-# HANDOFF — Suggested Bids no-harm outcome tree + transaction VORP
+# HANDOFF — Suggested Bids stable drop-row ordering
 
-## Status / owner requirements
+## Status / owner source
 
-Existing review-only PR #28 branch `fix/suggested-bids-non-worsening` started this follow-up exactly at required head `21f0340486ca3c655d9462667bed2b5dccef5b60` on required main base `97bef73b09a6766784a5f9a608eaa012e683c2fc`. Earlier outcome/VORP implementation commit: `dd1b19d149fe764414443d636c368a8ffdcb75dc`.
+Review-only PR #28 on existing branch `fix/suggested-bids-non-worsening`. This follow-up started from required remote head `8609b3eba37599e431c65b3088f48d46456dcd90`; the remote head was verified unchanged before implementation.
 
-Owner clarification Discord `1565047528997527744` requires every drop round to account for best, worst, and mixed prior outcomes so an unguaranteed earlier win can never justify team harm. Discord `1565050012399046859` requires pickup suggestions themselves to be VORP-based so gross QB totals cannot dominate the roster. The exact primary-sequencing owner source is Discord `1565087484512305283`: each completed position row's first target is gone after processing and must not repeat later. Full verbatim wording is preserved in `PROGRESS.md`.
+Owner report — Discord `1565091946865758229`:
 
-## Implemented semantics
+> Hmm... another weird thing I see is that Algiers is above Flournoy with 1 suggested drop, while Fl... has 5. How is that possible? If Fl... is more valuable than Jones then I would expect less drop options (like Montgomery is a RB so how could he be better than our #4 drop but not our #3 drop who is a RB?). If Jones is more valuable, the Flournoy should appear higher than Jones on the drop list.
 
-For every position-player target/drop pair, using one source for both player values:
+The fixture labels are explicitly Allgeier/Flournoy/Montgomery-shaped synthetic labels, not verified player identities.
 
-- `targetVorp = targetValue - replacement[targetPosition]`
-- `dropVorp = dropValue - replacement[dropPosition]`
-- `transactionGain = targetVorp - dropVorp`
-- require `transactionGain >= 0`
+## Causal diagnosis and implementation
 
-Cross-position transactions fail closed unless both player values and both native-position baselines are finite. Same-position fallback may use `targetValue - dropValue` because the identical baseline cancels. Recommendations sort first by transaction gain, then deterministic survival/risk, optimized weekly impact, and player ID—not gross weekly/ROS/source value across positions.
+The existing stable queue sorted same-source positional ROS VORP before weekly projection. In the exact synthetic reproduction, that put a starting RB shape (ROS positional VORP `10`) above a bench WR shape (`25`) even though removing them from the optimized original next-week lineup cost `14` and `0` projected fantasy points respectively. That priority was a real ordering defect.
 
-The original actual-roster guard remains: a displayed card independently must preserve optimized next-week points, not worsen Overall Rank, and improve weekly points or durable transaction VORP. FLEX/SUPER_FLEX therefore still permit legitimate cross-position rebalancing.
+The differing recommendation counts are legitimate and are not a sort key. In the fixture, the bench WR row has five recommendations while the starting RB row has one. The Montgomery-shaped target is safe for the bench WR (`passes: eligible`, weekly change `0`, transaction VORP `+15`) but fails for the starting RB (`fails: original-lineup-harm`, weekly change `-4`). The exact non-nested sets also reflect prior-primary consumption. The pair is not rejected by mixed-outcome safety, and the result cannot be inferred from names or shared RB labels alone.
 
-For each later position round, prior displayed groups expand to every materially reachable roster. Each prior group has a miss outcome or exactly one displayed target win. A target already present or a drop already gone makes that particular later execution unreachable; it is never double-added/double-dropped. Roster IDs are sorted, deduplicated, and keyed canonically after every group. The later card must preserve optimized weekly points and Overall Rank in every reachable state where it can execute.
+The stable queue is now computed exactly once from the original roster with this ascending tuple:
 
-For every successfully emitted position row, `recommendations[0]` after the existing transaction-VORP comparator/ties is now consumed before candidate generation for the next row. Consumed primary IDs are excluded from all later recommendations, including fallbacks, so the next eligible target promotes. The outcome tree still keeps both team-wins (changed roster) and team-loses (unchanged roster) branches; consumption is an additional display-availability constraint in both, not a replacement for safety reachability. This specifically assumes the Suggested Bids claim was validly submitted and reached processing—the player is then gone to this team or another manager—and does not generalize to unsubmitted or invalid claims.
+```text
+(
+  optimized next-week lineup removal cost,
+  same-source ROS positional VORP / keep value,
+  deterministic player ID
+)
 
-Only an emitted row's canonical primary is consumed. Same-round alternatives remain visible and can recur later unless they become a later primary or existing branch-specific reachability excludes them. Empty/skipped rows consume nothing. DST/K streamers do not use this position-primary set.
+removalCost = optimizedOriginalLineupPoints
+            - optimizedLineupPoints(originalRoster - player)
+keepValue   = sameSourcePlayerValue
+            - sameSourceReplacementBaseline[player.nativePosition]
+```
 
-Caps remain five position rounds and five displayed targets per round. Therefore the safety tree can still store at most `6^5 = 7,776` states after the fifth group, while the final round evaluates cards against at most `6^4 = 1,296` prior states. Durable VORP and standalone safety prefilter before outcome-state evaluation.
+Both numeric keys use their source's native projected-fantasy-point/value units; raw cross-position totals are never mixed. Finite injury/bye projections of `0` produce a valid zero removal cost. Missing/non-finite weekly data receives conservative `+Infinity` removal cost. Missing/non-finite player value or native-position baseline receives conservative `+Infinity` keep value. Removal cost is clamped at zero against numerical/model anomalies. A zero-removal durable injured/bye player is still protected by secondary ROS VORP and, decisively, the existing transaction-VORP eligibility gate; empty rows remain omitted.
 
-Bid/budget/opponent/duplicate caps and reservation, standalone best/worst/mixed no-harm, calibration fallback, FLEX/SUPER_FLEX, DST/K streamer logic, advisory/no-write behavior, and current-main features remain unchanged.
+The safety evaluator now returns exact diagnostic reasons while enforcing the same guards. Preserved: transaction-VORP-first pickups; successful-row primary consumption in both win/loss availability branches; all-miss/all-hit/mixed outcome safety; same-position calibration fallback; FLEX/SUPER_FLEX; bid/budget/opponent/duplicate caps; DST/K; advisory/no-write behavior.
 
-## Files / validation
+## Exact synthetic diagnostics
 
-Changed in the outcome/VORP completion:
+| Drop shape | Original-roster removal cost | ROS positional VORP | Best primary transaction VORP | Recs | Montgomery-shaped result |
+|---|---:|---:|---:|---:|---|
+| Bench WR / Flournoy shape | 0 | 25 | 15 | 5 | `passes: eligible`; weekly change 0 |
+| Starting RB / Allgeier shape | 14 | 10 | 20 | 1 | `fails: original-lineup-harm`; weekly change -4 |
+
+Regression coverage also proves one excellent option can precede five marginal ones without count sorting; two zero-removal bench players use ROS positional VORP; exact ties use player ID; a high-ROS injury/bye player does not produce an unsafe displayed row; and the queue remains original-roster-stable after prior hit/miss branches. Existing primary-consumption, outcome-state, transaction-VORP, calibration, FLEX/SUPER_FLEX, cap, duplicate, DST/K, and no-harm tests remain green.
+
+## Files and validation
+
+Changed files:
 
 - `src/logic/weeklyBidPlan.ts`
 - `src/logic/weeklyBidPlan.test.ts`
 - `PROGRESS.md`
 - `HANDOFF.md`
 
-Regression coverage includes the Aaron-Jones-shaped repeated-primary fixture; promotion to distinct Round 2/3 primaries; exclusion from every later fallback; processed-claim win/loss roster branches; recurring same-round alternatives; deterministic equal-cost/equal-value ordering; original-safe/all-hit-safe/mixed-harm rejection; explicit all-miss/all-hit/mixed subsets; multiple alternatives and duplicate-target unreachability; high-gross-QB/lower-VORP ordering; transaction-VORP primary and deterministic ties; same-position fallback; complete/partial calibration; FLEX/SUPER_FLEX; original screenshot shape; caps/duplicates; and all-card nonnegative-points/non-worse-rank invariants. The synthetic maximum 5×5 safety enumerator and all 7,776 canonical states remain covered under a generous five-second non-stalling ceiling; display-row recommendation counts now reflect consumed primaries and branch-specific reachability without weakening that bound.
+Local validation:
 
-Primary-sequencing implementation commit: `9187cd6168a76b6cda2d4648684f6a2902af02e2`. Local gates passed: 30/30 focused Suggested Bids tests; 398/398 frontend tests across 47 files; 61/61 API tests; TypeScript typecheck; production build; changed-file Oxlint (0 warnings/errors); `git diff --check`; bounded privacy/secret/scope review.
+- focused planner: 34/34
+- full frontend: 402/402 across 47 files
+- full API: 61/61
+- TypeScript typecheck: passed
+- production build: passed
+- changed-file Oxlint: 0 warnings / 0 errors
+- `git diff --check`: passed
+- bounded diff/privacy/secret/scope review: only intended PR #28 logic/tests/docs; synthetic identifiers only; no private data, credentials, artifacts, provider/DB/live-user changes
 
-Natural CI passed at pushed head `0c221a365ec6f0e8e292a448de45710a14f31fd2`: workflow `CI` job `build` (lint, typecheck, frontend tests, managed Functions tests, build, artifact) and workflow `Deploy to Azure SWA` job `Build and Deploy`. Exact natural preview: `https://nice-moss-07ec56310-28.centralus.7.azurestaticapps.net`. Hosted synthetic/privacy-safe QA passed at 1280×900 and 390×844: the primaries were Aaron Jones Shape → Third Eligible → Recurring Alternative, Aaron appeared only in Round 1, cards stayed VORP-descending with positive gains and #1→#1 no-harm ranks, and both widths had no horizontal overflow. Browser storage/cache/IndexedDB were cleared and the tab was closed. No provider/DB/live-user mutation. PR #28 remained OPEN and clean/mergeable. Exact final PR head after the documentation-only evidence commit is recorded in PR #28/status because a commit cannot contain its own SHA.
+Implementation commit/head: pending commit. Natural CI/Azure, exact preview URL, hosted 1280×900 and 390×844 QA, and final PR state are pending the required push. A commit cannot contain its own final SHA, so the exact final documentation head must be recorded in PR #28/status after push.
+
+## Residual caveat
+
+No private/live owner roster was inspected or mutated. The code defect and mechanism are proven with a privacy-safe synthetic shape matching the reported constraints; the exact live players/source values can drift and remain unverified. Non-nested recommendation sets are expected and need no UI prose.
 
 ## Boundaries
 
-PR #28 remains review-only. Do not merge/auto-merge, push main, delete the branch/environment, manually deploy or dispatch workflows, or mutate provider/database/live-user data.
+PR #28 remains review-only. Do not merge/auto-merge, push main, delete the branch/environment, manually deploy or dispatch workflows, mutate provider/database/live-user data, force-push, or create another PR.
