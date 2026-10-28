@@ -1,82 +1,60 @@
-# HANDOFF — Guillotine Companion PR #23 mobile custom-ranking follow-up
+# HANDOFF — Suggested Bids independently non-worsening swaps
 
 ## Status
 
-Owner follow-up from Discord `1558416398890565642` is implemented, tested, pushed, and hosted-QA complete on the existing PR #23 branch/worktree.
+Implemented on isolated branch `fix/suggested-bids-non-worsening` from exact main base `97bef73b09a6766784a5f9a608eaa012e683c2fc`. Owner source: Discord `1565045421162889416`.
 
-- Worktree: `/home/john/.openclaw/worktrees/gb-hybrid-custom-rankings`
-- Branch: `feat/hybrid-custom-rankings`
-- PR: https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/23
-- Hosted preview: https://nice-moss-07ec56310-23.centralus.7.azurestaticapps.net
-- Implementation commits: `8390000` (`fix custom ranking mobile follow-up`) and `3a15ef4` (`preserve mobile value touch target`)
-- PR remains OPEN, review-only, and unmerged. No production deploy or manual workflow dispatch occurred.
+The branch is review-only. Do not merge, auto-merge, delete its branch/environment, deploy, dispatch workflows, or mutate provider/database/live-user state. Unrelated PR #24 was not modified or used.
 
-## Root causes and fixes
+## Confirmed root cause
 
-1. **Divider too far left on mobile**
-   - Root cause: the custom-value rail used a fixed `8.75rem` width at every viewport.
-   - Fix: mobile rail is `7.75rem`, returning 16px to player/name details; `sm:` and larger retain `8.75rem`.
-   - The value input was also only 36px high (38px bordered group), so final hosted QA raised it to a true 44px input/46px editor group rather than sacrificing touch usability.
+1. `buildStablePositionDropQueue` used raw same-source positional VORP only to order original-roster drops; it did not prove a target-for-drop transaction preserved durable value.
+2. Eligibility compared the target's gross weekly and ROS totals directly with the drop's gross totals. Gross totals across QB/RB/WR/TE are not position-adjusted and can make a plentiful backup QB look more valuable than a scarce starting RB.
+3. Later cards were admitted and priced when `scenarioWeeklyGain >= 0` after earlier top targets were optimistically inserted. The card's visible gain/rank were separately calculated against the real roster, allowing contradictory harmful cards such as `-7.7 pts`, `#2 → #5`.
 
-2. **Zero-edit preservation confirmation**
-   - Root cause: Save opened confirmation for every generated-setting change, even when `board.overrides` had no applicable manual edit.
-   - Fix: count only overrides for current players whose normalized value differs from the frozen baseline. With count 0, Save regenerates directly. With count >=1, confirmation uses the actual singular/plural count and keeps preservation checked by default.
+## Formula before / after
 
-3. **Custom valuation unavailable in Player Details**
-   - Root cause: custom cards deliberately passed `suggestedBid: null` to avoid conflating custom and market concepts, but no separate custom valuation was propagated; the generic Suggested field therefore rendered `Unavailable`.
-   - Fix: `PlayerDetailData` now has explicit `customValue`. Custom cards pass the selected board value; the popup renders `Custom value` separately from market `Predicted`, source-native rank/value, Team Impact, manager predictions, and bidding history.
+Before:
 
-## Files changed
+- Drop ordering only: `drop raw VORP = drop value − same-position replacement`.
+- Eligibility: `target weekly > drop weekly && target gross ROS > drop gross ROS && conditional scenario gain >= 0`.
+- Pricing: conditional risk/gain after assumed earlier wins.
 
-- `src/pages/WaiversPage.tsx`
-- `src/pages/WaiversPage.test.tsx`
-- `src/components/CustomRankingDialogs.tsx`
-- `src/components/CustomRankingDialogs.test.tsx`
-- `src/components/PlayerDetailDialog.tsx`
+After, for every displayed transaction independently:
+
+- `standalone roster = actual current roster − drop + target`.
+- Require `optimizedWeekly(standalone) − optimizedWeekly(actual) >= 0`.
+- Require `afterOverallRank <= beforeOverallRank`.
+- With complete per-transaction calibration, durable delta is `(targetValue − replacement[targetPosition]) − (dropValue − replacement[dropPosition])`; require delta `>= 0` and require weekly or durable strict improvement.
+- Conservative fallback: if target/drop values or either native-position baseline is absent, reject cross-position swaps. A same-position swap may use `targetValue − dropValue` because its unknown common baseline cancels exactly. Never compare gross ROS with net VORP.
+- Eligibility, sorting, and pricing use standalone impact/risk. Sequential state is retained only for truthful budget reservation/scenario bookkeeping.
+
+The existing optimizer continues to model native slots, FLEX, and SUPER_FLEX; therefore independently safe/useful cross-position roster rebalancing remains available.
+
+## Code and tests
+
+Changed only:
+
+- `src/logic/weeklyBidPlan.ts`
+- `src/logic/weeklyBidPlan.test.ts`
 - `PROGRESS.md`
 - `HANDOFF.md`
 
-Untracked QA evidence was intentionally preserved under `artifacts/pr23-qa/2026-10-10-mobile-follow-up/` and was not staged wholesale.
+Synthetic tests cover the reported starting-RB→backup-QB failure shape, an unsafe later card that only works after an unguaranteed earlier win, every-card weekly/rank invariants, same-position fallback, safe FLEX/SUPER_FLEX cross-position rebalancing, complete/partial/missing positional calibration, and existing cap/budget/streamer semantics.
 
-## Validation
+## Validation / hosted QA
 
-Passed locally:
+Implementation commit: .
 
-- Focused Vitest: **56/56** across:
-  - `src/components/CustomRankingDialogs.test.tsx`
-  - `src/pages/WaiversPage.test.tsx`
-  - `src/components/PlayerDetailDialog.test.tsx`
-  - `src/logic/__tests__/customRankings.test.ts`
-- Follow-up WaiversPage test after the touch-target correction: **15/15**.
-- Capped serial `npm run build` with `NODE_OPTIONS=--max-old-space-size=1024 nice -n 10`.
-- Changed-file Oxlint: **0 errors**; one pre-existing `react(set-state-in-effect)` warning in `CustomRankingDialogs.tsx` when linting the wider changed set.
-- `git diff --check` and bounded added-line secret scan.
+Local gates passed:
 
-Implementation-head GitHub checks passed:
+- focused Suggested Bids: 22/22
+- full frontend: 390/390 across 47 files
+- API: 61/61
+- TypeScript typecheck: passed
+- production build: passed
+- changed-file Oxlint: 0 warnings / 0 errors
+- : passed
+- bounded privacy/secret review: only synthetic player/team IDs; no screenshot, private league/user IDs, credentials, or secret values added
 
-- CI run `38094475186`: success (lint, typecheck, frontend tests, managed Functions tests, build, artifact).
-- Azure preview run `38094475177`: success.
-
-## Hosted QA
-
-Real SeaMex Guillotine 2026 league / `PR23 QA` custom ranking:
-
-- Desktop: responsive value rail retained; left/right card actions remained distinct; popup showed source-native value, `Custom value $34`, and market `Predicted $0` separately.
-- Mobile 390×844 measurements: viewport/document width 390px (no page-level horizontal overflow), card 334px, player region 210px, value region 124px, input 44px, editor group 46px.
-- One override: confirmation showed `1 player value has been edited.` and preservation checked by default; preserving retained the override after regeneration.
-- Unchecked preservation cleared the override.
-- Zero overrides: settings regenerated directly with no confirmation, no zero-count copy, and no preservation checkbox.
-- Left side opened Player Details; right editor focused without opening a dialog.
-
-Evidence:
-
-- `artifacts/pr23-qa/2026-10-10-mobile-follow-up/desktop-custom-cards.jpg`
-- `artifacts/pr23-qa/2026-10-10-mobile-follow-up/desktop-custom-popup.jpg`
-- `artifacts/pr23-qa/2026-10-10-mobile-follow-up/mobile-390-custom-cards.jpg`
-- `artifacts/pr23-qa/2026-10-10-mobile-follow-up/mobile-390-custom-popup.jpg`
-- `artifacts/pr23-qa/2026-10-10-mobile-follow-up/mobile-390-one-override-confirmation.jpg`
-- `artifacts/pr23-qa/2026-10-10-mobile-follow-up/qa-notes.md`
-
-## Safety gate
-
-PR #23 remains unmerged. Do not merge, enable auto-merge, delete the branch, deploy production, or dispatch deployment workflows without John's explicit authorization for that exact action.
+Final PR head, PR URL, natural CI, exact preview URL, and hosted desktop/mobile QA evidence are recorded in the PR description/status because a commit cannot contain its own final SHA.

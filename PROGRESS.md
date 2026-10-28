@@ -1,5 +1,21 @@
 # Guillotine Companion — Current Progress
 
+## P0 — Suggested Bids independently non-worsening swaps (implemented 2026-10-28)
+
+**Owner source:** Discord `1565045421162889416`. The reported card dropped a starting RB for backup QBs while displaying `-7.7 pts` and Overall `#2 → #5`.
+
+- [x] Confirmed three interacting root causes: drop VORP only ordered original-roster cuts; transaction eligibility compared gross weekly/ROS totals across unlike positions; and later-card eligibility/pricing used an optimistic roster containing assumed earlier wins even though visible impact was standalone.
+- [x] Every position-player card is now independently evaluated from the actual current roster. It must have nonnegative optimized next-week gain, non-worse Overall Rank, and non-declining durable value.
+- [x] Durable cross-position value now compares like with like: `(target same-source ROS − target-position replacement) − (drop same-source ROS − drop-position replacement)`. Missing/partial calibration fails cross-position swaps closed; same-position comparisons remain valid because the shared baseline cancels.
+- [x] FLEX/SUPER_FLEX remain supported by the optimized lineup evaluator; valid cross-position rebalancing is not globally banned.
+- [x] Eligibility, ordering, and pricing use standalone gain/risk. Sequential assumed wins remain only for budget reservation and scenario bookkeeping.
+- [x] Added privacy-safe synthetic regressions for the reported RB→backup-QB shape, unguaranteed earlier wins, all-card gain/rank invariants, same-position upgrades, safe cross-position FLEX/SUPER_FLEX rebalancing, complete/partial/missing VORP calibration, and existing duplicate/budget/streamer behavior.
+- [x] Implementation commit  passed 22 focused, 390 frontend, and 61 API tests; typecheck, production build, changed-file lint, diff, privacy, and secret gates passed.
+- [ ] Review-only PR natural CI, exact Azure preview URL, and hosted 1280×900/390×844 QA remain to be recorded.
+
+**Gate:** Review-only. Do not merge, auto-merge, delete branches/environments, deploy, dispatch workflows, or mutate live/provider data.
+
+
 ## P0 — PR #23 restore standard Suggested field in custom-ranking player dialog (implemented 2026-10-10)
 
 **Owner source:** Discord `1558719548516081726`.
