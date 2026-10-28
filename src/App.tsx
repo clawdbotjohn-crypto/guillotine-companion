@@ -12,6 +12,7 @@ const LeaguePage = lazy(() => import('./pages/LeaguePage').then(m => ({ default:
 const TeamsPage = lazy(() => import('./pages/TeamsPage').then(m => ({ default: m.TeamsPage })));
 const TeamProfilePage = lazy(() => import('./pages/TeamProfilePage').then(m => ({ default: m.TeamProfilePage })));
 const WaiversPage = lazy(() => import('./pages/WaiversPage').then(m => ({ default: m.WaiversPage })));
+const WeeklyBidPlanPage = lazy(() => import('./pages/WeeklyBidPlanPage').then(m => ({ default: m.WeeklyBidPlanPage })));
 const ScoresPage = lazy(() => import('./pages/ScoresPage').then(m => ({ default: m.ScoresPage })));
 
 function LoadingFallback() {
@@ -49,6 +50,7 @@ function AppLayout() {
           <Route path="/team-select" element={<TeamSelectPage />} />
           <Route path="/hub" element={<HubPage />} />
           <Route path="/waivers" element={<WaiversPage />} />
+          <Route path="/weekly-bid-plan" element={<WeeklyBidPlanPage />} />
           <Route path="/scores" element={<ScoresPage />} />
           <Route path="/league" element={<LeaguePage />} />
           <Route path="/teams" element={<TeamsPage />} />

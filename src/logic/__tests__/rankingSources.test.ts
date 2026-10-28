@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ExternalRanking, League } from '../../api/types';
 import type { PlayerRecord } from '../../store/players';
-import { buildWaiverBoard, type LeagueContext } from '../waivers';
+import { buildWaiverBoard, buildWaiverBoardModel, type LeagueContext } from '../waivers';
 import {
   buildExternalRankingMap,
   getReceptionScoring,
@@ -107,10 +107,10 @@ it('gives Sleeper, FantasyCalc, and FantasyPros full ownership of positional and
   const sleeper = new Map([
     ['rb1', { playerId: 'rb1', position: 'RB', totalPoints: 60, pointsPerWeek: 60, projectedWeeks: 1 }],
     ['rb2', { playerId: 'rb2', position: 'RB', totalPoints: 50, pointsPerWeek: 50, projectedWeeks: 1 }],
-    ['rb3', { playerId: 'rb3', position: 'RB', totalPoints: 10, pointsPerWeek: 10, projectedWeeks: 1 }],
+    ['rb3', { playerId: 'rb3', position: 'RB', totalPoints: 0, pointsPerWeek: 0, projectedWeeks: 1 }],
     ['wr1', { playerId: 'wr1', position: 'WR', totalPoints: 40, pointsPerWeek: 40, projectedWeeks: 1 }],
     ['wr2', { playerId: 'wr2', position: 'WR', totalPoints: 30, pointsPerWeek: 30, projectedWeeks: 1 }],
-    ['wr3', { playerId: 'wr3', position: 'WR', totalPoints: 5, pointsPerWeek: 5, projectedWeeks: 1 }],
+    ['wr3', { playerId: 'wr3', position: 'WR', totalPoints: 0, pointsPerWeek: 0, projectedWeeks: 1 }],
   ]);
   const external = (values: Record<string, number>) => buildExternalRankingMap(
     [...sourcePlayers].map(([id, record], index) => ({
@@ -123,26 +123,34 @@ it('gives Sleeper, FantasyCalc, and FantasyPros full ownership of positional and
     })),
     sourcePlayers,
   ).projections;
-  const fantasyCalc = external({ rb1: 60, rb2: 20, rb3: 1, wr1: 50, wr2: 40, wr3: 2 });
-  const fantasyPros = external({ rb1: 40, rb2: 35, rb3: 1, wr1: 60, wr2: 20, wr3: 2 });
+  const fantasyCalc = external({ rb1: 60, rb2: 20, rb3: 1, wr1: 50, wr2: 40, wr3: 1 });
+  const fantasyPros = external({ rb1: 40, rb2: 35, rb3: 1, wr1: 60, wr2: 20, wr3: 1 });
 
   for (const [name, projections, flexBoundary] of [
     ['Sleeper', sleeper, 'rb2'],
     ['FantasyCalc', fantasyCalc, 'wr2'],
     ['FantasyPros', fantasyPros, 'rb2'],
   ] as const) {
+    const model = buildWaiverBoardModel(projections, sourceContext);
     const rows = buildWaiverBoard(
       [...sourcePlayers.keys()], projections, sourceContext, [], (id) => id,
-      { maxPerPos: Number.POSITIVE_INFINITY },
+      { maxPerPos: Number.POSITIVE_INFINITY, boardModel: model },
     );
     const safe = (id: string) => rows.find((row) => row.playerId === id)!
       .suggestions.find((suggestion) => suggestion.strategy === 'safe')!.value;
     const boundaryPosition = flexBoundary.slice(0, 2).toUpperCase();
     const otherPosition = boundaryPosition === 'RB' ? 'WR' : 'RB';
+    const otherSecond = `${otherPosition.toLowerCase()}2`;
 
     expect(rows.find((row) => row.playerId === flexBoundary)?.position, name).toBe(boundaryPosition);
+    expect(rows.find((row) => row.playerId === flexBoundary)?.posRank, name).toBe(2);
+    expect(model.nonVorpStarterModel.currentSelectedCountByPosition.get(boundaryPosition), name).toBe(2);
+    expect(model.nonVorpStarterModel.currentSelectedCountByPosition.get(otherPosition), name).toBe(1);
+    // The final-four floor consumes the two positive players at each position;
+    // both rank-two players are therefore exact Safe replacement boundaries.
     expect(safe(flexBoundary), name).toBe(0);
+    expect(safe(otherSecond), name).toBe(0);
     expect(safe(`${boundaryPosition.toLowerCase()}1`), name).toBeGreaterThan(0);
-    expect(safe(`${otherPosition.toLowerCase()}1`), name).toBe(0);
+    expect(safe(`${otherPosition.toLowerCase()}1`), name).toBeGreaterThan(0);
   }
 });

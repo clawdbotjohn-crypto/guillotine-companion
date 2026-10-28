@@ -26,6 +26,32 @@ export interface WeeklyPlayerProjection extends WeeklyScoredPlayer {
   positionRank: number;
 }
 
+/** Sleeper/player metadata may spell team defense as DST or D/ST; use one rank bucket. */
+function normalizeProjectionPosition(position: string | null | undefined): string {
+  const normalized = position?.trim().toUpperCase() ?? '';
+  if (normalized === 'DST' || normalized === 'D/ST') return 'DEF';
+  return normalized;
+}
+
+/** Deterministic same-position ROS ranks (points descending, then player id). */
+export function buildRosPositionRankMap(
+  projections: ReadonlyMap<string, RosPlayerProjection>,
+): ReadonlyMap<string, number> {
+  const byPosition = new Map<string, RosPlayerProjection[]>();
+  for (const projection of projections.values()) {
+    const position = normalizeProjectionPosition(projection.position);
+    const rows = byPosition.get(position) ?? [];
+    rows.push(projection);
+    byPosition.set(position, rows);
+  }
+  const ranks = new Map<string, number>();
+  for (const rows of byPosition.values()) {
+    rows.sort((a, b) => b.totalPoints - a.totalPoints || a.playerId.localeCompare(b.playerId));
+    rows.forEach((row, index) => ranks.set(row.playerId, index + 1));
+  }
+  return ranks;
+}
+
 /** Match Sleeper's three projection totals to the league's reception scoring. */
 export function getProjectionScoring(receptions: number | undefined): ProjectionScoring {
   if (receptions === 1) return 'ppr';
@@ -80,7 +106,7 @@ export function sumRestOfSeasonProjections(
   if (projectedWeeks === 0) return result;
 
   for (const [playerId, totalPoints] of totals.entries()) {
-    const position = getPosition(playerId);
+    const position = normalizeProjectionPosition(getPosition(playerId));
     if (!position) continue;
     result.set(playerId, {
       playerId,
@@ -101,7 +127,7 @@ export function buildWeeklyScoredPlayers(
 ): Map<string, WeeklyScoredPlayer> {
   const scored = new Map<string, WeeklyScoredPlayer>();
   for (const [playerId, projection] of Object.entries(projections)) {
-    const position = getPosition(playerId);
+    const position = normalizeProjectionPosition(getPosition(playerId));
     const points = getProjectionPoints(projection, scoring);
     if (!position || points == null) continue;
     scored.set(playerId, { playerId, position, points });
@@ -120,7 +146,7 @@ export function buildWeeklyProjectionContext(
 ): Map<string, WeeklyPlayerProjection> {
   const byPosition = new Map<string, WeeklyScoredPlayer[]>();
   for (const player of buildWeeklyScoredPlayers(projections, scoring, getPosition).values()) {
-    if (!['QB', 'RB', 'WR', 'TE'].includes(player.position)) continue;
+    if (!['QB', 'RB', 'WR', 'TE', 'K', 'DEF'].includes(player.position)) continue;
     const players = byPosition.get(player.position) ?? [];
     players.push(player);
     byPosition.set(player.position, players);

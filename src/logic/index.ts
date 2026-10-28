@@ -41,6 +41,7 @@ export {
   sumRestOfSeasonProjections,
   buildWeeklyScoredPlayers,
   buildWeeklyProjectionContext,
+  buildRosPositionRankMap,
   getTeamByeWeek,
   type ProjectionScoring,
   type RosPlayerProjection,
@@ -57,6 +58,13 @@ export {
   buildExternalRankingMap,
   type WaiverRankingSource,
 } from './rankingSources';
+
+export {
+  buildBiddingTeamStatusMap,
+  UNAVAILABLE_BIDDING_TEAM_STATUS,
+  type BiddingTeamStatus,
+  type BiddingTeamStatusKind,
+} from './biddingTeamStatus';
 
 export {
   formatCurrentRank,
