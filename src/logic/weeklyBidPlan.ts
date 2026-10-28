@@ -418,6 +418,12 @@ export function buildWeeklyBidPlan(input: WeeklyBidPlanInput): WeeklyBidPlan | n
   );
   const dropQueue = buildStablePositionDropQueue(input, originalPlayers);
   let reachablePositionStates = buildReachablePositionRosterStates(originalPlayers, []);
+  // Suggested Bids assumes each displayed primary claim is validly submitted and reaches waiver
+  // processing. Whether this team wins or loses that claim, its target is no longer available for a
+  // later displayed claim: it joined this roster or another manager won it. This display-planning
+  // constraint deliberately does not generalize to unsubmitted or invalid claims, and it does not
+  // replace the miss/win roster branches used for safety analysis below.
+  const consumedPositionPrimaryTargetIds = new Set<string>();
 
   for (const drop of dropQueue) {
     if (rows.filter((row) => row.kind === 'position').length >= maxRows) break;
@@ -425,7 +431,8 @@ export function buildWeeklyBidPlan(input: WeeklyBidPlanInput): WeeklyBidPlan | n
 
     const before = classifyScenario(input, scenarioPlayers);
     const meritRecommendations = availableRows
-      .filter((target) => !originalPlayers.includes(target.playerId))
+      .filter((target) => !originalPlayers.includes(target.playerId)
+        && !consumedPositionPrimaryTargetIds.has(target.playerId))
       .map((target): WeeklyBidRecommendation | null => {
         const durable = durableSwapValue(input, drop.playerId, target.playerId);
         // A displayed swap must preserve durable position-adjusted value. Requiring at least one
@@ -519,6 +526,11 @@ export function buildWeeklyBidPlan(input: WeeklyBidPlanInput): WeeklyBidPlan | n
       recommendations,
       scenarioBudgetBefore: scenarioBudget,
     });
+
+    // Only the canonical primary of a successfully emitted position row is consumed. Same-round
+    // alternatives remain visible and may recur later unless they become a later primary or are
+    // unreachable in a particular modeled roster state. Streamer groups are intentionally separate.
+    consumedPositionPrimaryTargetIds.add(recommendations[0].target.playerId);
 
     for (const recommendation of recommendations) {
       if (!earliestDisplayedBid.has(recommendation.target.playerId)) {

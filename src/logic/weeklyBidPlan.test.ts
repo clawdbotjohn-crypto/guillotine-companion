@@ -131,6 +131,43 @@ function streamerInput({
   });
 }
 
+function primarySequencingInput({ equalTargets = false } = {}): MutableInput {
+  const drops = [
+    weekly('sequence-drop-1', 'RB', 1),
+    weekly('sequence-drop-2', 'WR', 2),
+    weekly('sequence-drop-3', 'TE', 3),
+  ];
+  const targetPoints = equalTargets ? [20, 20, 20, 20] : [20, 18, 16, 14];
+  const targetIds = equalTargets
+    ? ['equal-alpha', 'equal-bravo', 'equal-charlie', 'equal-delta']
+    : ['aaron-jones-shape', 'next-eligible', 'third-eligible', 'recurring-alternative'];
+  const targets = targetIds.map((id, index) => weekly(id, 'RB', targetPoints[index]));
+  const weeklyPlayers = [...drops, ...targets, weekly('sequence-opponent', 'QB', 0)];
+  const targetValues = equalTargets ? [100, 100, 100, 100] : [100, 90, 80, 70];
+  const rosPlayers = [
+    ros('sequence-drop-1', 'RB', 1),
+    ros('sequence-drop-2', 'WR', 2),
+    ros('sequence-drop-3', 'TE', 3),
+    ...targetIds.map((id, index) => ros(id, 'RB', targetValues[index])),
+    ros('sequence-opponent', 'QB', 0),
+  ];
+  return base({
+    rosters: [
+      roster(1, drops.map((player) => player.playerId)),
+      roster(2, ['sequence-opponent']),
+    ],
+    activeRosterIds: new Set([1, 2]),
+    lineupPositions: ['FLEX', 'FLEX', 'FLEX'],
+    weeklyProjections: new Map(weeklyPlayers.map((player) => [player.playerId, player])),
+    rosProjections: new Map(rosPlayers.map((player) => [player.playerId, player])),
+    availableRows: targetIds.map((id) => target(id, 'RB', 10, 20)),
+    availablePlayerIds: targetIds,
+    valueByPlayerId: new Map(rosPlayers.map((player) => [player.playerId, player.totalPoints])),
+    replacementByPosition: new Map([['QB', 0], ['RB', 0], ['WR', 0], ['TE', 0]]),
+    maxPositionDrops: 3,
+  });
+}
+
 function pricingInput(
   selectedPoints: number,
   opponentPoints: number[],
@@ -243,7 +280,71 @@ describe('weekly team bid planning', () => {
     ]);
   });
 
-  it('reserves sequential budget while keeping later eligibility and price independent', () => {
+  it('consumes each emitted primary before the next row while retaining same-round alternatives', () => {
+    const rows = buildWeeklyBidPlan(primarySequencingInput())!.rows
+      .filter((row) => row.kind === 'position');
+
+    expect(rows).toHaveLength(3);
+    expect(rows.map((row) => row.recommendations[0].target.playerId)).toEqual([
+      'aaron-jones-shape', 'next-eligible', 'third-eligible',
+    ]);
+    expect(rows[0].recommendations.map((item) => item.target.playerId)).toEqual([
+      'aaron-jones-shape', 'next-eligible', 'third-eligible', 'recurring-alternative',
+    ]);
+    for (let round = 1; round < rows.length; round++) {
+      const laterTargets = rows[round].recommendations.map((item) => item.target.playerId);
+      for (const priorRow of rows.slice(0, round)) {
+        expect(laterTargets).not.toContain(priorRow.recommendations[0].target.playerId);
+      }
+    }
+    // An alternative may recur until it becomes a primary; consumption is not a blanket de-dupe.
+    expect(rows.every((row) => row.recommendations.some((item) =>
+      item.target.playerId === 'recurring-alternative'))).toBe(true);
+    expect(rows[1].recommendations.some((item) =>
+      item.target.playerId === 'next-eligible')).toBe(true);
+    expect(rows[2].recommendations.some((item) =>
+      item.target.playerId === 'next-eligible')).toBe(false);
+  });
+
+  it('keeps consumed primaries unavailable after both processed-claim win and loss branches', () => {
+    const input = primarySequencingInput();
+    const rows = buildWeeklyBidPlan(input)!.rows.filter((row) => row.kind === 'position');
+    const primary = rows[0].recommendations[0].target.playerId;
+    const states = buildReachablePositionRosterStates(
+      input.rosters[0].players ?? [],
+      [{
+        dropPlayerId: rows[0].dropPlayerId,
+        targetPlayerIds: rows[0].recommendations.map((item) => item.target.playerId),
+      }],
+    );
+    const lossState = states.find((state) => state.includes(rows[0].dropPlayerId))!;
+    const winState = states.find((state) => state.includes(primary))!;
+    const slots = parseLineupSlots([...input.lineupPositions]);
+
+    expect(lossState).not.toContain(primary);
+    expect(winState).not.toContain(rows[0].dropPlayerId);
+    expect(projectBestLineup(winState, input.weeklyProjections, slots).total)
+      .toBeGreaterThan(projectBestLineup(lossState, input.weeklyProjections, slots).total);
+    // A validly submitted claim reaching processing makes the target unavailable either way:
+    // this team won it, or another manager did. Later fallback lists therefore omit it globally.
+    expect(rows.slice(1).flatMap((row) => row.recommendations)
+      .every((item) => item.target.playerId !== primary)).toBe(true);
+  });
+
+  it('deterministically consumes the first displayed equal-cost equal-value target', () => {
+    const rows = buildWeeklyBidPlan(primarySequencingInput({ equalTargets: true }))!.rows
+      .filter((row) => row.kind === 'position');
+
+    expect(rows.map((row) => row.recommendations[0].target.playerId)).toEqual([
+      'equal-alpha', 'equal-bravo', 'equal-charlie',
+    ]);
+    expect(rows[0].recommendations.map((item) => item.theoreticalBid))
+      .toEqual([20, 20, 20, 20]);
+    expect(rows[1].recommendations.map((item) => item.target.playerId)).not.toContain('equal-alpha');
+    expect(rows[2].recommendations.map((item) => item.target.playerId)).not.toContain('equal-bravo');
+  });
+
+  it('reserves sequential budget while keeping later pricing independent', () => {
     const plan = buildWeeklyBidPlan(base({ maxPositionDrops: 2 }))!;
     const rows = plan.rows.filter((row) => row.kind === 'position');
     expect(rows).toHaveLength(2);
@@ -253,8 +354,8 @@ describe('weekly team bid planning', () => {
     );
     expect(rows[1].recommendations.every((rec) =>
       rec.beforeRisk === rows[0].recommendations[0].beforeRisk)).toBe(true);
-    expect(rows[1].recommendations.some((rec) =>
-      rec.target.playerId === rows[0].recommendations[0].target.playerId)).toBe(true);
+    expect(rows[1].recommendations.every((rec) =>
+      rec.target.playerId !== rows[0].recommendations[0].target.playerId)).toBe(true);
   });
 
   it('caps at actual scenario budget, preserves qualifying $0 recommendations, and caps by richest active opponent + $1', () => {
@@ -629,7 +730,13 @@ describe('weekly team bid planning', () => {
     const positionRows = buildWeeklyBidPlan(base())!.rows.filter((row) => row.kind === 'position');
     const planDurationMs = performance.now() - planStarted;
     expect(positionRows).toHaveLength(5);
-    expect(positionRows.map((row) => row.recommendations.length)).toEqual([5, 5, 5, 5, 5]);
+    // The full state enumerator remains bounded at 5x5 above. Display planning now removes each
+    // processed prior primary, and branch-specific reachability can remove additional alternatives.
+    expect(positionRows.map((row) => row.recommendations.length)).toEqual([5, 5, 3, 2, 1]);
+    const primaryIds = positionRows.map((row) => row.recommendations[0].target.playerId);
+    expect(new Set(primaryIds).size).toBe(primaryIds.length);
+    expect(positionRows.every((row, round) => row.recommendations.every((item) =>
+      !primaryIds.slice(0, round).includes(item.target.playerId)))).toBe(true);
     expect(planDurationMs).toBeLessThan(5_000);
   });
 
