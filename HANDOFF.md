@@ -64,7 +64,7 @@ Local validation:
 - `git diff --check`: passed
 - bounded diff/privacy/secret/scope review: only intended PR #28 logic/tests/docs; synthetic identifiers only; no private data, credentials, artifacts, provider/DB/live-user changes
 
-Implementation commit/head: pending commit. Natural CI/Azure, exact preview URL, hosted 1280×900 and 390×844 QA, and final PR state are pending the required push. A commit cannot contain its own final SHA, so the exact final documentation head must be recorded in PR #28/status after push.
+Exact implementation commit/head: `b79277f6a2eae8adae1f34a0278053e4ac559152`. Natural CI/Azure, exact preview URL, hosted 1280×900 and 390×844 QA, and final PR state are pending the required push. A commit cannot contain its own final SHA, so the exact final documentation head must be recorded in PR #28/status after push.
 
 ## Residual caveat
 
