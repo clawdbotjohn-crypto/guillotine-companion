@@ -1,5 +1,53 @@
 # Guillotine Companion — Current Progress
 
+## P0 — Suggested Bids drop-row ordering follow-up (implemented 2026-10-28)
+
+**Owner report — Discord `1565091946865758229`:**
+
+> Hmm... another weird thing I see is that Algiers is above Flournoy with 1 suggested drop, while Fl... has 5. How is that possible? If Fl... is more valuable than Jones then I would expect less drop options (like Montgomery is a RB so how could he be better than our #4 drop but not our #3 drop who is a RB?). If Jones is more valuable, the Flournoy should appear higher than Jones on the drop list.
+
+- [x] Privacy-safe synthetic Allgeier/Flournoy/Montgomery-shaped fixture (labels are shapes, not verified identities) proves the old inversion: pure same-source positional ROS VORP put the starting RB shape (`10`) ahead of the bench WR shape (`25`), even though their optimized original-roster next-week removal costs were `14` and `0` fantasy points. That ordering priority was the defect; differing counts were legitimate and are not a sort key.
+- [x] Stable original-roster tuple is now `(optimized next-week lineup removal cost ascending, same-source ROS positional VORP/keep value ascending, player ID ascending)`. Removal cost is projected fantasy points lost after re-optimizing the original roster without the player. Finite injury/bye `0` remains `0`; missing/non-finite weekly data uses conservative `+Infinity`. Positional keep value is `player value - native-position replacement baseline`; missing/non-finite calibration uses conservative `+Infinity`, never raw cross-position totals.
+- [x] Exact fixture diagnostics: bench WR shape = removal `0`, VORP `25`, best primary transaction VORP `15`, five recommendations, Montgomery shape `passes: eligible` with `0` weekly change. Starting RB shape = removal `14`, VORP `10`, best primary transaction VORP `20`, one recommendation, Montgomery shape `fails: original-lineup-harm` with `-4` points. The fail is optimized weekly lineup fit, not names/positions; prior-primary consumption explains the exact non-nested sets, while mixed-outcome safety does not cause this pair's result.
+- [x] Preserved transaction-VORP-first pickups, primary consumption after both win/loss, all-miss/all-hit/mixed safety, calibration fallback, FLEX/SUPER_FLEX, bid/budget/opponent/duplicate caps, DST/K, advisory/no-write, and robust-transaction-only row emission. Added regressions for bench-WR/starting-RB order, exact Montgomery reasons, one excellent vs five marginal, zero-removal VORP order, player-ID ties, injury/bye durable protection, and queue stability across prior hit/miss.
+- [x] Exact implementation commit: `b79277f6a2eae8adae1f34a0278053e4ac559152`. Local gates: 34/34 focused planner tests; 402/402 frontend tests across 47 files; 61/61 API tests; typecheck; production build; changed-file Oxlint 0 warnings/errors; `git diff --check`; bounded privacy/secret/scope review. Natural CI and Azure deployment passed for pushed docs head `5d5bb27f77f61553bc0ffdd87702e34d710d2233`; exact preview `https://nice-moss-07ec56310-28.centralus.7.azurestaticapps.net`. Hosted privacy-safe synthetic QA passed at 1280×900 and 390×844: coherent bench-WR-before-starting-RB ordering, valid 4-vs-1 non-nested counts with no added prose, distinct primaries, transaction-VORP pickup order, nonnegative gains/no rank harm, no overflow/console errors. Browser storage/cache/IndexedDB cleared and preview tabs closed; no manual dispatch/deploy.
+
+## P0 — Suggested Bids no-harm outcome tree + transaction VORP (implemented 2026-10-28)
+
+**Original owner source:** Discord `1565045421162889416`. The reported card dropped a starting RB for backup QBs while displaying `-7.7 pts` and Overall `#2 → #5`.
+
+**Owner clarification — Discord `1565047528997527744`:**
+
+> Yeah each round of drops should look at both best and worst case scenarios. So there is no chance that you end up hurting your team if certain bids go through. So the only reason it would make sense to drop a starting RB rd 3 for a QB would be if a better RB was guaranteed to be won earlier. But also I'm curious why the last couple rounds are all QB only suggestions? Is QB VORP high?
+
+**Owner clarification — Discord `1565050012399046859`:**
+
+> Ok pickup suggestions should be VORP based as well. Otherwise it will be a full team of QBs.
+
+**Owner primary-sequencing clarification — Discord `1565087484512305283`:**
+
+> Nice, the results look more reasonable now. One thing I see is the top suggestion (Aarond Jones) is suggested for every player. Likely we have the logic correct with who to grab and drop, but should do a last pass that says "ok from rd 1 the top target (highest value and then highest order among same cost) is gone for sure, so remove him from later rounds, then 2nd rd the #2 overall target is gone after that". Does that make sense? So the top target from each round would be removed from later rounds. Does our logic support that? Or do you see any issues with that?
+
+- [x] For each successfully emitted position-player row, `recommendations[0]` after the existing transaction-VORP comparator/ties is the canonical primary. It is consumed before the next row and excluded from every later recommendation/fallback; the next eligible target promotes under the same comparator. No candidate is consumed for a skipped/empty row, and DST/K streamer logic is not affected.
+- [x] Primary consumption is an additional display-availability rule, not a replacement for the safety outcome tree. The prior group still models team-wins (roster changes) and team-loses (roster unchanged), while the processed primary is unavailable for later display in both. This assumes the Suggested Bids claim was validly submitted and reached processing; it deliberately does not consume unsubmitted or invalid claims.
+- [x] Same-round alternatives remain visible and may recur later unless they become a prior primary or existing branch-specific reachability makes them unavailable in a modeled roster state.
+- [x] Preserved the standalone no-harm invariant: every displayed position card independently has nonnegative optimized next-week lineup impact, non-worse Overall Rank, and nonnegative durable transaction VORP from the actual current roster.
+- [x] Pickup eligibility and primary ordering now use one same-source transaction formula: `targetVorp = targetValue - replacement[targetPosition]`; `dropVorp = dropValue - replacement[dropPosition]`; `transactionGain = targetVorp - dropVorp`; require `transactionGain >= 0`. Survival/risk, weekly impact, then player ID are deterministic tie-breaks. Gross weekly/ROS/source values never rank cross-position pickups.
+- [x] Missing/partial calibration fails cross-position transactions closed. Same-position `targetValue - dropValue` remains valid when the shared replacement baseline is absent because it cancels exactly.
+- [x] Each later position round is checked against every reachable roster from prior displayed groups. Each group contributes a miss or exactly one displayed alternative; already-won targets and missing drops make that later execution unreachable; canonical roster IDs deduplicate equivalent states. A card survives only if every state where it can execute preserves optimized next-week points and Overall Rank.
+- [x] The outcome tree is deterministically bounded by five position rounds × five targets: at most `(5 + 1)^5 = 7,776` stored states after round five and `6^4 = 1,296` states entering the final card check. Complete/fail-closed VORP and independent safety prefilter candidates before state evaluation.
+- [x] Preserved FLEX/SUPER_FLEX rebalancing, bid caps/reservations, duplicate-target semantics, DST/K streamer behavior, advisory/no-write behavior, and current-main features.
+- [x] Privacy-safe tests cover original-safe/all-hit-safe/mixed-harm rejection; explicit all-miss/all-hit/mixed subsets; multi-alternative/duplicate-target reachability; QB gross-points versus VORP ordering; VORP-primary/tie-break ordering; same-position fallback; complete/partial calibration; FLEX/SUPER_FLEX; original screenshot shape; caps/duplicates; and no negative points/worse rank.
+- [x] Required starting PR head was `14041a450ff01e7660cd03ea142917bd4612afaf` on exact base `97bef73b09a6766784a5f9a608eaa012e683c2fc`; outcome/VORP implementation commit is `dd1b19d149fe764414443d636c368a8ffdcb75dc`.
+- [x] Primary-sequencing implementation commit: `9187cd6168a76b6cda2d4648684f6a2902af02e2` (follow-up started at required head `21f0340486ca3c655d9462667bed2b5dccef5b60`; required base `97bef73b09a6766784a5f9a608eaa012e683c2fc`). Files: `src/logic/weeklyBidPlan.ts`, `src/logic/weeklyBidPlan.test.ts`, `PROGRESS.md`, and `HANDOFF.md`.
+- [x] Follow-up local gates: 30/30 focused, 398/398 full frontend across 47 files, and 61/61 API tests; typecheck; production build; changed-file Oxlint with 0 warnings/errors; `git diff --check`; bounded privacy/secret/scope review.
+- [x] Natural CI at pushed head `0c221a365ec6f0e8e292a448de45710a14f31fd2` passed: workflow `CI` job `build` (lint, typecheck, frontend tests, managed Functions tests, build, artifact) and workflow `Deploy to Azure SWA` job `Build and Deploy`; no workflow dispatch or manual deploy. Exact preview from natural deployment output: `https://nice-moss-07ec56310-28.centralus.7.azurestaticapps.net`.
+- [x] Hosted synthetic/privacy-safe QA at 1280×900 and 390×844: position primaries rendered as Aaron Jones Shape → Third Eligible → Recurring Alternative, with Aaron absent from every later card; all displayed cards remained VORP-descending by round, showed positive next-week gains (+19.0/+17.0, +14.0, +11.0) and unchanged rank #1→#1; document/body widths matched at both viewports with no horizontal overflow. Browser storage/cache/IndexedDB cleared and tab closed afterward. No provider/DB/live-user mutation.
+- [x] Review-only PR remained OPEN and clean/mergeable at QA. Exact final head after this documentation-only commit is recorded in PR #28/status because a commit cannot contain its own SHA.
+
+**Gate:** Review-only. Do not merge, auto-merge, delete branches/environments, deploy, dispatch workflows, or mutate live/provider data.
+
+
 ## P0 — PR #23 restore standard Suggested field in custom-ranking player dialog (implemented 2026-10-10)
 
 **Owner source:** Discord `1558719548516081726`.

@@ -1,82 +1,75 @@
-# HANDOFF — Guillotine Companion PR #23 mobile custom-ranking follow-up
+# HANDOFF — Suggested Bids stable drop-row ordering
 
-## Status
+## Status / owner source
 
-Owner follow-up from Discord `1558416398890565642` is implemented, tested, pushed, and hosted-QA complete on the existing PR #23 branch/worktree.
+Review-only PR #28 on existing branch `fix/suggested-bids-non-worsening`. This follow-up started from required remote head `8609b3eba37599e431c65b3088f48d46456dcd90`; the remote head was verified unchanged before implementation.
 
-- Worktree: `/home/john/.openclaw/worktrees/gb-hybrid-custom-rankings`
-- Branch: `feat/hybrid-custom-rankings`
-- PR: https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/23
-- Hosted preview: https://nice-moss-07ec56310-23.centralus.7.azurestaticapps.net
-- Implementation commits: `8390000` (`fix custom ranking mobile follow-up`) and `3a15ef4` (`preserve mobile value touch target`)
-- PR remains OPEN, review-only, and unmerged. No production deploy or manual workflow dispatch occurred.
+Owner report — Discord `1565091946865758229`:
 
-## Root causes and fixes
+> Hmm... another weird thing I see is that Algiers is above Flournoy with 1 suggested drop, while Fl... has 5. How is that possible? If Fl... is more valuable than Jones then I would expect less drop options (like Montgomery is a RB so how could he be better than our #4 drop but not our #3 drop who is a RB?). If Jones is more valuable, the Flournoy should appear higher than Jones on the drop list.
 
-1. **Divider too far left on mobile**
-   - Root cause: the custom-value rail used a fixed `8.75rem` width at every viewport.
-   - Fix: mobile rail is `7.75rem`, returning 16px to player/name details; `sm:` and larger retain `8.75rem`.
-   - The value input was also only 36px high (38px bordered group), so final hosted QA raised it to a true 44px input/46px editor group rather than sacrificing touch usability.
+The fixture labels are explicitly Allgeier/Flournoy/Montgomery-shaped synthetic labels, not verified player identities.
 
-2. **Zero-edit preservation confirmation**
-   - Root cause: Save opened confirmation for every generated-setting change, even when `board.overrides` had no applicable manual edit.
-   - Fix: count only overrides for current players whose normalized value differs from the frozen baseline. With count 0, Save regenerates directly. With count >=1, confirmation uses the actual singular/plural count and keeps preservation checked by default.
+## Causal diagnosis and implementation
 
-3. **Custom valuation unavailable in Player Details**
-   - Root cause: custom cards deliberately passed `suggestedBid: null` to avoid conflating custom and market concepts, but no separate custom valuation was propagated; the generic Suggested field therefore rendered `Unavailable`.
-   - Fix: `PlayerDetailData` now has explicit `customValue`. Custom cards pass the selected board value; the popup renders `Custom value` separately from market `Predicted`, source-native rank/value, Team Impact, manager predictions, and bidding history.
+The existing stable queue sorted same-source positional ROS VORP before weekly projection. In the exact synthetic reproduction, that put a starting RB shape (ROS positional VORP `10`) above a bench WR shape (`25`) even though removing them from the optimized original next-week lineup cost `14` and `0` projected fantasy points respectively. That priority was a real ordering defect.
 
-## Files changed
+The differing recommendation counts are legitimate and are not a sort key. In the fixture, the bench WR row has five recommendations while the starting RB row has one. The Montgomery-shaped target is safe for the bench WR (`passes: eligible`, weekly change `0`, transaction VORP `+15`) but fails for the starting RB (`fails: original-lineup-harm`, weekly change `-4`). The exact non-nested sets also reflect prior-primary consumption. The pair is not rejected by mixed-outcome safety, and the result cannot be inferred from names or shared RB labels alone.
 
-- `src/pages/WaiversPage.tsx`
-- `src/pages/WaiversPage.test.tsx`
-- `src/components/CustomRankingDialogs.tsx`
-- `src/components/CustomRankingDialogs.test.tsx`
-- `src/components/PlayerDetailDialog.tsx`
+The stable queue is now computed exactly once from the original roster with this ascending tuple:
+
+```text
+(
+  optimized next-week lineup removal cost,
+  same-source ROS positional VORP / keep value,
+  deterministic player ID
+)
+
+removalCost = optimizedOriginalLineupPoints
+            - optimizedLineupPoints(originalRoster - player)
+keepValue   = sameSourcePlayerValue
+            - sameSourceReplacementBaseline[player.nativePosition]
+```
+
+Both numeric keys use their source's native projected-fantasy-point/value units; raw cross-position totals are never mixed. Finite injury/bye projections of `0` produce a valid zero removal cost. Missing/non-finite weekly data receives conservative `+Infinity` removal cost. Missing/non-finite player value or native-position baseline receives conservative `+Infinity` keep value. Removal cost is clamped at zero against numerical/model anomalies. A zero-removal durable injured/bye player is still protected by secondary ROS VORP and, decisively, the existing transaction-VORP eligibility gate; empty rows remain omitted.
+
+The safety evaluator now returns exact diagnostic reasons while enforcing the same guards. Preserved: transaction-VORP-first pickups; successful-row primary consumption in both win/loss availability branches; all-miss/all-hit/mixed outcome safety; same-position calibration fallback; FLEX/SUPER_FLEX; bid/budget/opponent/duplicate caps; DST/K; advisory/no-write behavior.
+
+## Exact synthetic diagnostics
+
+| Drop shape | Original-roster removal cost | ROS positional VORP | Best primary transaction VORP | Recs | Montgomery-shaped result |
+|---|---:|---:|---:|---:|---|
+| Bench WR / Flournoy shape | 0 | 25 | 15 | 5 | `passes: eligible`; weekly change 0 |
+| Starting RB / Allgeier shape | 14 | 10 | 20 | 1 | `fails: original-lineup-harm`; weekly change -4 |
+
+Regression coverage also proves one excellent option can precede five marginal ones without count sorting; two zero-removal bench players use ROS positional VORP; exact ties use player ID; a high-ROS injury/bye player does not produce an unsafe displayed row; and the queue remains original-roster-stable after prior hit/miss branches. Existing primary-consumption, outcome-state, transaction-VORP, calibration, FLEX/SUPER_FLEX, cap, duplicate, DST/K, and no-harm tests remain green.
+
+## Files and validation
+
+Changed files:
+
+- `src/logic/weeklyBidPlan.ts`
+- `src/logic/weeklyBidPlan.test.ts`
 - `PROGRESS.md`
 - `HANDOFF.md`
 
-Untracked QA evidence was intentionally preserved under `artifacts/pr23-qa/2026-10-10-mobile-follow-up/` and was not staged wholesale.
+Local validation:
 
-## Validation
+- focused planner: 34/34
+- full frontend: 402/402 across 47 files
+- full API: 61/61
+- TypeScript typecheck: passed
+- production build: passed
+- changed-file Oxlint: 0 warnings / 0 errors
+- `git diff --check`: passed
+- bounded diff/privacy/secret/scope review: only intended PR #28 logic/tests/docs; synthetic identifiers only; no private data, credentials, artifacts, provider/DB/live-user changes
 
-Passed locally:
+Exact implementation commit/head: `b79277f6a2eae8adae1f34a0278053e4ac559152`. The first pushed documentation head was `5d5bb27f77f61553bc0ffdd87702e34d710d2233`; natural exact-head CI and Azure deployment passed. Exact preview URL: `https://nice-moss-07ec56310-28.centralus.7.azurestaticapps.net`. Hosted privacy-safe synthetic QA passed at 1280×900 and 390×844: bench WR appeared before starting RB; non-nested counts were coherent (4 vs 1) without explanatory prose; primaries were distinct (Marginal Alpha then Exceptional Safe); pickup cards remained transaction-VORP ordered; every card had nonnegative next-week gain and unchanged/improved rank; and neither viewport had horizontal overflow or console errors. Browser local/session storage, Cache Storage, and IndexedDB were cleared and all preview tabs closed afterward. Final post-QA docs-head checks and PR state are recorded in PR #28 because a commit cannot contain its own SHA.
 
-- Focused Vitest: **56/56** across:
-  - `src/components/CustomRankingDialogs.test.tsx`
-  - `src/pages/WaiversPage.test.tsx`
-  - `src/components/PlayerDetailDialog.test.tsx`
-  - `src/logic/__tests__/customRankings.test.ts`
-- Follow-up WaiversPage test after the touch-target correction: **15/15**.
-- Capped serial `npm run build` with `NODE_OPTIONS=--max-old-space-size=1024 nice -n 10`.
-- Changed-file Oxlint: **0 errors**; one pre-existing `react(set-state-in-effect)` warning in `CustomRankingDialogs.tsx` when linting the wider changed set.
-- `git diff --check` and bounded added-line secret scan.
+## Residual caveat
 
-Implementation-head GitHub checks passed:
+No private/live owner roster was inspected or mutated. The code defect and mechanism are proven with a privacy-safe synthetic shape matching the reported constraints; the exact live players/source values can drift and remain unverified. Non-nested recommendation sets are expected and need no UI prose.
 
-- CI run `38094475186`: success (lint, typecheck, frontend tests, managed Functions tests, build, artifact).
-- Azure preview run `38094475177`: success.
+## Boundaries
 
-## Hosted QA
-
-Real SeaMex Guillotine 2026 league / `PR23 QA` custom ranking:
-
-- Desktop: responsive value rail retained; left/right card actions remained distinct; popup showed source-native value, `Custom value $34`, and market `Predicted $0` separately.
-- Mobile 390×844 measurements: viewport/document width 390px (no page-level horizontal overflow), card 334px, player region 210px, value region 124px, input 44px, editor group 46px.
-- One override: confirmation showed `1 player value has been edited.` and preservation checked by default; preserving retained the override after regeneration.
-- Unchecked preservation cleared the override.
-- Zero overrides: settings regenerated directly with no confirmation, no zero-count copy, and no preservation checkbox.
-- Left side opened Player Details; right editor focused without opening a dialog.
-
-Evidence:
-
-- `artifacts/pr23-qa/2026-10-10-mobile-follow-up/desktop-custom-cards.jpg`
-- `artifacts/pr23-qa/2026-10-10-mobile-follow-up/desktop-custom-popup.jpg`
-- `artifacts/pr23-qa/2026-10-10-mobile-follow-up/mobile-390-custom-cards.jpg`
-- `artifacts/pr23-qa/2026-10-10-mobile-follow-up/mobile-390-custom-popup.jpg`
-- `artifacts/pr23-qa/2026-10-10-mobile-follow-up/mobile-390-one-override-confirmation.jpg`
-- `artifacts/pr23-qa/2026-10-10-mobile-follow-up/qa-notes.md`
-
-## Safety gate
-
-PR #23 remains unmerged. Do not merge, enable auto-merge, delete the branch, deploy production, or dispatch deployment workflows without John's explicit authorization for that exact action.
+PR #28 remains review-only. Do not merge/auto-merge, push main, delete the branch/environment, manually deploy or dispatch workflows, mutate provider/database/live-user data, force-push, or create another PR.
