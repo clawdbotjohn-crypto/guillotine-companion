@@ -1,75 +1,49 @@
-# HANDOFF — Suggested Bids stable drop-row ordering
+# HANDOFF — Waivers player-name search
 
-## Status / owner source
+## Scope and authorization
 
-Review-only PR #28 on existing branch `fix/suggested-bids-non-worsening`. This follow-up started from required remote head `8609b3eba37599e431c65b3088f48d46456dcd90`; the remote head was verified unchanged before implementation.
+- Owner authorization: Discord `1565620883941363804` — “Yeah let's do that. Should be super fast and easy to implement too.”
+- Exact base: `2e9452303b600eada7bd912caa29b7e0894f477e` (`origin/main`).
+- Review-only PR #29: https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/29
+- Exact implementation head: `e05d27415a8a04cba52a9822aa475c7c39871628` (`Add player search to waivers`). The pushed PR head also includes this required post-QA documentation record; its exact SHA is reported in PR #29 and the worker handoff because a commit cannot contain its own final SHA.
 
-Owner report — Discord `1565091946865758229`:
+## Delivered behavior
 
-> Hmm... another weird thing I see is that Algiers is above Flournoy with 1 suggested drop, while Fl... has 5. How is that possible? If Fl... is more valuable than Jones then I would expect less drop options (like Montgomery is a RB so how could he be better than our #4 drop but not our #3 drop who is a RB?). If Jones is more valuable, the Flournoy should appear higher than Jones on the drop list.
+- Compact, labeled player-name search in the existing Waivers filter area.
+- Trimmed, case-insensitive substring matching is applied to the already-current rows, after source/custom board, available/rostered, position, and ranking-strategy behavior.
+- Empty/clear restores the existing rows; search no-match copy names the query and says current filters produced no match.
+- Input and clear action are keyboard-accessible 44px targets. Existing custom values remain editable.
+- Changed files: `src/pages/WaiversPage.tsx`, `src/pages/WaiversPage.test.tsx`, `src/logic/waiverPlayerSearch.ts`, `PROGRESS.md`, `HANDOFF.md`.
 
-The fixture labels are explicitly Allgeier/Flournoy/Montgomery-shaped synthetic labels, not verified player identities.
+## Verification
 
-## Causal diagnosis and implementation
+- Focused: `npm test -- --run src/pages/WaiversPage.test.tsx` — 20/20 tests passed (1 file).
+- Frontend: `npm test` — 405/405 tests passed (47 files).
+- API: `(cd api && npm test)` — 61/61 tests passed (8 files).
+- `npm run typecheck` — passed.
+- `npm run build` — passed (Vite production build).
+- `npx oxlint src/pages/WaiversPage.tsx src/pages/WaiversPage.test.tsx src/logic/waiverPlayerSearch.ts` — 0 warnings/errors.
+- `git diff --check` — passed.
+- Bounded diff/name-only and sensitive-pattern review found only the named UI/filter/test/docs files; no credentials, provider/database writes, telemetry, or unrelated behavior.
+- Natural GitHub checks passed at implementation head: `build` (50s) and Azure `Build and Deploy` (1m03s); no workflow was manually dispatched.
 
-The existing stable queue sorted same-source positional ROS VORP before weekly projection. In the exact synthetic reproduction, that put a starting RB shape (ROS positional VORP `10`) above a bench WR shape (`25`) even though removing them from the optimized original next-week lineup cost `14` and `0` projected fantasy points respectively. That priority was a real ordering defect.
+## Hosted preview QA
 
-The differing recommendation counts are legitimate and are not a sort key. In the fixture, the bench WR row has five recommendations while the starting RB row has one. The Montgomery-shaped target is safe for the bench WR (`passes: eligible`, weekly change `0`, transaction VORP `+15`) but fails for the starting RB (`fails: original-lineup-harm`, weekly change `-4`). The exact non-nested sets also reflect prior-primary consumption. The pair is not rejected by mixed-outcome safety, and the result cannot be inferred from names or shared RB labels alone.
+Exact preview: https://nice-moss-07ec56310-29.centralus.7.azurestaticapps.net
 
-The stable queue is now computed exactly once from the original roster with this ascending tuple:
+Privacy-safe synthetic/read-only interception passed at 1280×900 and 390×844:
 
-```text
-(
-  optimized next-week lineup removal cost,
-  same-source ROS positional VORP / keep value,
-  deterministic player ID
-)
+- mixed-case partial `jOsH` narrowed six standard rows to Josh Allen; clear restored all six;
+- WR + `bRoWn` returned only A.J. Brown and Marquise Brown;
+- switching to the injected custom board preserved the same search + position composition;
+- custom value editing committed `77 → 81` while search was active;
+- `zz-no-match` rendered the honest query/current-filter empty state; clear restored both custom rows;
+- Tab moved focus from search to the 44×44 clear control;
+- desktop and mobile document/body widths exactly matched viewport widths; no horizontal overflow or console errors.
 
-removalCost = optimizedOriginalLineupPoints
-            - optimizedLineupPoints(originalRoster - player)
-keepValue   = sameSourcePlayerValue
-            - sameSourceReplacementBaseline[player.nativePosition]
-```
+After QA, local/session storage, Cache Storage, IndexedDB, browser cache, cookies, and all preview tabs/contexts were cleared/closed. No provider/database/live-user state was read or mutated.
 
-Both numeric keys use their source's native projected-fantasy-point/value units; raw cross-position totals are never mixed. Finite injury/bye projections of `0` produce a valid zero removal cost. Missing/non-finite weekly data receives conservative `+Infinity` removal cost. Missing/non-finite player value or native-position baseline receives conservative `+Infinity` keep value. Removal cost is clamped at zero against numerical/model anomalies. A zero-removal durable injured/bye player is still protected by secondary ROS VORP and, decisively, the existing transaction-VORP eligibility gate; empty rows remain omitted.
+## Boundary / blockers
 
-The safety evaluator now returns exact diagnostic reasons while enforcing the same guards. Preserved: transaction-VORP-first pickups; successful-row primary consumption in both win/loss availability branches; all-miss/all-hit/mixed outcome safety; same-position calibration fallback; FLEX/SUPER_FLEX; bid/budget/opponent/duplicate caps; DST/K; advisory/no-write behavior.
-
-## Exact synthetic diagnostics
-
-| Drop shape | Original-roster removal cost | ROS positional VORP | Best primary transaction VORP | Recs | Montgomery-shaped result |
-|---|---:|---:|---:|---:|---|
-| Bench WR / Flournoy shape | 0 | 25 | 15 | 5 | `passes: eligible`; weekly change 0 |
-| Starting RB / Allgeier shape | 14 | 10 | 20 | 1 | `fails: original-lineup-harm`; weekly change -4 |
-
-Regression coverage also proves one excellent option can precede five marginal ones without count sorting; two zero-removal bench players use ROS positional VORP; exact ties use player ID; a high-ROS injury/bye player does not produce an unsafe displayed row; and the queue remains original-roster-stable after prior hit/miss branches. Existing primary-consumption, outcome-state, transaction-VORP, calibration, FLEX/SUPER_FLEX, cap, duplicate, DST/K, and no-harm tests remain green.
-
-## Files and validation
-
-Changed files:
-
-- `src/logic/weeklyBidPlan.ts`
-- `src/logic/weeklyBidPlan.test.ts`
-- `PROGRESS.md`
-- `HANDOFF.md`
-
-Local validation:
-
-- focused planner: 34/34
-- full frontend: 402/402 across 47 files
-- full API: 61/61
-- TypeScript typecheck: passed
-- production build: passed
-- changed-file Oxlint: 0 warnings / 0 errors
-- `git diff --check`: passed
-- bounded diff/privacy/secret/scope review: only intended PR #28 logic/tests/docs; synthetic identifiers only; no private data, credentials, artifacts, provider/DB/live-user changes
-
-Exact implementation commit/head: `b79277f6a2eae8adae1f34a0278053e4ac559152`. The first pushed documentation head was `5d5bb27f77f61553bc0ffdd87702e34d710d2233`; natural exact-head CI and Azure deployment passed. Exact preview URL: `https://nice-moss-07ec56310-28.centralus.7.azurestaticapps.net`. Hosted privacy-safe synthetic QA passed at 1280×900 and 390×844: bench WR appeared before starting RB; non-nested counts were coherent (4 vs 1) without explanatory prose; primaries were distinct (Marginal Alpha then Exceptional Safe); pickup cards remained transaction-VORP ordered; every card had nonnegative next-week gain and unchanged/improved rank; and neither viewport had horizontal overflow or console errors. Browser local/session storage, Cache Storage, and IndexedDB were cleared and all preview tabs closed afterward. Final post-QA docs-head checks and PR state are recorded in PR #28 because a commit cannot contain its own SHA.
-
-## Residual caveat
-
-No private/live owner roster was inspected or mutated. The code defect and mechanism are proven with a privacy-safe synthetic shape matching the reported constraints; the exact live players/source values can drift and remain unverified. Non-nested recommendation sets are expected and need no UI prose.
-
-## Boundaries
-
-PR #28 remains review-only. Do not merge/auto-merge, push main, delete the branch/environment, manually deploy or dispatch workflows, mutate provider/database/live-user data, force-push, or create another PR.
+- Review only: do not merge, enable auto-merge, push main, delete branches/environments, manually deploy/dispatch, or mutate provider/database/live-user data.
+- No implementation or QA blockers.

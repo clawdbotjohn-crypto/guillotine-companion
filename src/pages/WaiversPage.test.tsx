@@ -1,8 +1,9 @@
 /* @vitest-environment jsdom */
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { DEFAULT_SHOW_ROSTERED_PLAYERS, RankingSourceSelector, ReplacementTeamSelector, RosteredPlayersToggle, WaiverPlayerCard, VorpControls, VorpSourceNotice } from './WaiversPage';
+import { DEFAULT_SHOW_ROSTERED_PLAYERS, PlayerNameSearch, RankingSourceSelector, ReplacementTeamSelector, RosteredPlayersToggle, WaiverPlayerCard, VorpControls, VorpSourceNotice } from './WaiversPage';
 import { formatWaiverSourceMetric } from '../logic/playerValueMetrics';
+import { filterWaiverRowsByPlayerName } from '../logic/waiverPlayerSearch';
 import { DEFAULT_WAIVER_STRATEGY, getWaiverStrategyExplanation, WAIVER_STRATEGIES, WAIVER_STRATEGY_EXPLANATIONS } from '../logic/waiverDisplay';
 import type { WaiverPlayerRow } from '../logic/waivers';
 import type { ManagerPredictionDisplay } from '../logic/managerPredictionDisplay';
@@ -23,6 +24,50 @@ const waiverRow: WaiverPlayerRow = {
 const cardProps = { row: waiverRow, remainingFaab: 100, nflTeam: 'SEA', weeklyPoints: 13.4, weeklyRank: 16, byeWeek: 8, playingWeek: 7 };
 
 describe('waiver controls', () => {
+  it('filters the already-current standard ranking rows by a trimmed case-insensitive name substring', () => {
+    const alreadyFiltered = [
+      { ...waiverRow, playerId: 'available-rb', name: 'Bijan Robinson' },
+      { ...waiverRow, playerId: 'available-rb-2', name: 'Brian Robinson Jr.' },
+    ];
+
+    expect(filterWaiverRowsByPlayerName(alreadyFiltered, '  jAn RoB  ')).toEqual([
+      expect.objectContaining({ playerId: 'available-rb' }),
+    ]);
+    expect(filterWaiverRowsByPlayerName(alreadyFiltered, 'missing')).toEqual([]);
+    expect(filterWaiverRowsByPlayerName(alreadyFiltered, '   ')).toBe(alreadyFiltered);
+  });
+
+  it('filters custom-ranking rows without changing custom values or reintroducing excluded rows', () => {
+    const customPositionAndAvailabilityRows = [
+      { ...waiverRow, playerId: 'custom-a', name: 'Amon-Ra St. Brown', customValue: 84 },
+      { ...waiverRow, playerId: 'custom-b', name: 'Marquise Brown', customValue: 27 },
+    ];
+
+    const result = filterWaiverRowsByPlayerName(customPositionAndAvailabilityRows, 'ST. b');
+    expect(result).toEqual([
+      expect.objectContaining({ playerId: 'custom-a', customValue: 84 }),
+    ]);
+    expect(result).not.toContainEqual(expect.objectContaining({ playerId: 'custom-b' }));
+  });
+
+  it('provides an accessible compact search and a 44px clear action that restores an empty query', () => {
+    const onChange = vi.fn();
+    const { rerender } = render(<PlayerNameSearch value="" onChange={onChange} />);
+    const input = screen.getByRole('searchbox', { name: 'Search players by name' });
+    expect(input.className).toContain('min-h-11');
+    expect(screen.queryByRole('button', { name: 'Clear player search' })).toBeNull();
+
+    fireEvent.change(input, { target: { value: '  cHaSe  ' } });
+    expect(onChange).toHaveBeenCalledWith('  cHaSe  ');
+
+    rerender(<PlayerNameSearch value="  cHaSe  " onChange={onChange} />);
+    const clear = screen.getByRole('button', { name: 'Clear player search' });
+    expect(clear.className).toContain('min-h-11');
+    expect(clear.className).toContain('min-w-11');
+    fireEvent.click(clear);
+    expect(onChange).toHaveBeenLastCalledWith('');
+  });
+
   it('uses a compact accessible source selector with source help behind a disclosure', () => {
     const onChange = vi.fn();
     render(<RankingSourceSelector value="sleeper" onChange={onChange} />);
