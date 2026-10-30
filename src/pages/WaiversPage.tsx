@@ -1,6 +1,6 @@
 // Waivers page — recommended bids per strategy, weekly context, and predicted winning bid.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { AlertTriangle, ShoppingCart, Info, RefreshCw, UserCheck, Plus, Settings, Trash2 } from 'lucide-react';
+import { AlertTriangle, ShoppingCart, Info, RefreshCw, UserCheck, Plus, Search, Settings, Trash2, X } from 'lucide-react';
 import { Button, Card, PositionBadge, Skeleton } from '../components/ui';
 import { FaabOverBudgetWarning } from '../components/FaabOverBudgetWarning';
 import { buildManagerDetailData, type ManagerDetailData } from '../logic/managerDetails';
@@ -62,6 +62,7 @@ import {
   type DisplayStrategyKey,
 } from '../logic/waiverDisplay';
 import { resolveBiddingBaseline } from '../logic/waiverStrategies';
+import { filterWaiverRowsByPlayerName } from '../logic/waiverPlayerSearch';
 import { formatWaiverSourceMetric } from '../logic/playerValueMetrics';
 import {
   MAX_CUSTOM_RANKINGS,
@@ -83,6 +84,45 @@ import {
 } from '../components/CustomRankingDialogs';
 
 const POS_FILTERS = ['ALL', 'QB', 'RB', 'WR', 'TE'];
+
+export function PlayerNameSearch({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const hasQuery = value.length > 0;
+  return (
+    <div className="relative mb-3">
+      <label htmlFor="waiver-player-search" className="sr-only">Search players by name</label>
+      <Search
+        aria-hidden="true"
+        size={15}
+        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#6b6e99]"
+      />
+      <input
+        id="waiver-player-search"
+        type="search"
+        autoComplete="off"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder="Search player name"
+        className={`min-h-11 w-full rounded-lg border border-[#2a2e55] bg-[#0e1025] py-2.5 pl-9 text-xs text-[#f0f0ff] outline-none placeholder:text-[#4a4d77] focus:border-[#6366f1] focus:ring-1 focus:ring-[#6366f1] ${hasQuery ? 'pr-12' : 'pr-3'}`}
+      />
+      {hasQuery && (
+        <button
+          type="button"
+          aria-label="Clear player search"
+          onClick={() => onChange('')}
+          className="absolute right-0 top-0 inline-flex min-h-11 min-w-11 items-center justify-center rounded-r-lg text-[#8b8eac] hover:text-[#f0f0ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#818cf8]"
+        >
+          <X aria-hidden="true" size={16} />
+        </button>
+      )}
+    </div>
+  );
+}
 
 export function ReplacementTeamSelector({
   value,
@@ -581,6 +621,7 @@ export function WaiversPage() {
   });
 
   const [posFilter, setPosFilter] = useState('ALL');
+  const [playerNameQuery, setPlayerNameQuery] = useState('');
   const [showRosteredPlayers, setShowRosteredPlayers] = useState(DEFAULT_SHOW_ROSTERED_PLAYERS);
   const [replacementTeamSelection, setReplacementTeamSelection] = useState<{
     leagueId: string;
@@ -870,9 +911,10 @@ export function WaiversPage() {
   const positionRows = posFilter === 'ALL'
     ? displayRows
     : displayRows.filter((row) => row.position === posFilter);
-  const filtered = strategy === 'custom'
+  const rankedRows = strategy === 'custom'
     ? positionRows
     : sortWaiverRowsByStrategy(positionRows, strategy);
+  const filtered = filterWaiverRowsByPlayerName(rankedRows, playerNameQuery);
   const weeklyProjectionState: PlayerProjectionState = nflStateQuery.isLoading || weeklyProjectionQuery.isLoading
     ? 'loading'
     : nflStateQuery.isError || weeklyProjectionQuery.isError
@@ -1079,6 +1121,8 @@ export function WaiversPage() {
         </div>
       </div>
 
+      <PlayerNameSearch value={playerNameQuery} onChange={setPlayerNameQuery} />
+
       <RosteredPlayersToggle
         checked={showRosteredPlayers}
         onChange={setShowRosteredPlayers}
@@ -1106,7 +1150,9 @@ export function WaiversPage() {
             <p className="text-[#6b6e99] text-sm">
               {strategy === 'custom' && customRankings.length === 0
                 ? 'Create a custom ranking to set your own player values.'
-                : `No ${showRosteredPlayers ? 'players' : 'available free agents'} matched to ${strategy === 'custom' ? 'this custom ranking' : `${sourceInfo.shortLabel} values`}.`}
+                : playerNameQuery.trim()
+                  ? `No players matching “${playerNameQuery.trim()}” were found with the current filters.`
+                  : `No ${showRosteredPlayers ? 'players' : 'available free agents'} matched to ${strategy === 'custom' ? 'this custom ranking' : `${sourceInfo.shortLabel} values`}.`}
             </p>
           </Card>
         )}
