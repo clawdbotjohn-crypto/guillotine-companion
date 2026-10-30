@@ -1,5 +1,18 @@
 # Guillotine Companion — Current Progress
 
+## Review-only PR #29 — Waivers player-name search (2026-10-30)
+
+Owner authorization: Discord `1565620883941363804` — “Yeah let's do that. Should be super fast and easy to implement too.” Exact base: `2e9452303b600eada7bd912caa29b7e0894f477e`.
+
+- Added one compact, labeled Waivers player-name search after the existing source/custom-board, availability, position, and strategy pipelines. Matching is trimmed, case-insensitive substring search; clear restores the unchanged current result set; no-match copy names the query and current filters.
+- Input and clear controls are keyboard-accessible 44px targets in the existing visual language. Existing custom-value editing remains unchanged.
+- Review-only PR: https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/29
+- Implementation commit: `e05d27415a8a04cba52a9822aa475c7c39871628`.
+- Validation: focused Waivers 20/20; full frontend 405/405 across 47 files; API 61/61; typecheck/build passed; changed-file Oxlint 0 warnings/errors; `git diff --check` passed; bounded scope/privacy/secret review passed.
+- Natural CI and Azure preview passed at implementation head. Exact preview: https://nice-moss-07ec56310-29.centralus.7.azurestaticapps.net
+- Hosted synthetic/read-only QA passed at 1280×900 and 390×844: mixed-case `jOsH` narrowed 6→1; clear restored 6; WR + `bRoWn` produced only A.J./Marquise Brown on standard and custom paths; custom value 77→81 committed; honest no-match state rendered; Tab reached the 44×44 clear action; no horizontal overflow or console errors. Local/session storage, Cache Storage, IndexedDB, browser cache, cookies, and tabs/contexts were cleared afterward.
+- Boundary: PR #29 remains review-only. Do not merge/auto-merge, push main, delete branches/environments, manually deploy/dispatch, or mutate provider/database/live-user data.
+
 ## P0 — Suggested Bids drop-row ordering follow-up (implemented 2026-10-28)
 
 **Owner report — Discord `1565091946865758229`:**
