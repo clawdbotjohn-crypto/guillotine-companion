@@ -6,7 +6,7 @@
 - Exact base: `cf097ee6d0531dda4bbbfb4f5c9ee4266ee97b85` (`origin/main`).
 - Branch: `feat/page-navigation-cache-reuse`.
 - Review-only PR: https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/30
-- Implementation commit: `dbae6571f5a331a3034fbcefa3697e757798e736`.
+- Implementation commit: `dbae65782869fe7e1ef7fbe7656533ead7a31cdf`.
 - Review only: no merge, auto-merge, branch deletion, deploy/dispatch, runtime/config change, or live/provider/database mutation is authorized.
 
 ## Delivered behavior
