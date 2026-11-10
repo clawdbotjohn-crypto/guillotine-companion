@@ -305,11 +305,22 @@ Authoritative owner wording: Discord message `1555497219050278982`, **“Add liv
 - [ ] Preserve source-relative ordering unless explicitly edited. Keep named/versioned custom sets separate from provider-native values.
 - [ ] Define durable ownership/auth, persistence, autosave/versioning, reset/duplicate/recovery, and optional import/export before implementation.
 
-### P1 — Request/cache audit
+### P1 — Request/cache audit (implemented 2026-11-10; review-only)
 
-- [ ] Measure initial load, refresh, league/source switch, and tab-switch requests; identify duplicate provider/backend calls and request waterfalls.
-- [ ] Define freshness by data class, shared deduplication/cache ownership, event-aware invalidation, and an explicit accessible refresh path.
-- [ ] Add request-count/deduplication coverage without changing valuation semantics. Do not reactivate the previously deferred broad Waivers render-performance rewrite unless new evidence shows a current problem.
+**Owner selection / scoping request — Discord `1569671232092377141`:**
+
+> Ok let's do the request audit work. Give me a short outline on what you would queue up for that work so I can make sure the details sound right.
+
+**Owner scope clarification / approval — Discord `1569671809161371649`:**
+
+> I think it's a little simpler. Basically we want to cache calls where it makes sense. So if we jump to a page and back it won't have to make the same slow call twice (within reason, of course some times you need to refresh the cache or update). If that's what you were detailing as well then all good. I just don't want us to get too excessive with the work or go off in a bunch of different directions.
+
+- [x] Audited the shared route hooks. Historical/source/week reads already had bounded, input-specific TanStack Query keys and freshness. The demonstrated duplicate was `GET /league/{leagueId}/rosters`, whose zero freshness plus forced mount refetch made Hub → another page → back issue the same league request on each remount.
+- [x] Reuse current league rosters for five minutes under the existing `['rosters', leagueId]` identity. Once stale, normal mount and focus refreshes resume; direct `refetch()` still bypasses freshness and returns updated ownership. No provider writes, valuation changes, new cache layer, or unrelated UI/performance work.
+- [x] Deterministic hook coverage proves fresh same-league remount reuse, league-key separation, and explicit refresh. Request count for the two-mount/back-navigation flow is **2 before → 1 after** while fresh; explicit refresh remains **+1 request** and updates data.
+- [x] Validation: focused hook tests 9/9; full frontend 407/407 across 47 files; managed API 61/61; typecheck and production build passed; full lint 0 errors with two pre-existing React effect warnings; `git diff --check` passed. No visual behavior changed, so browser viewport QA was not useful for this data-fetch-only correction.
+
+**Gate:** Review only. Do not merge, enable auto-merge, delete the branch, deploy/dispatch, or mutate live/provider/database data without exact owner authorization.
 
 ### P2 — Manager likely-bids view, scenarios, and opponent needs
 

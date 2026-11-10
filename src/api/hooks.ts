@@ -28,8 +28,10 @@ const STALE_6H = STALE_1H * 6;
 const STALE_24H = STALE_1H * 24;
 
 export const CURRENT_ROSTER_QUERY_FRESHNESS = {
-  staleTime: 0,
-  refetchOnMount: 'always' as const,
+  // Page navigation commonly remounts this shared league query. Reuse the just-loaded roster
+  // briefly, then resume normal mount/focus refreshes so processed waivers appear promptly.
+  staleTime: STALE_5M,
+  refetchOnMount: true,
   refetchOnWindowFocus: true,
 };
 
@@ -56,8 +58,8 @@ export function useRosters(leagueId: string | null) {
     queryKey: ['rosters', leagueId],
     queryFn: () => api.getLeagueRosters(leagueId!),
     enabled: !!leagueId,
-    // Processed waivers change current ownership immediately. Do not reuse an hour-old roster
-    // snapshot just because Hub or Teams mounted this query first.
+    // Ownership changes after processed waivers, so keep this cache short and refreshable rather
+    // than sharing the hour-scale freshness used by historical reads.
     ...CURRENT_ROSTER_QUERY_FRESHNESS,
   });
 }
