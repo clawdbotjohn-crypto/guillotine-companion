@@ -5,6 +5,8 @@
 - Owner selected the request/cache work in Discord `1569671232092377141` and narrowed/approved a small cache-reuse package in `1569671809161371649`.
 - Exact base: `cf097ee6d0531dda4bbbfb4f5c9ee4266ee97b85` (`origin/main`).
 - Branch: `feat/page-navigation-cache-reuse`.
+- Review-only PR: https://github.com/clawdbotjohn-crypto/guillotine-companion/pull/30
+- Implementation commit: `dbae6571f5a331a3034fbcefa3697e757798e736`.
 - Review only: no merge, auto-merge, branch deletion, deploy/dispatch, runtime/config change, or live/provider/database mutation is authorized.
 
 ## Delivered behavior
@@ -34,6 +36,6 @@
 
 ## Remaining / gate
 
-- PR URL, exact pushed head, natural CI, mergeability, and preview status must be recorded after push/open.
+- PR #30 is open for review. Its exact final pushed head, mergeability, natural CI, and preview status are reported in the scheduler summary/PR metadata because a commit cannot contain its own final SHA.
 - No implementation blocker or approved follow-up remains in this package.
 - Keep the PR review-only until John explicitly authorizes that exact PR.
