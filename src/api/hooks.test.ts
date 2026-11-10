@@ -1,9 +1,15 @@
-import { describe, expect, it, vi } from 'vitest';
-import type { ProjectionSnapshotResponse } from './types';
+/* @vitest-environment jsdom */
+import { createElement, type ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { renderHook, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as api from './client';
+import type { ProjectionSnapshotResponse, Roster } from './types';
 import {
   CURRENT_ROSTER_QUERY_FRESHNESS,
   fetchProjectionSnapshotBatch,
   stabilizeProjectionSnapshotBatch,
+  useRosters,
 } from './hooks';
 
 const snapshot = {
@@ -13,12 +19,72 @@ const snapshot = {
 } as unknown as ProjectionSnapshotResponse;
 
 describe('current roster query freshness', () => {
-  it('always refetches ownership after processed waivers and on focus', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function createWrapper(queryClient: QueryClient) {
+    return function Wrapper({ children }: { children: ReactNode }) {
+      return createElement(QueryClientProvider, { client: queryClient }, children);
+    };
+  }
+
+  function createQueryClient() {
+    return new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+  }
+
+  it('uses a bounded five-minute cache while retaining mount and focus refreshes once stale', () => {
     expect(CURRENT_ROSTER_QUERY_FRESHNESS).toEqual({
-      staleTime: 0,
-      refetchOnMount: 'always',
+      staleTime: 5 * 60 * 1000,
+      refetchOnMount: true,
       refetchOnWindowFocus: true,
     });
+  });
+
+  it('reuses the fresh league roster when page navigation remounts the hook', async () => {
+    const roster = [{ roster_id: 1 }] as Roster[];
+    const getLeagueRosters = vi.spyOn(api, 'getLeagueRosters').mockResolvedValue(roster);
+    const queryClient = createQueryClient();
+    const wrapper = createWrapper(queryClient);
+
+    const firstPage = renderHook(() => useRosters('league-a'), { wrapper });
+    await waitFor(() => expect(firstPage.result.current.data).toBe(roster));
+    firstPage.unmount();
+
+    const returnPage = renderHook(() => useRosters('league-a'), { wrapper });
+    await waitFor(() => expect(returnPage.result.current.data).toBe(roster));
+
+    expect(getLeagueRosters).toHaveBeenCalledTimes(1);
+    expect(getLeagueRosters).toHaveBeenCalledWith('league-a');
+  });
+
+  it('keeps league identity separate and lets explicit refresh fetch updated ownership', async () => {
+    const firstRoster = [{ roster_id: 1 }] as Roster[];
+    const updatedRoster = [{ roster_id: 2 }] as Roster[];
+    const otherLeagueRoster = [{ roster_id: 3 }] as Roster[];
+    const getLeagueRosters = vi.spyOn(api, 'getLeagueRosters')
+      .mockResolvedValueOnce(firstRoster)
+      .mockResolvedValueOnce(otherLeagueRoster)
+      .mockResolvedValueOnce(updatedRoster);
+    const queryClient = createQueryClient();
+    const wrapper = createWrapper(queryClient);
+
+    const leagueA = renderHook(() => useRosters('league-a'), { wrapper });
+    await waitFor(() => expect(leagueA.result.current.data).toBe(firstRoster));
+
+    const leagueB = renderHook(() => useRosters('league-b'), { wrapper });
+    await waitFor(() => expect(leagueB.result.current.data).toBe(otherLeagueRoster));
+
+    await leagueA.result.current.refetch();
+    await waitFor(() => expect(leagueA.result.current.data).toEqual(updatedRoster));
+
+    expect(getLeagueRosters.mock.calls.map(([leagueId]) => leagueId)).toEqual([
+      'league-a',
+      'league-b',
+      'league-a',
+    ]);
   });
 });
 
